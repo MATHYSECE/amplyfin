@@ -5,6 +5,7 @@ import 'dart:io';
 import 'package:http/http.dart' as http;
 
 import '../models/movie.dart';
+import '../models/movie_details.dart';
 import '../models/session.dart';
 
 /// Erreur lisible renvoyée par [JellyfinApi].
@@ -135,13 +136,36 @@ class JellyfinApi {
     );
   }
 
-  /// Adresse de l'affiche d'un film (GET /Items/{id}/Images/Primary),
-  /// redimensionnée par le serveur à [width] pixels de large.
-  /// Cet appel ne demande pas de jeton. Null si le film n'a pas d'affiche.
-  String? posterUrl(Movie movie, {required int width}) {
-    final tag = movie.posterTag;
+  /// GET /Items/{id}?userId=… : la fiche complète d'un film.
+  Future<MovieDetails> getMovieDetails({
+    required String userId,
+    required String movieId,
+  }) async {
+    final json = await _send(
+      'GET',
+      '/Items/$movieId',
+      query: {'userId': userId},
+    );
+    return MovieDetails.fromJson(json as Map<String, dynamic>);
+  }
+
+  /// Adresse de l'affiche d'un film, [width] pixels de large.
+  /// Null si le film n'a pas d'affiche.
+  String? posterUrl(Movie movie, {required int width}) =>
+      _imageUrl(movie.id, 'Primary', movie.posterTag, width);
+
+  /// Adresse de l'image de fond d'un film, [width] pixels de large.
+  /// Null si le film n'a pas d'image de fond.
+  String? backdropUrl(MovieDetails details, {required int width}) =>
+      _imageUrl(details.movie.id, 'Backdrop', details.backdropTag, width);
+
+  /// GET /Items/{id}/Images/{type} : image redimensionnée par le serveur.
+  /// Cet appel ne demande pas de jeton. Le [tag] (empreinte de l'image)
+  /// change quand l'image change, ce qui évite de garder une vieille image
+  /// en cache.
+  String? _imageUrl(String itemId, String type, String? tag, int width) {
     if (tag == null) return null;
-    return Uri.parse('$serverUrl/Items/${movie.id}/Images/Primary')
+    return Uri.parse('$serverUrl/Items/$itemId/Images/$type')
         .replace(
           queryParameters: {'fillWidth': '$width', 'quality': '90', 'tag': tag},
         )

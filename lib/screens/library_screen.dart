@@ -1,11 +1,12 @@
-import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 
 import '../api/jellyfin_api.dart';
 import '../models/movie.dart';
 import '../models/session.dart';
 import '../services/session_store.dart';
+import '../widgets/poster_image.dart';
 import 'login_screen.dart';
+import 'movie_screen.dart';
 
 /// Bibliothèque : grille des affiches de films, chargée page par page.
 class LibraryScreen extends StatefulWidget {
@@ -172,8 +173,11 @@ class _LibraryScreenState extends State<LibraryScreen> {
                 mainAxisSpacing: 16,
               ),
               itemCount: _movies.length,
-              itemBuilder: (context, index) =>
-                  _MovieTile(api: widget.api, movie: _movies[index]),
+              itemBuilder: (context, index) => _MovieTile(
+                api: widget.api,
+                session: widget.session,
+                movie: _movies[index],
+              ),
             ),
           ),
           SliverToBoxAdapter(child: _buildFooter()),
@@ -209,81 +213,59 @@ class _LibraryScreenState extends State<LibraryScreen> {
   }
 }
 
-/// Une case de la grille : affiche, titre et année.
+/// Une case de la grille : affiche, titre et année. Un appui ouvre la fiche.
 class _MovieTile extends StatelessWidget {
-  const _MovieTile({required this.api, required this.movie});
+  const _MovieTile({
+    required this.api,
+    required this.session,
+    required this.movie,
+  });
 
   final JellyfinApi api;
+  final Session session;
   final Movie movie;
+
+  void _openMovie(BuildContext context) {
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => MovieScreen(api: api, session: session, movie: movie),
+      ),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
     final textTheme = Theme.of(context).textTheme;
     final colors = Theme.of(context).colorScheme;
 
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        // L'affiche prend toute la place restante ; arrondis via le thème (Card)
-        Expanded(
-          child: Card(
-            child: LayoutBuilder(
-              builder: (context, constraints) {
-                final width = _posterPixelWidth(context, constraints.maxWidth);
-                final url = api.posterUrl(movie, width: width);
-                if (url == null) return const _PosterPlaceholder();
-                return CachedNetworkImage(
-                  imageUrl: url,
-                  fit: BoxFit.cover,
-                  width: double.infinity,
-                  height: double.infinity,
-                  // Image décodée à la taille affichée : économise la mémoire
-                  memCacheWidth: width,
-                  fadeInDuration: const Duration(milliseconds: 200),
-                  placeholder: (_, _) => const SizedBox.shrink(),
-                  errorWidget: (_, _, _) => const _PosterPlaceholder(),
-                );
-              },
+    return InkWell(
+      onTap: () => _openMovie(context),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          // L'affiche prend toute la place restante, et « glisse » vers la fiche
+          Expanded(
+            child: Hero(
+              tag: PosterImage.heroTag(movie),
+              child: PosterImage(api: api, movie: movie),
             ),
           ),
-        ),
-        const SizedBox(height: 6),
-        Text(
-          movie.name,
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
-          style: textTheme.bodyMedium,
-        ),
-        // Texte vide si pas d'année : toutes les cases gardent la même hauteur
-        Text(
-          movie.year?.toString() ?? '',
-          maxLines: 1,
-          style: textTheme.bodySmall?.copyWith(color: colors.onSurfaceVariant),
-        ),
-      ],
-    );
-  }
-
-  /// Largeur de l'affiche en vrais pixels, arrondie à la centaine supérieure :
-  /// le serveur envoie une image juste assez grande, et l'adresse reste la même
-  /// d'une case à l'autre (donc le cache sert au maximum).
-  static int _posterPixelWidth(BuildContext context, double logicalWidth) {
-    final pixels = logicalWidth * MediaQuery.devicePixelRatioOf(context);
-    return ((pixels / 100).ceil() * 100).clamp(100, 1000);
-  }
-}
-
-/// Affichée quand un film n'a pas d'affiche (ou si elle ne charge pas).
-class _PosterPlaceholder extends StatelessWidget {
-  const _PosterPlaceholder();
-
-  @override
-  Widget build(BuildContext context) {
-    return Center(
-      child: Icon(
-        Icons.movie_outlined,
-        size: 40,
-        color: Theme.of(context).colorScheme.onSurfaceVariant,
+          const SizedBox(height: 6),
+          Text(
+            movie.name,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: textTheme.bodyMedium,
+          ),
+          // Texte vide si pas d'année : toutes les cases gardent la même hauteur
+          Text(
+            movie.year?.toString() ?? '',
+            maxLines: 1,
+            style: textTheme.bodySmall?.copyWith(
+              color: colors.onSurfaceVariant,
+            ),
+          ),
+        ],
       ),
     );
   }
