@@ -56,6 +56,23 @@ dev_dependencies:
   # package. See that file for information about deactivating specific lint
   # rules and activating additional ones.
   flutter_lints: ^6.0.0
+  flutter_launcher_icons: ^0.14.4
+
+# Icône de l'appli : fichiers Android et iPhone générés à partir de
+# assets/icon/ avec « dart run flutter_launcher_icons »
+flutter_launcher_icons:
+  image_path: assets/icon/icon.png
+  android: true
+  # Android 8+ : icône adaptative (le téléphone choisit la forme)
+  adaptive_icon_background: assets/icon/icon_background.png
+  adaptive_icon_foreground: assets/icon/icon_foreground.png
+  # Le signe est déjà placé dans la zone sûre : pas de marge en plus
+  adaptive_icon_foreground_inset: 0
+  # Android 13+ : icône à une couleur, teintée selon le fond d'écran
+  adaptive_icon_monochrome: assets/icon/icon_foreground.png
+  ios: true
+  # Apple refuse la transparence
+  remove_alpha_ios: true
 
 # For information on the generic Dart part of this file, see the
 # following page: https://dart.dev/tools/pub/pubspec
