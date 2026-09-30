@@ -11,10 +11,13 @@ import '../models/media_track.dart';
 import '../models/playback_info.dart';
 import '../models/playback_quality.dart';
 import '../models/session.dart';
+import '../models/subtitle_size.dart';
 import '../models/track_choice.dart';
 import '../services/device_capabilities.dart';
+import '../services/player_preferences.dart';
 import '../theme/app_theme.dart';
 import '../widgets/player_controls.dart';
+import '../widgets/subtitle_overlay.dart';
 import '../widgets/track_picker.dart';
 import '../widgets/transcode_dialog.dart';
 import '../widgets/ui.dart';
@@ -111,6 +114,13 @@ class _PlayerScreenState extends State<PlayerScreen> {
 
   /// Pistes actuelles (gardées si on change de qualité).
   late TrackSelection _tracks = widget.tracks;
+
+  /// Taille des sous-titres (retenue sur le téléphone).
+  final _preferences = PlayerPreferences();
+  SubtitleSize _subtitleSize = SubtitleSize.medium;
+
+  /// Vrai quand les commandes sont affichées (les sous-titres remontent).
+  final _controlsVisible = ValueNotifier<bool>(true);
   bool _opening = false;
   String? _error;
 
@@ -145,7 +155,13 @@ class _PlayerScreenState extends State<PlayerScreen> {
       _progressInterval,
       (_) => _reportProgress(),
     );
+    _loadSubtitleSize();
     _start();
+  }
+
+  Future<void> _loadSubtitleSize() async {
+    final size = await _preferences.loadSubtitleSize();
+    if (mounted) setState(() => _subtitleSize = size);
   }
 
   /// Prépare l'affichage puis lance le film.
@@ -190,6 +206,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
     _disposePlayer();
     _info.dispose();
     _sourceLabel.dispose();
+    _controlsVisible.dispose();
 
     // Retour à l'affichage normal
     SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
@@ -500,6 +517,12 @@ class _PlayerScreenState extends State<PlayerScreen> {
           PickerOption(track.index, track.label),
       ],
       selected: _tracks.subtitleIndex ?? TrackSelection.noSubtitles,
+      extra: PickerExtra(
+        icon: Icons.format_size_rounded,
+        label: 'Taille des sous-titres',
+        value: _subtitleSize.label,
+        onTap: _chooseSubtitleSize,
+      ),
     );
     if (chosen == null || chosen.value == _tracks.subtitleIndex || !mounted) {
       return;
@@ -513,6 +536,21 @@ class _PlayerScreenState extends State<PlayerScreen> {
     } else {
       await _open(_quality, start: _player.state.position);
     }
+  }
+
+  /// Menu « Taille des sous-titres » (retenue pour les prochaines lectures).
+  Future<void> _chooseSubtitleSize() async {
+    final chosen = await showPicker(
+      context,
+      title: 'Taille des sous-titres',
+      options: [
+        for (final size in SubtitleSize.values) PickerOption(size, size.label),
+      ],
+      selected: _subtitleSize,
+    );
+    if (chosen == null || !mounted) return;
+    setState(() => _subtitleSize = chosen.value);
+    await _preferences.saveSubtitleSize(chosen.value);
   }
 
   /// Menu « Qualité » : choisir une qualité relance la vidéo au même endroit.
@@ -551,8 +589,20 @@ class _PlayerScreenState extends State<PlayerScreen> {
         fit: StackFit.expand,
         children: [
           if (controller != null) ...[
-            // La vidéo seule (les commandes de media_kit sont désactivées)
-            Video(controller: controller, controls: NoVideoControls),
+            // La vidéo seule (commandes et sous-titres de media_kit désactivés)
+            Video(
+              controller: controller,
+              controls: NoVideoControls,
+              subtitleViewConfiguration: const SubtitleViewConfiguration(
+                visible: false,
+              ),
+            ),
+            // Nos sous-titres, sous les commandes
+            SubtitleOverlay(
+              player: _player,
+              size: _subtitleSize,
+              raised: _controlsVisible,
+            ),
             // Nos commandes, dessinées comme sur la maquette
             PlayerControls(
               player: _player,
@@ -563,6 +613,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
               onAudio: _chooseAudio,
               onSubtitles: _chooseSubtitles,
               onQuality: _chooseQuality,
+              onVisibleChanged: (visible) => _controlsVisible.value = visible,
             ),
           ],
           if (_opening && _info.value == null)

@@ -13,13 +13,33 @@ class PickerOption<T> {
   final String? description;
 }
 
+/// Ligne de réglage sous les choix d'une liste (ex. « Taille des
+/// sous-titres · Moyenne »), qui ferme la liste puis lance [onTap].
+class PickerExtra {
+  const PickerExtra({
+    required this.icon,
+    required this.label,
+    required this.value,
+    required this.onTap,
+  });
+
+  final IconData icon;
+  final String label;
+
+  /// Réglage actuel, affiché sous le libellé.
+  final String value;
+  final VoidCallback onTap;
+}
+
 /// Liste de choix qui monte du bas de l'écran, avec une coche sur le choix
 /// actuel. Renvoie l'option touchée, ou null si on ferme sans choisir.
+/// [extra] : ligne de réglage facultative, sous les choix.
 Future<PickerOption<T>?> showPicker<T>(
   BuildContext context, {
   required String title,
   required List<PickerOption<T>> options,
   required T selected,
+  PickerExtra? extra,
 }) {
   return showModalBottomSheet<PickerOption<T>>(
     context: context,
@@ -42,6 +62,22 @@ Future<PickerOption<T>?> showPicker<T>(
                   : null,
               onTap: () => Navigator.of(context).pop(option),
             ),
+          if (extra != null) ...[
+            const Divider(),
+            ListTile(
+              leading: Icon(extra.icon),
+              title: Text(extra.label),
+              subtitle: Text(extra.value),
+              trailing: const Icon(
+                Icons.chevron_right_rounded,
+                color: AppColors.greyDark,
+              ),
+              onTap: () {
+                Navigator.of(context).pop();
+                extra.onTap();
+              },
+            ),
+          ],
         ],
       ),
     ),

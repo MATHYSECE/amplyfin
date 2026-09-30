@@ -1,4 +1,5 @@
 import 'package:flutter/cupertino.dart' show CupertinoPageTransitionsBuilder;
+import 'package:flutter/foundation.dart' show defaultTargetPlatform;
 import 'package:flutter/material.dart';
 
 /// Thème central d'Amplyfin : noir, blanc et quelques gris, police Manrope,
@@ -61,6 +62,24 @@ abstract final class AppRadius {
 
   /// Boutons et pastilles en forme de pilule.
   static const pill = 999.0;
+}
+
+/// Sous-titres (comme Plex) : texte blanc dans la police du téléphone
+/// (SF Pro sur iPhone, Roboto sur Android), plus nette que Manrope en petit,
+/// dans une boîte sombre arrondie autour du bloc de texte.
+abstract final class AppSubtitles {
+  static const text = AppColors.white;
+
+  /// Fond de la boîte : noir à 60 %.
+  static const box = Color(0x99000000);
+  static const radius = 6.0;
+  static const fontWeight = FontWeight.w500;
+  static const lineHeight = 1.3;
+
+  /// Police du système du téléphone.
+  static String get fontFamily => defaultTargetPlatform == TargetPlatform.iOS
+      ? 'CupertinoSystemText'
+      : 'Roboto';
 }
 
 /// Durées des animations : courtes, pour une appli qui paraît fluide.

@@ -30,6 +30,7 @@ class PlayerControls extends StatefulWidget {
     required this.onAudio,
     required this.onSubtitles,
     required this.onQuality,
+    this.onVisibleChanged,
   });
 
   final Player player;
@@ -47,6 +48,10 @@ class PlayerControls extends StatefulWidget {
   final VoidCallback onAudio;
   final VoidCallback onSubtitles;
   final VoidCallback onQuality;
+
+  /// Prévenu quand les commandes s'affichent ou se masquent
+  /// (les sous-titres remontent au-dessus de la barre de progression).
+  final ValueChanged<bool>? onVisibleChanged;
 
   @override
   State<PlayerControls> createState() => _PlayerControlsState();
@@ -83,7 +88,7 @@ class _PlayerControlsState extends State<PlayerControls> {
         _scheduleHide();
       } else {
         _hideTimer?.cancel();
-        if (mounted) setState(() => _visible = true);
+        if (mounted) _setVisible(true);
       }
     });
     _readLevels();
@@ -126,18 +131,25 @@ class _PlayerControlsState extends State<PlayerControls> {
     _hideTimer?.cancel();
     if (!_player.state.playing) return;
     _hideTimer = Timer(_hideDelay, () {
-      if (mounted) setState(() => _visible = false);
+      if (mounted) _setVisible(false);
     });
   }
 
+  /// Affiche ou masque les commandes, et prévient le lecteur.
+  void _setVisible(bool visible) {
+    if (_visible == visible) return;
+    setState(() => _visible = visible);
+    widget.onVisibleChanged?.call(visible);
+  }
+
   void _toggleVisible() {
-    setState(() => _visible = !_visible);
+    _setVisible(!_visible);
     if (_visible) _scheduleHide();
   }
 
   /// Toute action sur une commande garde les commandes affichées un moment.
   void _interacted() {
-    if (!_visible) setState(() => _visible = true);
+    _setVisible(true);
     _scheduleHide();
   }
 
