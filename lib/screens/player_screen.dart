@@ -65,6 +65,11 @@ class _PlayerScreenState extends State<PlayerScreen> {
   /// Mémoire tampon du lecteur : 64 Mo, confortable pour de la 4K.
   static const _bufferSize = 64 * 1024 * 1024;
 
+  /// Sous-titres à part : nouveaux essais avant d'abandonner (le serveur,
+  /// occupé à préparer la vidéo, ne les fournit pas toujours du premier coup).
+  static const _subtitleRetries = 3;
+  static const _subtitleRetryDelay = Duration(seconds: 3);
+
   final _player = Player(
     configuration: const PlayerConfiguration(
       bufferSize: _bufferSize,
@@ -85,6 +90,12 @@ class _PlayerScreenState extends State<PlayerScreen> {
 
   /// Évite de montrer deux fois la fenêtre « lecture directe impossible ».
   bool _decodeProblemShown = false;
+
+  /// Nouveaux essais déjà faits pour les sous-titres à part actuels.
+  int _subtitleAttempts = 0;
+
+  /// Vrai pendant l'attente avant un nouvel essai des sous-titres.
+  bool _subtitleRetryPending = false;
   final List<StreamSubscription<dynamic>> _subscriptions = [];
   Timer? _progressTimer;
 
@@ -296,23 +307,50 @@ class _PlayerScreenState extends State<PlayerScreen> {
   /// jamais pu démarrer.
   void _onPlayerError(String message) {
     if (!mounted || _error != null) return;
-    // Sous-titres à part impossibles à télécharger : la vidéo continue sans
     if (message.contains('/Subtitles/')) {
-      _tracks = TrackSelection(
-        audioIndex: _tracks.audioIndex,
-        subtitleIndex: TrackSelection.noSubtitles,
-      );
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Ces sous-titres n\'ont pas pu être chargés.'),
-        ),
-      );
+      _onSubtitleError();
       return;
     }
     if (_player.state.duration > Duration.zero) return;
     // Jamais le message brut du moteur : il peut contenir l'adresse du
     // serveur et la clé de connexion
     setState(() => _error = 'La vidéo n\'a pas pu être lue.');
+  }
+
+  /// Sous-titres à part impossibles à télécharger : nouvel essai quelques
+  /// secondes plus tard, puis, après plusieurs échecs, la vidéo continue sans.
+  Future<void> _onSubtitleError() async {
+    final info = _info.value;
+    final index = _tracks.subtitleIndex;
+    // Le moteur signale chaque échec deux fois : une seule réaction
+    // (essai déjà prévu, ou sous-titres déjà abandonnés)
+    if (_subtitleRetryPending ||
+        info == null ||
+        index == null ||
+        index == TrackSelection.noSubtitles) {
+      return;
+    }
+    if (_subtitleAttempts < _subtitleRetries) {
+      _subtitleAttempts++;
+      _subtitleRetryPending = true;
+      await Future<void>.delayed(_subtitleRetryDelay);
+      _subtitleRetryPending = false;
+      // Entre-temps, on a pu changer de vidéo ou de sous-titres
+      if (!mounted || _info.value != info || _tracks.subtitleIndex != index) {
+        return;
+      }
+      await _applySubtitles(info, index, retry: true);
+      return;
+    }
+    _tracks = TrackSelection(
+      audioIndex: _tracks.audioIndex,
+      subtitleIndex: TrackSelection.noSubtitles,
+    );
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('Ces sous-titres n\'ont pas pu être chargés.'),
+      ),
+    );
   }
 
   void _reportProgress() {
@@ -380,8 +418,13 @@ class _PlayerScreenState extends State<PlayerScreen> {
   }
 
   /// Sous-titres : aucun, fichier à part (téléchargé par son adresse),
-  /// ou piste du fichier vidéo.
-  Future<void> _applySubtitles(PlaybackInfo info, int index) async {
+  /// ou piste du fichier vidéo. [retry] : nouvel essai après un échec.
+  Future<void> _applySubtitles(
+    PlaybackInfo info,
+    int index, {
+    bool retry = false,
+  }) async {
+    if (!retry) _subtitleAttempts = 0;
     final track = info.track(index);
     if (track == null) {
       await _player.setSubtitleTrack(SubtitleTrack.no());
