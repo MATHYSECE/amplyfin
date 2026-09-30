@@ -12,6 +12,7 @@ import '../models/playback_info.dart';
 import '../models/playback_quality.dart';
 import '../models/season.dart';
 import '../models/session.dart';
+import '../models/track_choice.dart';
 import 'device_profile.dart';
 
 /// Erreur lisible renvoyée par [JellyfinApi].
@@ -231,12 +232,15 @@ class JellyfinApi {
   /// [start] : position de départ, pour que le serveur commence sa conversion
   /// directement au bon endroit (sinon il part du début et le lecteur attend).
   /// [supports10Bit] : faux si l'appareil ne décode pas les vidéos 10 bits.
+  /// [tracks] : pistes audio et sous-titres voulues (le serveur les renvoie
+  /// ensuite comme choix par défaut, et les met dans le flux s'il convertit).
   Future<PlaybackInfo> getPlaybackInfo({
     required String userId,
     required String itemId,
     required PlaybackQuality quality,
     Duration start = Duration.zero,
     bool supports10Bit = true,
+    TrackSelection tracks = const TrackSelection(),
   }) async {
     final bitrate = quality.maxBitrate ?? originalMaxBitrate;
     final json = await _send(
@@ -246,6 +250,9 @@ class JellyfinApi {
       body: {
         'UserId': userId,
         'StartTimeTicks': durationToTicks(start),
+        if (tracks.audioIndex != null) 'AudioStreamIndex': tracks.audioIndex,
+        if (tracks.subtitleIndex != null)
+          'SubtitleStreamIndex': tracks.subtitleIndex,
         'MaxStreamingBitrate': bitrate,
         'DeviceProfile': buildDeviceProfile(
           maxBitrate: bitrate,
@@ -290,6 +297,11 @@ class JellyfinApi {
     final url = info.transcodingUrl!;
     return url.startsWith('http') ? url : '$serverUrl$url';
   }
+
+  /// Adresse complète à partir d'une adresse partielle du serveur
+  /// (ex. l'adresse d'un fichier de sous-titres).
+  String absoluteUrl(String url) =>
+      url.startsWith('http') ? url : '$serverUrl$url';
 
   /// En-têtes à joindre aux requêtes du lecteur vidéo (identification).
   Map<String, String> get streamHeaders => {

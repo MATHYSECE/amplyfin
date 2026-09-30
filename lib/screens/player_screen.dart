@@ -10,13 +10,17 @@ import 'package:media_kit/media_kit.dart';
 import 'package:media_kit_video/media_kit_video.dart';
 
 import '../api/jellyfin_api.dart';
+import '../models/media_track.dart';
 import '../models/playback_info.dart';
 import '../models/playback_quality.dart';
 import '../models/session.dart';
+import '../models/track_choice.dart';
+import '../widgets/track_picker.dart';
 
 /// Lecteur vidéo plein écran, à l'horizontale.
 /// Par défaut le fichier original est lu tel quel (lecture directe) ;
 /// le menu « Qualité » permet de demander un flux converti plus léger.
+/// Les menus « Audio » et « Sous-titres » changent de piste en cours de route.
 class PlayerScreen extends StatefulWidget {
   const PlayerScreen({
     super.key,
@@ -24,6 +28,7 @@ class PlayerScreen extends StatefulWidget {
     required this.session,
     required this.itemId,
     required this.title,
+    this.tracks = const TrackSelection(),
   });
 
   final JellyfinApi api;
@@ -34,6 +39,9 @@ class PlayerScreen extends StatefulWidget {
 
   /// Titre affiché en haut du lecteur.
   final String title;
+
+  /// Pistes audio et sous-titres choisies avant la lecture.
+  final TrackSelection tracks;
 
   @override
   State<PlayerScreen> createState() => _PlayerScreenState();
@@ -67,6 +75,9 @@ class _PlayerScreenState extends State<PlayerScreen> {
   /// la mention ORIGINAL / CONVERTI écoute donc directement cette valeur.
   final _info = ValueNotifier<PlaybackInfo?>(null);
   PlaybackQuality _quality = PlaybackQuality.original;
+
+  /// Pistes actuelles (gardées si on change de qualité).
+  late TrackSelection _tracks = widget.tracks;
   bool _opening = false;
   String? _error;
 
@@ -181,6 +192,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
         // Le décodeur vidéo de l'émulateur ne sait pas lire le 10 bits :
         // le serveur convertit alors ces vidéos
         supports10Bit: !_onEmulator,
+        tracks: _tracks,
       );
       if (!mounted) return;
 
@@ -201,6 +213,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
       _info.value = info;
       setState(() => _quality = quality);
       _report(() => widget.api.reportPlaybackStart(info, start));
+      await _applyTracks(info);
     } on JellyfinException catch (e) {
       if (mounted) setState(() => _error = e.message);
     } finally {
@@ -240,38 +253,154 @@ class _PlayerScreenState extends State<PlayerScreen> {
     }
   }
 
+  // ---------- Pistes audio et sous-titres ----------
+
+  /// Applique les pistes choisies une fois la vidéo ouverte. Sans choix
+  /// précis, on prend celles proposées par le serveur (préférences Jellyfin).
+  Future<void> _applyTracks(PlaybackInfo info) async {
+    _tracks = TrackSelection(
+      audioIndex: _tracks.audioIndex ?? info.defaultAudioIndex,
+      subtitleIndex:
+          _tracks.subtitleIndex ??
+          info.defaultSubtitleIndex ??
+          TrackSelection.noSubtitles,
+    );
+    await _waitForTracks();
+    if (!mounted) return;
+    await _applyAudio(info, _tracks.audioIndex);
+    await _applySubtitles(info, _tracks.subtitleIndex!);
+  }
+
+  /// Attend que le lecteur ait lu la liste des pistes du fichier.
+  Future<void> _waitForTracks() async {
+    // « auto » et « no » sont toujours dans la liste : il faut plus que ça
+    bool ready(Tracks tracks) =>
+        tracks.audio.length > 2 || tracks.video.length > 2;
+    if (ready(_player.state.tracks)) return;
+    try {
+      await _player.stream.tracks
+          .firstWhere(ready)
+          .timeout(const Duration(seconds: 15));
+    } on TimeoutException {
+      // Tant pis : le lecteur garde ses pistes par défaut
+    }
+  }
+
+  /// Piste audio. En flux converti, le serveur n'envoie que la piste
+  /// demandée : rien à faire côté lecteur.
+  Future<void> _applyAudio(PlaybackInfo info, int? index) async {
+    if (!info.directPlay) return;
+    final track = info.track(index);
+    final id = track == null ? null : playerTrackId(info.tracks, track);
+    if (id != null) await _player.setAudioTrack(AudioTrack('$id', null, null));
+  }
+
+  /// Sous-titres : aucun, fichier à part (téléchargé par son adresse),
+  /// ou piste du fichier vidéo.
+  Future<void> _applySubtitles(PlaybackInfo info, int index) async {
+    final track = info.track(index);
+    if (track == null) {
+      await _player.setSubtitleTrack(SubtitleTrack.no());
+      return;
+    }
+    final url = track.deliveryUrl;
+    if (track.deliveryMethod == 'External' && url != null) {
+      await _player.setSubtitleTrack(
+        SubtitleTrack.uri(
+          widget.api.absoluteUrl(url),
+          title: track.label,
+          language: track.language,
+        ),
+      );
+    } else if (info.directPlay) {
+      final id = playerTrackId(info.tracks, track);
+      if (id != null) {
+        await _player.setSubtitleTrack(SubtitleTrack('$id', null, null));
+      }
+    } else if (track.deliveryMethod == 'Encode') {
+      // Flux converti : le serveur a incrusté les sous-titres dans l'image
+      await _player.setSubtitleTrack(SubtitleTrack.no());
+    } else {
+      await _player.setSubtitleTrack(SubtitleTrack.auto());
+    }
+  }
+
+  /// Menu « Audio ».
+  Future<void> _chooseAudio() async {
+    final info = _info.value;
+    if (info == null) return;
+    final chosen = await showPicker(
+      context,
+      title: 'Audio',
+      options: [
+        for (final track in info.audioTracks)
+          PickerOption<int?>(track.index, track.label),
+      ],
+      selected: _tracks.audioIndex,
+    );
+    if (chosen == null || chosen.value == _tracks.audioIndex || !mounted) {
+      return;
+    }
+    _tracks = TrackSelection(
+      audioIndex: chosen.value,
+      subtitleIndex: _tracks.subtitleIndex,
+    );
+    if (info.directPlay) {
+      // Le lecteur a tout le fichier : changement immédiat
+      await _applyAudio(info, chosen.value);
+    } else {
+      // Flux converti : on redemande un flux avec cette piste, au même endroit
+      await _open(_quality, start: _player.state.position);
+    }
+  }
+
+  /// Menu « Sous-titres ».
+  Future<void> _chooseSubtitles() async {
+    final info = _info.value;
+    if (info == null) return;
+    final chosen = await showPicker(
+      context,
+      title: 'Sous-titres',
+      options: [
+        const PickerOption(TrackSelection.noSubtitles, 'Aucun'),
+        for (final track in info.subtitleTracks)
+          PickerOption(track.index, track.label),
+      ],
+      selected: _tracks.subtitleIndex ?? TrackSelection.noSubtitles,
+    );
+    if (chosen == null || chosen.value == _tracks.subtitleIndex || !mounted) {
+      return;
+    }
+    _tracks = TrackSelection(
+      audioIndex: _tracks.audioIndex,
+      subtitleIndex: chosen.value,
+    );
+    if (info.directPlay) {
+      await _applySubtitles(info, chosen.value);
+    } else {
+      await _open(_quality, start: _player.state.position);
+    }
+  }
+
   /// Menu « Qualité » : choisir une qualité relance la vidéo au même endroit.
   Future<void> _chooseQuality() async {
-    final chosen = await showModalBottomSheet<PlaybackQuality>(
-      context: context,
-      isScrollControlled: true,
-      builder: (context) => SafeArea(
-        child: ListView(
-          shrinkWrap: true,
-          children: [
-            ListTile(
-              title: Text(
-                'Qualité',
-                style: Theme.of(context).textTheme.titleMedium,
-              ),
-            ),
-            for (final quality in PlaybackQuality.all)
-              ListTile(
-                title: Text(quality.label),
-                subtitle: Text(
-                  quality.isOriginal
-                      ? 'Fichier lu tel quel, sans conversion'
-                      : 'Converti par le serveur',
-                ),
-                trailing: quality == _quality ? const Icon(Icons.check) : null,
-                onTap: () => Navigator.of(context).pop(quality),
-              ),
-          ],
-        ),
-      ),
+    final chosen = await showPicker(
+      context,
+      title: 'Qualité',
+      options: [
+        for (final quality in PlaybackQuality.all)
+          PickerOption(
+            quality,
+            quality.label,
+            description: quality.isOriginal
+                ? 'Fichier lu tel quel, sans conversion'
+                : 'Converti par le serveur',
+          ),
+      ],
+      selected: _quality,
     );
-    if (chosen == null || chosen == _quality || !mounted) return;
-    await _open(chosen, start: _player.state.position);
+    if (chosen == null || chosen.value == _quality || !mounted) return;
+    await _open(chosen.value, start: _player.state.position);
   }
 
   @override
@@ -300,6 +429,14 @@ class _PlayerScreenState extends State<PlayerScreen> {
         ),
         _SourceLabel(info: _info),
         const SizedBox(width: 8),
+        MaterialCustomButton(
+          icon: const Icon(Icons.audiotrack),
+          onPressed: _chooseAudio,
+        ),
+        MaterialCustomButton(
+          icon: const Icon(Icons.subtitles),
+          onPressed: _chooseSubtitles,
+        ),
         MaterialCustomButton(
           icon: const Icon(Icons.high_quality_outlined),
           onPressed: _chooseQuality,

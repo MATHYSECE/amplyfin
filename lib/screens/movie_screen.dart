@@ -4,7 +4,9 @@ import '../api/jellyfin_api.dart';
 import '../models/item_details.dart';
 import '../models/media_item.dart';
 import '../models/session.dart';
+import '../models/track_choice.dart';
 import '../widgets/details_page.dart';
+import '../widgets/track_picker.dart';
 import 'player_screen.dart';
 
 /// Fiche d'un film : image de fond, affiche, infos, bouton lecture, résumé.
@@ -31,6 +33,10 @@ class _MovieScreenState extends State<MovieScreen> {
   bool _loading = false;
   String? _error;
 
+  // Pistes choisies avant la lecture (numéros sur le serveur)
+  int? _audioIndex;
+  int _subtitleIndex = TrackSelection.noSubtitles;
+
   @override
   void initState() {
     super.initState();
@@ -48,12 +54,62 @@ class _MovieScreenState extends State<MovieScreen> {
         userId: widget.session.userId,
         itemId: widget.movie.id,
       );
-      if (mounted) setState(() => _details = details);
+      if (!mounted) return;
+      setState(() {
+        _details = details;
+        _presetTracks(details);
+      });
     } on JellyfinException catch (e) {
       if (mounted) setState(() => _error = e.message);
     } finally {
       if (mounted) setState(() => _loading = false);
     }
+  }
+
+  /// Présélection : le choix proposé par le serveur (préférences Jellyfin
+  /// de l'utilisateur), sinon la piste audio marquée « par défaut ».
+  void _presetTracks(ItemDetails details) {
+    final audios = details.audioTracks;
+    final serverAudio = audios
+        .where((t) => t.index == details.defaultAudioIndex)
+        .firstOrNull;
+    _audioIndex =
+        (serverAudio ??
+                audios.where((t) => t.isDefault).firstOrNull ??
+                audios.firstOrNull)
+            ?.index;
+
+    final serverSubtitle = details.subtitleTracks
+        .where((t) => t.index == details.defaultSubtitleIndex)
+        .firstOrNull;
+    _subtitleIndex = serverSubtitle?.index ?? TrackSelection.noSubtitles;
+  }
+
+  Future<void> _chooseAudio(ItemDetails details) async {
+    final chosen = await showPicker(
+      context,
+      title: 'Audio',
+      options: [
+        for (final track in details.audioTracks)
+          PickerOption<int?>(track.index, track.label),
+      ],
+      selected: _audioIndex,
+    );
+    if (chosen != null) setState(() => _audioIndex = chosen.value);
+  }
+
+  Future<void> _chooseSubtitles(ItemDetails details) async {
+    final chosen = await showPicker(
+      context,
+      title: 'Sous-titres',
+      options: [
+        const PickerOption(TrackSelection.noSubtitles, 'Aucun'),
+        for (final track in details.subtitleTracks)
+          PickerOption(track.index, track.label),
+      ],
+      selected: _subtitleIndex,
+    );
+    if (chosen != null) setState(() => _subtitleIndex = chosen.value);
   }
 
   void _play() {
@@ -64,9 +120,43 @@ class _MovieScreenState extends State<MovieScreen> {
           session: widget.session,
           itemId: widget.movie.id,
           title: widget.movie.name,
+          tracks: TrackSelection(
+            audioIndex: _audioIndex,
+            subtitleIndex: _subtitleIndex,
+          ),
         ),
       ),
     );
+  }
+
+  /// Les deux lignes de choix « Audio » et « Sous-titres ».
+  List<Widget> _buildTrackSelectors(ItemDetails details) {
+    final audio = details.audioTracks
+        .where((t) => t.index == _audioIndex)
+        .firstOrNull;
+    final subtitle = details.subtitleTracks
+        .where((t) => t.index == _subtitleIndex)
+        .firstOrNull;
+    return [
+      TrackSelectorTile(
+        icon: Icons.audiotrack,
+        title: 'Audio',
+        value: audio?.label ?? 'Par défaut',
+        onTap: details.audioTracks.length > 1
+            ? () => _chooseAudio(details)
+            : null,
+      ),
+      TrackSelectorTile(
+        icon: Icons.subtitles,
+        title: 'Sous-titres',
+        value: details.subtitleTracks.isEmpty
+            ? 'Aucun disponible'
+            : (subtitle?.label ?? 'Aucun'),
+        onTap: details.subtitleTracks.isEmpty
+            ? null
+            : () => _chooseSubtitles(details),
+      ),
+    ];
   }
 
   @override
@@ -92,7 +182,9 @@ class _MovieScreenState extends State<MovieScreen> {
           // Qualité du fichier : 4K, HEVC, HDR10, E-AC3 5.1…
           chips: details?.quality?.labels ?? const [],
         ),
-        const SizedBox(height: 20),
+        const SizedBox(height: 12),
+        if (details != null) ..._buildTrackSelectors(details),
+        const SizedBox(height: 12),
         FilledButton.icon(
           onPressed: _play,
           icon: const Icon(Icons.play_arrow),

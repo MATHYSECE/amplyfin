@@ -1,6 +1,7 @@
 import 'durations.dart';
 import 'media_item.dart';
 import 'media_quality.dart';
+import 'media_track.dart';
 
 /// La fiche complète d'un film ou d'une série : ce qu'affiche l'écran de détail.
 class ItemDetails {
@@ -15,6 +16,9 @@ class ItemDetails {
     this.quality,
     this.endYear,
     this.status,
+    this.tracks = const [],
+    this.defaultAudioIndex,
+    this.defaultSubtitleIndex,
   });
 
   /// Lit la fiche à partir du JSON renvoyé par GET /Items/{id}.
@@ -22,6 +26,12 @@ class ItemDetails {
     final ticks = json['RunTimeTicks'] as int?;
     final backdropTags = json['BackdropImageTags'] as List<dynamic>?;
     final endDate = json['EndDate'] as String?;
+    // Premier fichier vidéo : pistes et choix par défaut du serveur
+    // (qui tiennent compte des préférences de l'utilisateur)
+    final sources = json['MediaSources'] as List<dynamic>?;
+    final source = (sources != null && sources.isNotEmpty)
+        ? sources.first as Map<String, dynamic>
+        : null;
     return ItemDetails(
       item: MediaItem.fromJson(json),
       overview: json['Overview'] as String?,
@@ -35,6 +45,11 @@ class ItemDetails {
       quality: MediaQuality.fromItemJson(json),
       endYear: endDate == null ? null : DateTime.tryParse(endDate)?.year,
       status: json['Status'] as String?,
+      tracks: tracksFromStreams(
+        (source?['MediaStreams'] ?? json['MediaStreams']) as List<dynamic>?,
+      ),
+      defaultAudioIndex: source?['DefaultAudioStreamIndex'] as int?,
+      defaultSubtitleIndex: source?['DefaultSubtitleStreamIndex'] as int?,
     );
   }
 
@@ -67,6 +82,21 @@ class ItemDetails {
 
   /// État d'une série pour le serveur : « Continuing », « Ended »…
   final String? status;
+
+  /// Pistes audio et sous-titres du fichier (films).
+  final List<MediaTrack> tracks;
+
+  /// Piste audio proposée par le serveur (préférences de l'utilisateur).
+  final int? defaultAudioIndex;
+
+  /// Sous-titres proposés par le serveur (-1 = aucun).
+  final int? defaultSubtitleIndex;
+
+  List<MediaTrack> get audioTracks =>
+      tracks.where((t) => t.type == TrackType.audio).toList();
+
+  List<MediaTrack> get subtitleTracks =>
+      tracks.where((t) => t.type == TrackType.subtitle).toList();
 
   /// Durée lisible : « 2 h 04 », « 1 h » ou « 45 min ».
   String? get runtimeLabel => formatRuntime(runtime);

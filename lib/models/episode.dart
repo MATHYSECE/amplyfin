@@ -1,5 +1,6 @@
 import 'durations.dart';
 import 'media_quality.dart';
+import 'media_track.dart';
 
 /// Un épisode d'une série (GET /Shows/{id}/Episodes).
 class Episode {
@@ -14,6 +15,7 @@ class Episode {
     this.imageTag,
     this.played = false,
     this.quality,
+    this.tracks = const [],
   });
 
   factory Episode.fromJson(Map<String, dynamic> json) {
@@ -30,6 +32,7 @@ class Episode {
       imageTag: imageTags?['Primary'] as String?,
       played: userData?['Played'] == true,
       quality: MediaQuality.fromItemJson(json),
+      tracks: tracksFromStreams(json['MediaStreams'] as List<dynamic>?),
     );
   }
 
@@ -58,6 +61,9 @@ class Episode {
 
   /// Qualité technique du fichier (définition, codec, son), si connue.
   final MediaQuality? quality;
+
+  /// Pistes audio et sous-titres (pour appliquer le choix de langue).
+  final List<MediaTrack> tracks;
 
   /// Titre dans la liste : « 3. Titre de l'épisode ».
   String get listTitle => number == null ? name : '$number. $name';

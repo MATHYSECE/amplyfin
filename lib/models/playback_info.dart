@@ -1,3 +1,5 @@
+import 'media_track.dart';
+
 /// Réponse du serveur à POST /Items/{id}/PlaybackInfo :
 /// comment lire ce film (directement, ou via un flux converti).
 class PlaybackInfo {
@@ -7,6 +9,9 @@ class PlaybackInfo {
     required this.playSessionId,
     required this.directPlay,
     this.transcodingUrl,
+    this.tracks = const [],
+    this.defaultAudioIndex,
+    this.defaultSubtitleIndex,
   });
 
   /// Lit la réponse. Lève une [FormatException] si le film ne peut pas
@@ -35,6 +40,9 @@ class PlaybackInfo {
       playSessionId: (json['PlaySessionId'] as String?) ?? '',
       directPlay: directPlay,
       transcodingUrl: transcodingUrl,
+      tracks: tracksFromStreams(source['MediaStreams'] as List<dynamic>?),
+      defaultAudioIndex: source['DefaultAudioStreamIndex'] as int?,
+      defaultSubtitleIndex: source['DefaultSubtitleStreamIndex'] as int?,
     );
   }
 
@@ -52,6 +60,26 @@ class PlaybackInfo {
 
   /// Adresse (partielle) du flux HLS converti, si le serveur en propose un.
   final String? transcodingUrl;
+
+  /// Pistes audio et sous-titres (avec, pour les sous-titres, la façon dont
+  /// le serveur les livre).
+  final List<MediaTrack> tracks;
+
+  /// Piste audio à utiliser : celle demandée, sinon le choix du serveur.
+  final int? defaultAudioIndex;
+
+  /// Sous-titres à afficher (-1 = aucun).
+  final int? defaultSubtitleIndex;
+
+  List<MediaTrack> get audioTracks =>
+      tracks.where((t) => t.type == TrackType.audio).toList();
+
+  List<MediaTrack> get subtitleTracks =>
+      tracks.where((t) => t.type == TrackType.subtitle).toList();
+
+  /// La piste portant ce numéro, ou null.
+  MediaTrack? track(int? index) =>
+      tracks.where((t) => t.index == index).firstOrNull;
 
   /// Méthode de lecture, dans le vocabulaire du serveur.
   String get playMethod => directPlay ? 'DirectPlay' : 'Transcode';

@@ -4,10 +4,15 @@ import 'package:flutter/material.dart';
 import '../api/jellyfin_api.dart';
 import '../models/episode.dart';
 import '../models/item_details.dart';
+import '../models/languages.dart';
 import '../models/media_item.dart';
+import '../models/media_track.dart';
 import '../models/season.dart';
 import '../models/session.dart';
+import '../models/track_choice.dart';
+import '../services/track_preferences.dart';
 import '../widgets/details_page.dart';
+import '../widgets/track_picker.dart';
 import 'player_screen.dart';
 
 /// Fiche d'une série : infos, résumé, choix de la saison, liste des épisodes.
@@ -49,6 +54,10 @@ class _SeriesScreenState extends State<SeriesScreen> {
   String? _shownSeasonId;
   String? _episodesError;
 
+  // Langues choisies pour toute la série (retenues sur le téléphone)
+  final _trackPreferences = TrackPreferences();
+  LanguagePreference _languages = const LanguagePreference();
+
   String get _userId => widget.session.userId;
 
   @override
@@ -56,6 +65,70 @@ class _SeriesScreenState extends State<SeriesScreen> {
     super.initState();
     _loadDetails();
     _loadSeasons();
+    _loadLanguages();
+  }
+
+  Future<void> _loadLanguages() async {
+    final languages = await _trackPreferences.load(widget.series.id);
+    if (mounted) setState(() => _languages = languages);
+  }
+
+  Future<void> _saveLanguages(LanguagePreference languages) async {
+    setState(() => _languages = languages);
+    await _trackPreferences.save(widget.series.id, languages);
+  }
+
+  /// Toutes les pistes des épisodes déjà chargés (pour lister les langues).
+  Iterable<MediaTrack> get _allTracks =>
+      _episodes.values.expand((episodes) => episodes).expand((e) => e.tracks);
+
+  Future<void> _chooseAudioLanguage() async {
+    final chosen = await showPicker(
+      context,
+      title: 'Audio pour toute la série',
+      options: [
+        const PickerOption<String?>(
+          null,
+          'Par défaut',
+          description: 'Selon les réglages de ton compte Jellyfin',
+        ),
+        for (final language in languagesOf(_allTracks, TrackType.audio))
+          PickerOption<String?>(language, languageName(language)),
+      ],
+      selected: _languages.audioLanguage,
+    );
+    if (chosen == null) return;
+    await _saveLanguages(
+      LanguagePreference(
+        audioLanguage: chosen.value,
+        subtitleLanguage: _languages.subtitleLanguage,
+      ),
+    );
+  }
+
+  Future<void> _chooseSubtitleLanguage() async {
+    final chosen = await showPicker(
+      context,
+      title: 'Sous-titres pour toute la série',
+      options: [
+        const PickerOption<String?>(
+          null,
+          'Par défaut',
+          description: 'Selon les réglages de ton compte Jellyfin',
+        ),
+        const PickerOption<String?>(LanguagePreference.noSubtitles, 'Aucun'),
+        for (final language in languagesOf(_allTracks, TrackType.subtitle))
+          PickerOption<String?>(language, languageName(language)),
+      ],
+      selected: _languages.subtitleLanguage,
+    );
+    if (chosen == null) return;
+    await _saveLanguages(
+      LanguagePreference(
+        audioLanguage: _languages.audioLanguage,
+        subtitleLanguage: chosen.value,
+      ),
+    );
   }
 
   Future<void> _loadDetails() async {
@@ -158,6 +231,8 @@ class _SeriesScreenState extends State<SeriesScreen> {
           session: widget.session,
           itemId: episode.id,
           title: episode.playerTitle,
+          // Les langues de la série, appliquées aux pistes de cet épisode
+          tracks: _languages.resolve(episode.tracks),
         ),
       ),
     );
@@ -194,7 +269,24 @@ class _SeriesScreenState extends State<SeriesScreen> {
           RetryMessage(message: _detailsError!, onRetry: _loadDetails)
         else
           const Center(child: CircularProgressIndicator()),
-        const SizedBox(height: 24),
+        const SizedBox(height: 16),
+        Text(
+          'Langues pour toute la série',
+          style: Theme.of(context).textTheme.titleSmall,
+        ),
+        TrackSelectorTile(
+          icon: Icons.audiotrack,
+          title: 'Audio',
+          value: _languages.audioLabel,
+          onTap: _chooseAudioLanguage,
+        ),
+        TrackSelectorTile(
+          icon: Icons.subtitles,
+          title: 'Sous-titres',
+          value: _languages.subtitleLabel,
+          onTap: _chooseSubtitleLanguage,
+        ),
+        const SizedBox(height: 16),
         ..._buildSeasons(),
       ],
     );
