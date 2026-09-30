@@ -20,6 +20,12 @@ class AmplyfinApp extends StatelessWidget {
       theme: ThemeData(
         colorSchemeSeed: const Color(0xFF00A4DC),
         brightness: Brightness.dark,
+        // Cartes (affiches) : coins arrondis, contenu découpé à l'arrondi
+        cardTheme: CardThemeData(
+          margin: EdgeInsets.zero,
+          clipBehavior: Clip.antiAlias,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+        ),
       ),
       home: const StartScreen(),
     );

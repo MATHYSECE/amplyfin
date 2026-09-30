@@ -4,6 +4,7 @@ import 'dart:io';
 
 import 'package:http/http.dart' as http;
 
+import '../models/movie.dart';
 import '../models/session.dart';
 
 /// Erreur lisible renvoyée par [JellyfinApi].
@@ -102,6 +103,50 @@ class JellyfinApi {
 
   /// POST /Sessions/Logout : invalide le jeton côté serveur.
   Future<void> logout() => _send('POST', '/Sessions/Logout');
+
+  /// GET /Items : une page de films de l'utilisateur, triés par titre.
+  /// [startIndex] = position du premier film voulu, [limit] = taille de la page.
+  Future<MoviePage> getMovies({
+    required String userId,
+    int startIndex = 0,
+    int limit = 50,
+  }) async {
+    final json = await _send(
+      'GET',
+      '/Items',
+      query: {
+        'userId': userId,
+        'includeItemTypes': 'Movie',
+        'recursive': 'true',
+        'sortBy': 'SortName',
+        'sortOrder': 'Ascending',
+        'startIndex': '$startIndex',
+        'limit': '$limit',
+        // On ne veut que l'affiche, pas les autres images
+        'enableImageTypes': 'Primary',
+        'imageTypeLimit': '1',
+        'enableUserData': 'false',
+      },
+    );
+    final items = (json['Items'] as List<dynamic>?) ?? [];
+    return MoviePage(
+      movies: [for (final item in items) Movie.fromJson(item)],
+      totalCount: (json['TotalRecordCount'] as int?) ?? items.length,
+    );
+  }
+
+  /// Adresse de l'affiche d'un film (GET /Items/{id}/Images/Primary),
+  /// redimensionnée par le serveur à [width] pixels de large.
+  /// Cet appel ne demande pas de jeton. Null si le film n'a pas d'affiche.
+  String? posterUrl(Movie movie, {required int width}) {
+    final tag = movie.posterTag;
+    if (tag == null) return null;
+    return Uri.parse('$serverUrl/Items/${movie.id}/Images/Primary')
+        .replace(
+          queryParameters: {'fillWidth': '$width', 'quality': '90', 'tag': tag},
+        )
+        .toString();
+  }
 
   // ---------- Envoi des requêtes ----------
 

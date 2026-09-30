@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../api/jellyfin_api.dart';
 import '../services/session_store.dart';
-import 'home_screen.dart';
+import 'library_screen.dart';
 import 'login_screen.dart';
 
 /// Premier écran affiché : décide s'il faut se connecter
@@ -50,7 +50,7 @@ class _StartScreenState extends State<StartScreen> {
       // Serveur injoignable pour l'instant : on garde la session quand même
     }
 
-    _goTo(HomeScreen(api: api, session: session));
+    _goTo(LibraryScreen(api: api, session: session));
   }
 
   void _goTo(Widget screen) {

@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../api/jellyfin_api.dart';
 import '../services/session_store.dart';
-import 'home_screen.dart';
+import 'library_screen.dart';
 
 /// Écran de connexion : adresse du serveur, identifiant, mot de passe.
 class LoginScreen extends StatefulWidget {
@@ -75,7 +75,7 @@ class _LoginScreenState extends State<LoginScreen> {
       if (!mounted) return;
       Navigator.of(context).pushReplacement(
         MaterialPageRoute(
-          builder: (_) => HomeScreen(api: api, session: session),
+          builder: (_) => LibraryScreen(api: api, session: session),
         ),
       );
     } on FormatException {
