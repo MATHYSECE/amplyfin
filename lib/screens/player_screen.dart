@@ -1,7 +1,4 @@
 import 'dart:async';
-import 'dart:io';
-
-import 'package:device_info_plus/device_info_plus.dart';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -15,9 +12,11 @@ import '../models/playback_info.dart';
 import '../models/playback_quality.dart';
 import '../models/session.dart';
 import '../models/track_choice.dart';
+import '../services/device_capabilities.dart';
 import '../theme/app_theme.dart';
 import '../widgets/player_controls.dart';
 import '../widgets/track_picker.dart';
+import '../widgets/transcode_dialog.dart';
 import '../widgets/ui.dart';
 
 /// Lecteur vidéo plein écran, à l'horizontale.
@@ -33,6 +32,7 @@ class PlayerScreen extends StatefulWidget {
     required this.title,
     this.subtitle,
     this.tracks = const TrackSelection(),
+    this.initialInfo,
   });
 
   final JellyfinApi api;
@@ -49,6 +49,10 @@ class PlayerScreen extends StatefulWidget {
 
   /// Pistes audio et sous-titres choisies avant la lecture.
   final TrackSelection tracks;
+
+  /// Réponse du serveur déjà obtenue avant d'ouvrir le lecteur (la fiche
+  /// vérifie si la lecture directe est possible) : évite de redemander.
+  final PlaybackInfo? initialInfo;
 
   @override
   State<PlayerScreen> createState() => _PlayerScreenState();
@@ -74,6 +78,13 @@ class _PlayerScreenState extends State<PlayerScreen> {
 
   /// Vrai sur l'émulateur Android (réglages vidéo particuliers).
   bool _onEmulator = false;
+
+  /// Vrai quand l'appareil n'a pas réussi à décoder l'image en lecture
+  /// directe et que l'utilisateur a accepté une vraie conversion.
+  bool _forceTranscode = false;
+
+  /// Évite de montrer deux fois la fenêtre « lecture directe impossible ».
+  bool _decodeProblemShown = false;
   final List<StreamSubscription<dynamic>> _subscriptions = [];
   Timer? _progressTimer;
 
@@ -81,6 +92,10 @@ class _PlayerScreenState extends State<PlayerScreen> {
   /// ValueNotifier : les commandes de media_kit ne se redessinent pas seules,
   /// la mention ORIGINAL / CONVERTI écoute donc directement cette valeur.
   final _info = ValueNotifier<PlaybackInfo?>(null);
+
+  /// Mention affichée en haut du lecteur : « ORIGINAL », « CONVERTI », ou
+  /// « CONVERSION… » pendant qu'un flux converti se prépare.
+  final _sourceLabel = ValueNotifier<String?>(null);
   PlaybackQuality _quality = PlaybackQuality.original;
 
   /// Pistes actuelles (gardées si on change de qualité).
@@ -106,14 +121,15 @@ class _PlayerScreenState extends State<PlayerScreen> {
           if (done && mounted) Navigator.of(context).maybePop();
         }),
       );
-    if (kDebugMode) {
-      // Affiche les messages du moteur vidéo dans la console (diagnostic)
-      _subscriptions.add(
-        _player.stream.log.listen(
-          (log) => debugPrint('mpv ${log.level} [${log.prefix}] ${log.text}'),
-        ),
-      );
-    }
+    _subscriptions.add(
+      _player.stream.log.listen((log) {
+        if (kDebugMode) {
+          // Messages du moteur vidéo dans la console (diagnostic)
+          debugPrint('mpv ${log.level} [${log.prefix}] ${log.text}');
+        }
+        _watchForDecodeProblem(log);
+      }),
+    );
     _progressTimer = Timer.periodic(
       _progressInterval,
       (_) => _reportProgress(),
@@ -123,20 +139,14 @@ class _PlayerScreenState extends State<PlayerScreen> {
 
   /// Prépare l'affichage puis lance le film.
   Future<void> _start() async {
-    _onEmulator = await _isAndroidEmulator();
+    _onEmulator = await DeviceCapabilities.isAndroidEmulator();
     final controller = VideoController(
       _player,
       configuration: _videoConfiguration(),
     );
     if (!mounted) return;
     setState(() => _controller = controller);
-    await _open(PlaybackQuality.original);
-  }
-
-  static Future<bool> _isAndroidEmulator() async {
-    if (!Platform.isAndroid) return false;
-    final device = await DeviceInfoPlugin().androidInfo;
-    return !device.isPhysicalDevice;
+    await _open(PlaybackQuality.original, prefetched: widget.initialInfo);
   }
 
   /// Réglage de l'affichage vidéo. Sur l'émulateur Android, l'affichage
@@ -166,6 +176,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
     }
     _disposePlayer();
     _info.dispose();
+    _sourceLabel.dispose();
 
     // Retour à l'affichage normal
     SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
@@ -182,31 +193,45 @@ class _PlayerScreenState extends State<PlayerScreen> {
 
   /// Demande au serveur comment lire le film dans la [quality] voulue,
   /// puis ouvre la vidéo à la position [start].
+  /// [prefetched] : réponse du serveur déjà obtenue (pas de nouvelle demande).
   Future<void> _open(
     PlaybackQuality quality, {
     Duration start = Duration.zero,
+    PlaybackInfo? prefetched,
   }) async {
     setState(() {
       _opening = true;
       _error = null;
     });
+    // Pendant le chargement, plus d'ancienne mention qui serait fausse
+    final converting =
+        !quality.isOriginal ||
+        _forceTranscode ||
+        (prefetched != null && !prefetched.directPlay);
+    _sourceLabel.value = converting ? 'CONVERSION…' : null;
     try {
-      final info = await widget.api.getPlaybackInfo(
-        userId: widget.session.userId,
-        itemId: widget.itemId,
-        quality: quality,
-        start: start,
-        // Le décodeur vidéo de l'émulateur ne sait pas lire le 10 bits :
-        // le serveur convertit alors ces vidéos
-        supports10Bit: !_onEmulator,
-        tracks: _tracks,
-      );
+      final info =
+          prefetched ??
+          await widget.api.getPlaybackInfo(
+            userId: widget.session.userId,
+            itemId: widget.itemId,
+            quality: quality,
+            start: start,
+            // Le décodeur vidéo de l'émulateur ne sait pas lire le 10 bits :
+            // le serveur convertit alors ces vidéos
+            supports10Bit: !_onEmulator,
+            tracks: _tracks,
+            allowDirectPlay: !_forceTranscode,
+          );
       if (!mounted) return;
 
       // Changement de qualité : l'ancienne séance est terminée
       final previous = _info.value;
       if (previous != null) {
         _report(() => widget.api.reportPlaybackStopped(previous, start));
+        // Oublie l'ancienne vidéo (pistes, durée) avant d'ouvrir la nouvelle :
+        // les pistes de la nouvelle seront appliquées une fois connues
+        await _player.stop();
       }
 
       await _player.open(
@@ -218,6 +243,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
       );
       if (!mounted) return;
       _info.value = info;
+      _sourceLabel.value = info.directPlay ? 'ORIGINAL' : 'CONVERTI';
       setState(() => _quality = quality);
       _report(() => widget.api.reportPlaybackStart(info, start));
       await _applyTracks(info);
@@ -228,14 +254,65 @@ class _PlayerScreenState extends State<PlayerScreen> {
     }
   }
 
+  /// Surveille les messages du moteur : en lecture directe, s'il n'arrive
+  /// pas à afficher l'image (décodeur ou affichage impossible), on propose
+  /// de convertir. Les autres erreurs, sans gravité, sont ignorées.
+  void _watchForDecodeProblem(PlayerLog log) {
+    final info = _info.value;
+    if (_decodeProblemShown || info == null || !info.directPlay) return;
+    if (!info.hasVideo || (log.level != 'fatal' && log.level != 'error')) {
+      return;
+    }
+    final text = log.text.toLowerCase();
+    if (text.contains('video chain') || text.contains('video_out')) {
+      _decodeProblemShown = true;
+      _offerTranscode();
+    }
+  }
+
+  /// Fenêtre « lecture directe impossible » pendant la lecture.
+  Future<void> _offerTranscode() async {
+    if (!mounted) return;
+    final position = _player.state.position;
+    await _player.pause();
+    if (!mounted) return;
+    final convert = await showTranscodeDialog(
+      context,
+      reasonCodes: const ['VideoCodecNotSupported'],
+    );
+    if (!mounted) return;
+    if (convert) {
+      // Vraie conversion, reprise au même endroit
+      _forceTranscode = true;
+      await _open(_quality, start: position);
+    } else {
+      Navigator.of(context).maybePop();
+    }
+  }
+
   /// Erreur signalée par le lecteur lui-même (fichier illisible, coupure…).
   /// Le moteur signale aussi des erreurs sans gravité (il essaie une autre
   /// méthode et la lecture continue) : on ne prévient que si la vidéo n'a
   /// jamais pu démarrer.
   void _onPlayerError(String message) {
     if (!mounted || _error != null) return;
+    // Sous-titres à part impossibles à télécharger : la vidéo continue sans
+    if (message.contains('/Subtitles/')) {
+      _tracks = TrackSelection(
+        audioIndex: _tracks.audioIndex,
+        subtitleIndex: TrackSelection.noSubtitles,
+      );
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Ces sous-titres n\'ont pas pu être chargés.'),
+        ),
+      );
+      return;
+    }
     if (_player.state.duration > Duration.zero) return;
-    setState(() => _error = 'Lecture impossible : $message');
+    // Jamais le message brut du moteur : il peut contenir l'adresse du
+    // serveur et la clé de connexion
+    setState(() => _error = 'La vidéo n\'a pas pu être lue.');
   }
 
   void _reportProgress() {
@@ -391,6 +468,8 @@ class _PlayerScreenState extends State<PlayerScreen> {
 
   /// Menu « Qualité » : choisir une qualité relance la vidéo au même endroit.
   Future<void> _chooseQuality() async {
+    // Qualité « originale » mais fichier converti (lecture directe impossible)
+    final convertedOriginal = _info.value?.directPlay == false;
     final chosen = await showPicker(
       context,
       title: 'Qualité',
@@ -399,9 +478,12 @@ class _PlayerScreenState extends State<PlayerScreen> {
           PickerOption(
             quality,
             quality.label,
-            description: quality.isOriginal
-                ? 'Fichier lu tel quel, sans conversion'
-                : 'Converti par le serveur',
+            description: !quality.isOriginal
+                ? 'Converti par le serveur'
+                : convertedOriginal
+                ? 'Définition d\'origine, mais convertie : '
+                      'lecture directe impossible sur cet appareil'
+                : 'Fichier lu tel quel, sans conversion',
           ),
       ],
       selected: _quality,
@@ -427,7 +509,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
               player: _player,
               title: widget.title,
               subtitle: widget.subtitle,
-              source: _info,
+              sourceLabel: _sourceLabel,
               onBack: () => Navigator.of(context).maybePop(),
               onAudio: _chooseAudio,
               onSubtitles: _chooseSubtitles,

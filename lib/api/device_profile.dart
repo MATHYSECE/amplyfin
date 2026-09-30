@@ -45,8 +45,9 @@ const _embeddedSubtitles = [
   'sub',
 ];
 
-/// Sous-titres dans un fichier à part (chargés plus tard, étape 8).
-const _externalSubtitles = ['srt', 'subrip', 'ass', 'ssa', 'vtt', 'webvtt'];
+/// Sous-titres livrés dans un fichier à part : uniquement les formats que le
+/// serveur sait produire (il refuse par exemple « subrip », il faut « srt »).
+const _externalSubtitles = ['srt', 'ass', 'ssa', 'vtt'];
 
 /// Construit le profil. [maxBitrate] : débit maximum accepté, en bits/s.
 /// [maxWidth] : largeur d'image maximum, pour forcer une définition réduite.

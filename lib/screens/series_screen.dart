@@ -10,12 +10,12 @@ import '../models/media_track.dart';
 import '../models/season.dart';
 import '../models/session.dart';
 import '../models/track_choice.dart';
+import '../services/playback_launcher.dart';
 import '../services/track_preferences.dart';
 import '../theme/app_theme.dart';
 import '../widgets/details_page.dart';
 import '../widgets/track_picker.dart';
 import '../widgets/ui.dart';
-import 'player_screen.dart';
 
 /// Fiche d'une série : infos, résumé, choix de la saison, liste des épisodes.
 class SeriesScreen extends StatefulWidget {
@@ -225,19 +225,18 @@ class _SeriesScreenState extends State<SeriesScreen> {
     }
   }
 
+  /// Vérifie avec le serveur si la lecture directe est possible (fenêtre
+  /// d'explication sinon), puis ouvre le lecteur.
   Future<void> _play(Episode episode) async {
-    await Navigator.of(context).push(
-      MaterialPageRoute(
-        builder: (_) => PlayerScreen(
-          api: widget.api,
-          session: widget.session,
-          itemId: episode.id,
-          title: episode.playerTitle,
-          subtitle: episode.playerSubtitle,
-          // Les langues de la série, appliquées aux pistes de cet épisode
-          tracks: _languages.resolve(episode.tracks),
-        ),
-      ),
+    await launchPlayback(
+      context,
+      api: widget.api,
+      session: widget.session,
+      itemId: episode.id,
+      title: episode.playerTitle,
+      subtitle: episode.playerSubtitle,
+      // Les langues de la série, appliquées aux pistes de cet épisode
+      tracks: _languages.resolve(episode.tracks),
     );
     // Au retour : met à jour les coches « déjà vu »
     final season = _selectedSeason;

@@ -5,10 +5,11 @@ import '../models/item_details.dart';
 import '../models/media_item.dart';
 import '../models/session.dart';
 import '../models/track_choice.dart';
+import '../services/playback_launcher.dart';
+import '../theme/app_theme.dart';
 import '../widgets/details_page.dart';
 import '../widgets/track_picker.dart';
 import '../widgets/ui.dart';
-import 'player_screen.dart';
 
 /// Fiche d'un film : image de fond, affiche, infos, bouton lecture, résumé.
 /// Le titre, l'année et l'affiche (déjà connus grâce à la grille) s'affichent
@@ -37,6 +38,9 @@ class _MovieScreenState extends State<MovieScreen> {
   // Pistes choisies avant la lecture (numéros sur le serveur)
   int? _audioIndex;
   int _subtitleIndex = TrackSelection.noSubtitles;
+
+  /// Vrai pendant la vérification avant la lecture.
+  bool _starting = false;
 
   @override
   void initState() {
@@ -113,21 +117,23 @@ class _MovieScreenState extends State<MovieScreen> {
     if (chosen != null) setState(() => _subtitleIndex = chosen.value);
   }
 
-  void _play() {
-    Navigator.of(context).push(
-      MaterialPageRoute(
-        builder: (_) => PlayerScreen(
-          api: widget.api,
-          session: widget.session,
-          itemId: widget.movie.id,
-          title: widget.movie.name,
-          tracks: TrackSelection(
-            audioIndex: _audioIndex,
-            subtitleIndex: _subtitleIndex,
-          ),
-        ),
+  /// Vérifie avec le serveur si la lecture directe est possible (fenêtre
+  /// d'explication sinon), puis ouvre le lecteur.
+  Future<void> _play() async {
+    if (_starting) return;
+    setState(() => _starting = true);
+    await launchPlayback(
+      context,
+      api: widget.api,
+      session: widget.session,
+      itemId: widget.movie.id,
+      title: widget.movie.name,
+      tracks: TrackSelection(
+        audioIndex: _audioIndex,
+        subtitleIndex: _subtitleIndex,
       ),
     );
+    if (mounted) setState(() => _starting = false);
   }
 
   /// Bloc en verre avec les deux choix « Audio » et « Sous-titres ».
@@ -191,7 +197,16 @@ class _MovieScreenState extends State<MovieScreen> {
         FilledButton.icon(
           onPressed: _play,
           style: FilledButton.styleFrom(minimumSize: const Size(0, 56)),
-          icon: const Icon(Icons.play_arrow_rounded, size: 26),
+          icon: _starting
+              ? const SizedBox(
+                  width: 22,
+                  height: 22,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2.5,
+                    color: AppColors.black,
+                  ),
+                )
+              : const Icon(Icons.play_arrow_rounded, size: 26),
           label: const Text('Lecture'),
         ),
         const SizedBox(height: 18),

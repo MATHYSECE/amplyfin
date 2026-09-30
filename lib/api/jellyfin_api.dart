@@ -234,6 +234,8 @@ class JellyfinApi {
   /// [supports10Bit] : faux si l'appareil ne décode pas les vidéos 10 bits.
   /// [tracks] : pistes audio et sous-titres voulues (le serveur les renvoie
   /// ensuite comme choix par défaut, et les met dans le flux s'il convertit).
+  /// [allowDirectPlay] : faux pour forcer une vraie conversion (quand
+  /// l'appareil n'a pas réussi à décoder l'image du fichier).
   Future<PlaybackInfo> getPlaybackInfo({
     required String userId,
     required String itemId,
@@ -241,6 +243,7 @@ class JellyfinApi {
     Duration start = Duration.zero,
     bool supports10Bit = true,
     TrackSelection tracks = const TrackSelection(),
+    bool allowDirectPlay = true,
   }) async {
     final bitrate = quality.maxBitrate ?? originalMaxBitrate;
     final json = await _send(
@@ -259,11 +262,12 @@ class JellyfinApi {
           maxWidth: quality.maxWidth,
           maxBitDepth: supports10Bit ? null : 8,
         ),
-        'EnableDirectPlay': quality.isOriginal,
-        'EnableDirectStream': quality.isOriginal,
+        'EnableDirectPlay': quality.isOriginal && allowDirectPlay,
+        'EnableDirectStream': quality.isOriginal && allowDirectPlay,
         'EnableTranscoding': true,
         // Si une conversion a lieu, le serveur recopie tel quel ce qu'il peut
-        'AllowVideoStreamCopy': true,
+        // (sauf conversion forcée : recopier l'image illisible ne servirait à rien)
+        'AllowVideoStreamCopy': allowDirectPlay,
         'AllowAudioStreamCopy': true,
         'AutoOpenLiveStream': true,
       },

@@ -7,7 +7,6 @@ import 'package:screen_brightness/screen_brightness.dart';
 import 'package:volume_controller/volume_controller.dart';
 
 import '../models/durations.dart';
-import '../models/playback_info.dart';
 import '../theme/app_theme.dart';
 import 'ui.dart';
 
@@ -26,7 +25,7 @@ class PlayerControls extends StatefulWidget {
     required this.player,
     required this.title,
     required this.subtitle,
-    required this.source,
+    required this.sourceLabel,
     required this.onBack,
     required this.onAudio,
     required this.onSubtitles,
@@ -41,8 +40,8 @@ class PlayerControls extends StatefulWidget {
   /// Petite ligne sous le titre (ex. « S1 · É3 · Titre »), facultative.
   final String? subtitle;
 
-  /// Séance de lecture (pour la mention ORIGINAL / CONVERTI).
-  final ValueListenable<PlaybackInfo?> source;
+  /// Mention ORIGINAL / CONVERTI / CONVERSION… (null : rien).
+  final ValueListenable<String?> sourceLabel;
 
   final VoidCallback onBack;
   final VoidCallback onAudio;
@@ -372,7 +371,7 @@ class _PlayerControlsState extends State<PlayerControls> {
                         ],
                       ),
                     ),
-                    _SourceBadge(source: widget.source),
+                    _SourceBadge(label: widget.sourceLabel),
                     const SizedBox(width: 12),
                     GlassCircleButton(
                       icon: Icons.volume_up_outlined,
@@ -496,19 +495,19 @@ class _RoundButton extends StatelessWidget {
   }
 }
 
-/// Mention « ORIGINAL » (lecture directe) ou « CONVERTI » (transcodage).
+/// Mention « ORIGINAL » (lecture directe), « CONVERTI » (transcodage) ou
+/// « CONVERSION… » (flux converti en préparation).
 class _SourceBadge extends StatelessWidget {
-  const _SourceBadge({required this.source});
+  const _SourceBadge({required this.label});
 
-  final ValueListenable<PlaybackInfo?> source;
+  final ValueListenable<String?> label;
 
   @override
   Widget build(BuildContext context) {
     return ValueListenableBuilder(
-      valueListenable: source,
-      builder: (context, info, _) => info == null
-          ? const SizedBox.shrink()
-          : OutlinePill(info.directPlay ? 'ORIGINAL' : 'CONVERTI'),
+      valueListenable: label,
+      builder: (context, text, _) =>
+          text == null ? const SizedBox.shrink() : OutlinePill(text),
     );
   }
 }

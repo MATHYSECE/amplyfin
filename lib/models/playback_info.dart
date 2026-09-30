@@ -12,6 +12,7 @@ class PlaybackInfo {
     this.tracks = const [],
     this.defaultAudioIndex,
     this.defaultSubtitleIndex,
+    this.hasVideo = true,
   });
 
   /// Lit la réponse. Lève une [FormatException] si le film ne peut pas
@@ -43,6 +44,9 @@ class PlaybackInfo {
       tracks: tracksFromStreams(source['MediaStreams'] as List<dynamic>?),
       defaultAudioIndex: source['DefaultAudioStreamIndex'] as int?,
       defaultSubtitleIndex: source['DefaultSubtitleStreamIndex'] as int?,
+      hasVideo: ((source['MediaStreams'] as List<dynamic>?) ?? []).any(
+        (s) => (s as Map<String, dynamic>)['Type'] == 'Video',
+      ),
     );
   }
 
@@ -70,6 +74,26 @@ class PlaybackInfo {
 
   /// Sous-titres à afficher (-1 = aucun).
   final int? defaultSubtitleIndex;
+
+  /// Vrai si le fichier contient une image (pas seulement du son).
+  final bool hasVideo;
+
+  /// Codes des raisons de la conversion, donnés par le serveur dans
+  /// l'adresse du flux converti (« TranscodeReasons=… »). Vide en lecture
+  /// directe.
+  List<String> get transcodeReasons {
+    final url = transcodingUrl;
+    if (directPlay || url == null) return const [];
+    final query = Uri.parse(url).queryParameters;
+    final key = query.keys
+        .where((k) => k.toLowerCase() == 'transcodereasons')
+        .firstOrNull;
+    final value = key == null ? '' : query[key]!;
+    return [
+      for (final code in value.split(','))
+        if (code.trim().isNotEmpty) code.trim(),
+    ];
+  }
 
   List<MediaTrack> get audioTracks =>
       tracks.where((t) => t.type == TrackType.audio).toList();
