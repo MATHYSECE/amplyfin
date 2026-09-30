@@ -6,7 +6,10 @@ import 'package:http/http.dart' as http;
 
 import '../models/movie.dart';
 import '../models/movie_details.dart';
+import '../models/playback_info.dart';
+import '../models/playback_quality.dart';
 import '../models/session.dart';
+import 'device_profile.dart';
 
 /// Erreur lisible renvoyée par [JellyfinApi].
 class JellyfinException implements Exception {
@@ -171,6 +174,116 @@ class JellyfinApi {
         )
         .toString();
   }
+
+  // ---------- Lecture vidéo ----------
+
+  /// POST /Items/{id}/PlaybackInfo : demande au serveur comment lire un film.
+  /// Qualité originale : lecture directe si possible.
+  /// Qualité réduite : flux converti par le serveur (débit et largeur limités).
+  /// [start] : position de départ, pour que le serveur commence sa conversion
+  /// directement au bon endroit (sinon il part du début et le lecteur attend).
+  Future<PlaybackInfo> getPlaybackInfo({
+    required String userId,
+    required String itemId,
+    required PlaybackQuality quality,
+    Duration start = Duration.zero,
+  }) async {
+    final bitrate = quality.maxBitrate ?? originalMaxBitrate;
+    final json = await _send(
+      'POST',
+      '/Items/$itemId/PlaybackInfo',
+      query: {'userId': userId},
+      body: {
+        'UserId': userId,
+        'StartTimeTicks': durationToTicks(start),
+        'MaxStreamingBitrate': bitrate,
+        'DeviceProfile': buildDeviceProfile(
+          maxBitrate: bitrate,
+          maxWidth: quality.maxWidth,
+        ),
+        'EnableDirectPlay': quality.isOriginal,
+        'EnableDirectStream': quality.isOriginal,
+        'EnableTranscoding': true,
+        // Si une conversion a lieu, le serveur recopie tel quel ce qu'il peut
+        'AllowVideoStreamCopy': true,
+        'AllowAudioStreamCopy': true,
+        'AutoOpenLiveStream': true,
+      },
+    );
+    try {
+      return PlaybackInfo.fromJson(
+        json as Map<String, dynamic>,
+        itemId: itemId,
+      );
+    } on FormatException catch (e) {
+      throw JellyfinException(e.message);
+    }
+  }
+
+  /// Adresse complète de la vidéo à donner au lecteur :
+  /// - lecture directe : GET /Videos/{id}/stream?static=true (fichier original) ;
+  /// - sinon : le flux HLS converti (TranscodingUrl, adresse partielle).
+  String streamUrl(PlaybackInfo info) {
+    if (info.directPlay) {
+      return Uri.parse('$serverUrl/Videos/${info.itemId}/stream')
+          .replace(
+            queryParameters: {
+              'static': 'true',
+              'mediaSourceId': info.mediaSourceId,
+              'playSessionId': info.playSessionId,
+              'deviceId': deviceId,
+            },
+          )
+          .toString();
+    }
+    final url = info.transcodingUrl!;
+    return url.startsWith('http') ? url : '$serverUrl$url';
+  }
+
+  /// En-têtes à joindre aux requêtes du lecteur vidéo (identification).
+  Map<String, String> get streamHeaders => {
+    'Authorization': _authorizationHeader,
+  };
+
+  /// POST /Sessions/Playing : la lecture commence.
+  Future<void> reportPlaybackStart(PlaybackInfo info, Duration position) =>
+      _send('POST', '/Sessions/Playing', body: _playbackReport(info, position));
+
+  /// POST /Sessions/Playing/Progress : où en est la lecture.
+  Future<void> reportPlaybackProgress(
+    PlaybackInfo info,
+    Duration position, {
+    required bool isPaused,
+  }) => _send(
+    'POST',
+    '/Sessions/Playing/Progress',
+    body: {..._playbackReport(info, position), 'IsPaused': isPaused},
+  );
+
+  /// POST /Sessions/Playing/Stopped : la lecture s'arrête. Le serveur coupe
+  /// alors une éventuelle conversion et retient la position.
+  Future<void> reportPlaybackStopped(PlaybackInfo info, Duration position) =>
+      _send(
+        'POST',
+        '/Sessions/Playing/Stopped',
+        body: {
+          'ItemId': info.itemId,
+          'MediaSourceId': info.mediaSourceId,
+          'PlaySessionId': info.playSessionId,
+          'PositionTicks': durationToTicks(position),
+        },
+      );
+
+  /// Contenu commun des signalements de début et de progression.
+  Map<String, dynamic> _playbackReport(PlaybackInfo info, Duration position) =>
+      {
+        'ItemId': info.itemId,
+        'MediaSourceId': info.mediaSourceId,
+        'PlaySessionId': info.playSessionId,
+        'PositionTicks': durationToTicks(position),
+        'PlayMethod': info.playMethod,
+        'CanSeek': true,
+      };
 
   // ---------- Envoi des requêtes ----------
 

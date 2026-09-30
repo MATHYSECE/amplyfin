@@ -1,10 +1,13 @@
 import 'package:flutter/material.dart';
+import 'package:media_kit/media_kit.dart';
 
 import 'screens/start_screen.dart';
 
 void main() {
   // Nécessaire avant d'utiliser le coffre-fort du téléphone
   WidgetsFlutterBinding.ensureInitialized();
+  // Prépare le moteur vidéo (media_kit)
+  MediaKit.ensureInitialized();
   runApp(const AmplyfinApp());
 }
 

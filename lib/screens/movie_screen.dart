@@ -8,6 +8,7 @@ import '../models/movie.dart';
 import '../models/movie_details.dart';
 import '../models/session.dart';
 import '../widgets/poster_image.dart';
+import 'player_screen.dart';
 
 /// Fiche d'un film : image de fond, affiche, infos, bouton lecture, résumé.
 /// Le titre, l'année et l'affiche (déjà connus grâce à la grille) s'affichent
@@ -79,9 +80,14 @@ class _MovieScreenState extends State<MovieScreen> {
   }
 
   void _play() {
-    // La lecture arrive à l'étape 5
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Lecture bientôt disponible.')),
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => PlayerScreen(
+          api: widget.api,
+          session: widget.session,
+          movie: widget.movie,
+        ),
+      ),
     );
   }
 
@@ -290,6 +296,7 @@ class _Header extends StatelessWidget {
       if (details?.officialRating != null) details!.officialRating!,
     ];
     final rating = details?.ratingLabel;
+    final qualityLabels = details?.quality?.labels ?? const <String>[];
 
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -334,6 +341,23 @@ class _Header extends StatelessWidget {
                     ),
                 ],
               ),
+              // Qualité du fichier : 4K, HEVC, HDR10, E-AC3 5.1…
+              if (qualityLabels.isNotEmpty) ...[
+                const SizedBox(height: 12),
+                Wrap(
+                  spacing: 6,
+                  runSpacing: 6,
+                  children: [
+                    for (final label in qualityLabels)
+                      Chip(
+                        label: Text(label),
+                        labelStyle: textTheme.labelSmall,
+                        visualDensity: VisualDensity.compact,
+                        materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                      ),
+                  ],
+                ),
+              ],
             ],
           ),
         ),

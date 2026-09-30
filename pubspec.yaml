@@ -38,6 +38,10 @@ dependencies:
   flutter_secure_storage: ^11.2.0
   uuid: ^4.6.0
   cached_network_image: ^4.0.4
+  media_kit: ^1.2.6
+  media_kit_video: ^2.0.1
+  media_kit_libs_video: ^1.0.7
+  device_info_plus: ^13.2.0
 
 dev_dependencies:
   flutter_test:

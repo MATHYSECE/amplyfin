@@ -1,3 +1,4 @@
+import 'media_quality.dart';
 import 'movie.dart';
 
 /// La fiche complète d'un film : ce qu'affiche l'écran de détail.
@@ -10,6 +11,7 @@ class MovieDetails {
     this.officialRating,
     this.communityRating,
     this.backdropTag,
+    this.quality,
   });
 
   /// Lit la fiche à partir du JSON renvoyé par GET /Items/{id}.
@@ -26,6 +28,7 @@ class MovieDetails {
       backdropTag: (backdropTags != null && backdropTags.isNotEmpty)
           ? backdropTags.first as String?
           : null,
+      quality: MediaQuality.fromItemJson(json),
     );
   }
 
@@ -50,6 +53,9 @@ class MovieDetails {
   /// Empreinte de l'image de fond, ou null s'il n'y en a pas.
   final String? backdropTag;
 
+  /// Qualité technique du fichier (définition, HDR, son), si connue.
+  final MediaQuality? quality;
+
   /// Durée lisible : « 2 h 04 », « 1 h » ou « 45 min ».
   String? get runtimeLabel {
     final d = runtime;
@@ -70,3 +76,6 @@ class MovieDetails {
 /// Jellyfin compte les durées en « ticks » : 10 millions par seconde.
 Duration? ticksToDuration(int? ticks) =>
     ticks == null ? null : Duration(microseconds: ticks ~/ 10);
+
+/// L'inverse : une durée en « ticks » (pour les signalements au serveur).
+int durationToTicks(Duration duration) => duration.inMicroseconds * 10;
