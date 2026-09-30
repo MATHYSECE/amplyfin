@@ -81,7 +81,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
   /// Affichage de la vidéo (créé au démarrage, selon l'appareil).
   VideoController? _controller;
 
-  /// Vrai sur l'émulateur Android (réglages vidéo particuliers).
+  /// Vrai sur l'émulateur Android (son décodeur ne lit pas le 10 bits).
   bool _onEmulator = false;
 
   /// Vrai quand l'appareil n'a pas réussi à décoder l'image en lecture
@@ -160,11 +160,13 @@ class _PlayerScreenState extends State<PlayerScreen> {
     await _open(PlaybackQuality.original, prefetched: widget.initialInfo);
   }
 
-  /// Réglage de l'affichage vidéo. Sur l'émulateur Android, l'affichage
-  /// OpenGL habituel de media_kit ne fonctionne pas (écran noir) : on envoie
-  /// alors l'image décodée par Android directement à l'écran.
+  /// Réglage de l'affichage vidéo. Sur Android, la puce vidéo décode l'image
+  /// et l'affiche elle-même à l'écran (comme les lecteurs natifs) : c'est le
+  /// seul moyen de lire la HEVC 10 bits ou la 4K de façon fluide. Avec le
+  /// réglage par défaut de media_kit, la puce n'a pas accès à l'écran et le
+  /// processeur, trop lent, prend le relais (et l'émulateur reste noir).
   VideoControllerConfiguration _videoConfiguration() {
-    if (_onEmulator) {
+    if (defaultTargetPlatform == TargetPlatform.android) {
       return const VideoControllerConfiguration(
         vo: 'mediacodec_embed',
         hwdec: 'mediacodec',
@@ -311,6 +313,10 @@ class _PlayerScreenState extends State<PlayerScreen> {
       _onSubtitleError();
       return;
     }
+    // Décodeur refusé : le moteur essaie aussitôt une autre méthode.
+    // Si l'image ne peut vraiment pas s'afficher, _watchForDecodeProblem
+    // propose de convertir.
+    if (message.contains('Could not open codec')) return;
     if (_player.state.duration > Duration.zero) return;
     // Jamais le message brut du moteur : il peut contenir l'adresse du
     // serveur et la clé de connexion
