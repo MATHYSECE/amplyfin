@@ -3,7 +3,9 @@ import 'package:flutter/material.dart';
 import '../api/jellyfin_api.dart';
 import '../models/media_item.dart';
 import '../models/session.dart';
+import '../theme/app_theme.dart';
 import 'poster_image.dart';
+import 'ui.dart';
 
 /// Grille d'affiches d'un type d'élément (films ou séries), chargée page par
 /// page au fil du défilement. Garde sa position quand on change d'onglet.
@@ -14,6 +16,7 @@ class LibraryGrid extends StatefulWidget {
     required this.session,
     required this.itemType,
     required this.emptyMessage,
+    required this.topPadding,
     required this.onOpen,
     required this.onUnauthorized,
   });
@@ -26,6 +29,9 @@ class LibraryGrid extends StatefulWidget {
 
   /// Message affiché si la bibliothèque est vide.
   final String emptyMessage;
+
+  /// Espace laissé en haut pour l'en-tête qui passe par-dessus la grille.
+  final double topPadding;
 
   /// Appelé quand on touche une affiche.
   final void Function(MediaItem item) onOpen;
@@ -120,18 +126,35 @@ class _LibraryGridState extends State<LibraryGrid>
   /// Tirer vers le bas : on recharge depuis le début.
   Future<void> _refresh() => _loadMore(reset: true);
 
+  /// Grille commune : vraies affiches, ou zones grises pendant le chargement.
+  static const _gridDelegate = SliverGridDelegateWithMaxCrossAxisExtent(
+    // 3 colonnes sur un téléphone, davantage sur une tablette
+    maxCrossAxisExtent: 150,
+    childAspectRatio: 0.55,
+    crossAxisSpacing: 12,
+    mainAxisSpacing: 18,
+  );
+
   @override
   Widget build(BuildContext context) {
     super.build(context); // nécessaire pour AutomaticKeepAliveClientMixin
+    final padding = EdgeInsets.fromLTRB(16, widget.topPadding + 12, 16, 12);
 
-    // Premier chargement
+    // Premier chargement : la grille a déjà sa forme, en zones grises
     if (_items.isEmpty && _loading) {
-      return const Center(child: CircularProgressIndicator());
+      return GridView.builder(
+        padding: padding,
+        physics: const NeverScrollableScrollPhysics(),
+        gridDelegate: _gridDelegate,
+        itemCount: 12,
+        itemBuilder: (_, _) => const _PosterTileSkeleton(),
+      );
     }
     // Premier chargement raté
     if (_items.isEmpty && _error != null) {
       return _MessageView(
-        icon: Icons.cloud_off,
+        topPadding: widget.topPadding,
+        icon: Icons.cloud_off_rounded,
         message: _error!,
         onRetry: _loadMore,
       );
@@ -139,6 +162,7 @@ class _LibraryGridState extends State<LibraryGrid>
     // Bibliothèque vide
     if (_items.isEmpty && !_hasMore) {
       return _MessageView(
+        topPadding: widget.topPadding,
         icon: Icons.movie_outlined,
         message: widget.emptyMessage,
         onRetry: _refresh,
@@ -147,21 +171,18 @@ class _LibraryGridState extends State<LibraryGrid>
 
     return RefreshIndicator(
       onRefresh: _refresh,
+      // La roue apparaît sous l'en-tête, pas derrière
+      edgeOffset: widget.topPadding,
       child: CustomScrollView(
         controller: _scrollController,
         // Permet de tirer pour rafraîchir même avec peu d'éléments
         physics: const AlwaysScrollableScrollPhysics(),
         slivers: [
           SliverPadding(
-            padding: const EdgeInsets.all(12),
+            padding: padding,
             sliver: SliverGrid.builder(
               // Le nombre de colonnes s'adapte à la largeur de l'écran
-              gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
-                maxCrossAxisExtent: 180,
-                childAspectRatio: 0.55,
-                crossAxisSpacing: 12,
-                mainAxisSpacing: 16,
-              ),
+              gridDelegate: _gridDelegate,
               itemCount: _items.length,
               itemBuilder: (context, index) => _PosterTile(
                 api: widget.api,
@@ -184,7 +205,7 @@ class _LibraryGridState extends State<LibraryGrid>
         child: Column(
           children: [
             Text(_error!, textAlign: TextAlign.center),
-            const SizedBox(height: 8),
+            const SizedBox(height: 12),
             OutlinedButton(
               onPressed: _loadMore,
               child: const Text('Réessayer'),
@@ -196,14 +217,20 @@ class _LibraryGridState extends State<LibraryGrid>
     if (_hasMore) {
       return const Padding(
         padding: EdgeInsets.fromLTRB(0, 8, 0, 32),
-        child: Center(child: CircularProgressIndicator()),
+        child: Center(
+          child: SizedBox(
+            width: 24,
+            height: 24,
+            child: CircularProgressIndicator(strokeWidth: 2.5),
+          ),
+        ),
       );
     }
-    return const SizedBox(height: 24);
+    return SizedBox(height: MediaQuery.paddingOf(context).bottom + 24);
   }
 }
 
-/// Une case de la grille : affiche, titre et année.
+/// Une case de la grille : affiche (avec une ombre douce), titre et année.
 class _PosterTile extends StatelessWidget {
   const _PosterTile({
     required this.api,
@@ -218,34 +245,43 @@ class _PosterTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final textTheme = Theme.of(context).textTheme;
-    final colors = Theme.of(context).colorScheme;
 
-    return InkWell(
+    return GestureDetector(
       onTap: onTap,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           // L'affiche prend toute la place restante, et « glisse » vers la fiche
           Expanded(
-            child: Hero(
-              tag: PosterImage.heroTag(item),
-              child: PosterImage(api: api, item: item),
+            child: DecoratedBox(
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(AppRadius.poster),
+                boxShadow: const [
+                  BoxShadow(
+                    color: AppColors.scrim55,
+                    blurRadius: 24,
+                    offset: Offset(0, 10),
+                  ),
+                ],
+              ),
+              child: Hero(
+                tag: PosterImage.heroTag(item),
+                child: PosterImage(api: api, item: item),
+              ),
             ),
           ),
-          const SizedBox(height: 6),
+          const SizedBox(height: 8),
           Text(
             item.name,
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
-            style: textTheme.bodyMedium,
+            style: textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w600),
           ),
           // Texte vide si pas d'année : toutes les cases gardent la même hauteur
           Text(
             item.year?.toString() ?? '',
             maxLines: 1,
-            style: textTheme.bodySmall?.copyWith(
-              color: colors.onSurfaceVariant,
-            ),
+            style: textTheme.bodySmall?.copyWith(color: AppColors.grey),
           ),
         ],
       ),
@@ -253,30 +289,55 @@ class _PosterTile extends StatelessWidget {
   }
 }
 
+/// Case en zones grises animées, pendant le premier chargement.
+class _PosterTileSkeleton extends StatelessWidget {
+  const _PosterTileSkeleton();
+
+  @override
+  Widget build(BuildContext context) {
+    return const Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Expanded(child: SkeletonBox()),
+        SizedBox(height: 10),
+        SkeletonBox(width: 90, height: 12, radius: 6),
+        SizedBox(height: 6),
+        SkeletonBox(width: 40, height: 10, radius: 5),
+      ],
+    );
+  }
+}
+
 /// Message plein écran avec un bouton « Réessayer ».
 class _MessageView extends StatelessWidget {
   const _MessageView({
+    required this.topPadding,
     required this.icon,
     required this.message,
     required this.onRetry,
   });
 
+  final double topPadding;
   final IconData icon;
   final String message;
   final VoidCallback onRetry;
 
   @override
   Widget build(BuildContext context) {
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(24),
+    return Padding(
+      padding: EdgeInsets.fromLTRB(32, topPadding, 32, 0),
+      child: Center(
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(icon, size: 64),
+            Icon(icon, size: 56, color: AppColors.grey),
             const SizedBox(height: 16),
-            Text(message, textAlign: TextAlign.center),
-            const SizedBox(height: 16),
+            Text(
+              message,
+              textAlign: TextAlign.center,
+              style: Theme.of(context).textTheme.bodyLarge,
+            ),
+            const SizedBox(height: 20),
             FilledButton(onPressed: onRetry, child: const Text('Réessayer')),
           ],
         ),

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../api/jellyfin_api.dart';
 import '../services/session_store.dart';
+import '../widgets/ui.dart';
 import 'library_screen.dart';
 import 'login_screen.dart';
 
@@ -61,6 +62,18 @@ class _StartScreenState extends State<StartScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return const Scaffold(body: Center(child: CircularProgressIndicator()));
+    // Le nom de l'appli sur le halo, le temps de vérifier la session
+    return Scaffold(
+      body: GlowBackground(
+        center: Alignment.center,
+        child: Center(
+          child: Text(
+            'Amplyfin',
+            style: Theme.of(context).textTheme.displaySmall
+                ?.copyWith(fontSize: 44),
+          ),
+        ),
+      ),
+    );
   }
 }

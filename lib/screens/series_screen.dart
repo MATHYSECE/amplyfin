@@ -11,8 +11,10 @@ import '../models/season.dart';
 import '../models/session.dart';
 import '../models/track_choice.dart';
 import '../services/track_preferences.dart';
+import '../theme/app_theme.dart';
 import '../widgets/details_page.dart';
 import '../widgets/track_picker.dart';
+import '../widgets/ui.dart';
 import 'player_screen.dart';
 
 /// Fiche d'une série : infos, résumé, choix de la saison, liste des épisodes.
@@ -251,42 +253,58 @@ class _SeriesScreenState extends State<SeriesScreen> {
       item: series,
       details: details,
       showBackdropFallback: !_detailsLoading,
+      header: DetailsHeader(
+        api: widget.api,
+        item: series,
+        infos: [
+          ?(details?.yearsLabel ?? series.year?.toString()),
+          ?details?.statusLabel,
+          ?details?.officialRating,
+        ],
+        rating: details?.ratingLabel,
+      ),
       children: [
-        DetailsHeader(
-          api: widget.api,
-          item: series,
-          infos: [
-            ?(details?.yearsLabel ?? series.year?.toString()),
-            ?details?.statusLabel,
-            ?details?.officialRating,
-          ],
-          rating: details?.ratingLabel,
-        ),
-        const SizedBox(height: 20),
         if (details != null)
           DetailsOverview(details: details)
         else if (_detailsError != null)
           RetryMessage(message: _detailsError!, onRetry: _loadDetails)
         else
-          const Center(child: CircularProgressIndicator()),
-        const SizedBox(height: 16),
+          const DetailsOverviewSkeleton(),
+        const SizedBox(height: 26),
         Text(
           'Langues pour toute la série',
-          style: Theme.of(context).textTheme.titleSmall,
+          style: Theme.of(context).textTheme.labelLarge
+              ?.copyWith(color: AppColors.grey),
         ),
-        TrackSelectorTile(
-          icon: Icons.audiotrack,
-          title: 'Audio',
-          value: _languages.audioLabel,
-          onTap: _chooseAudioLanguage,
+        const SizedBox(height: 10),
+        Row(
+          children: [
+            Expanded(
+              child: GlassPanel(
+                child: TrackSelectorTile(
+                  icon: Icons.volume_up_outlined,
+                  title: 'Audio',
+                  value: _languages.audioLabel,
+                  onTap: _chooseAudioLanguage,
+                  showChevron: false,
+                ),
+              ),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: GlassPanel(
+                child: TrackSelectorTile(
+                  icon: Icons.subtitles_outlined,
+                  title: 'Sous-titres',
+                  value: _languages.subtitleLabel,
+                  onTap: _chooseSubtitleLanguage,
+                  showChevron: false,
+                ),
+              ),
+            ),
+          ],
         ),
-        TrackSelectorTile(
-          icon: Icons.subtitles,
-          title: 'Sous-titres',
-          value: _languages.subtitleLabel,
-          onTap: _chooseSubtitleLanguage,
-        ),
-        const SizedBox(height: 16),
+        const SizedBox(height: 26),
         ..._buildSeasons(),
       ],
     );
@@ -300,7 +318,7 @@ class _SeriesScreenState extends State<SeriesScreen> {
         if (_seasonsError != null)
           RetryMessage(message: _seasonsError!, onRetry: _loadSeasons)
         else
-          const Center(child: CircularProgressIndicator()),
+          const _EpisodesSkeleton(),
       ];
     }
     if (seasons.isEmpty) {
@@ -317,9 +335,10 @@ class _SeriesScreenState extends State<SeriesScreen> {
         _loadingSeasons.contains(selected.id);
 
     return [
-      // Défilement horizontal si les saisons ne tiennent pas en largeur
+      // Saisons en pilules, défilement horizontal si elles ne tiennent pas
       SingleChildScrollView(
         scrollDirection: Axis.horizontal,
+        clipBehavior: Clip.none,
         child: Row(
           children: [
             for (final season in seasons)
@@ -334,12 +353,14 @@ class _SeriesScreenState extends State<SeriesScreen> {
           ],
         ),
       ),
-      const SizedBox(height: 8),
+      const SizedBox(height: 10),
       // Fine barre de chargement, sans changer la hauteur de la page
       SizedBox(
-        height: 4,
+        height: 3,
         child: switching && episodes != null
-            ? const LinearProgressIndicator()
+            ? const LinearProgressIndicator(
+                borderRadius: BorderRadius.all(Radius.circular(2)),
+              )
             : null,
       ),
       const SizedBox(height: 8),
@@ -349,7 +370,7 @@ class _SeriesScreenState extends State<SeriesScreen> {
           onRetry: () => _selectSeason(selected),
         )
       else if (episodes == null)
-        const Center(child: CircularProgressIndicator())
+        const _EpisodesSkeleton()
       else if (episodes.isEmpty)
         const Text('Aucun épisode dans cette saison.')
       else
@@ -358,80 +379,104 @@ class _SeriesScreenState extends State<SeriesScreen> {
             api: widget.api,
             episode: episode,
             onTap: () => _play(episode),
+            onInfo: () => _showEpisodeInfo(episode),
           ),
     ];
+  }
+
+  /// Bouton ⓘ : infos de l'épisode dans un panneau qui monte du bas.
+  Future<void> _showEpisodeInfo(Episode episode) async {
+    final play = await showModalBottomSheet<bool>(
+      context: context,
+      isScrollControlled: true,
+      builder: (context) => _EpisodeSheet(api: widget.api, episode: episode),
+    );
+    if (play == true && mounted) await _play(episode);
+  }
+}
+
+/// Largeur demandée au serveur pour les vignettes d'épisode, en pixels.
+const _episodeImageWidth = 480;
+
+/// Vignette d'un épisode (image, ou icône s'il n'y en a pas).
+class _EpisodeThumbnail extends StatelessWidget {
+  const _EpisodeThumbnail({required this.api, required this.episode});
+
+  final JellyfinApi api;
+  final Episode episode;
+
+  @override
+  Widget build(BuildContext context) {
+    final url = api.episodeImageUrl(episode, width: _episodeImageWidth);
+    const placeholder = Center(
+      child: Icon(Icons.tv_rounded, color: AppColors.greyDark),
+    );
+    return Card(
+      child: url == null
+          ? placeholder
+          : CachedNetworkImage(
+              imageUrl: url,
+              fit: BoxFit.cover,
+              width: double.infinity,
+              height: double.infinity,
+              memCacheWidth: _episodeImageWidth,
+              fadeInDuration: AppDurations.fast,
+              placeholder: (_, _) => const SizedBox.shrink(),
+              errorWidget: (_, _, _) => placeholder,
+            ),
+    );
   }
 }
 
 /// Une ligne de la liste : vignette (avec coche si déjà vu), numéro et titre,
-/// durée, début du résumé. Un appui lance la lecture.
+/// durée et qualité, bouton ⓘ. Un appui sur la ligne lance la lecture.
 class _EpisodeTile extends StatelessWidget {
   const _EpisodeTile({
     required this.api,
     required this.episode,
     required this.onTap,
+    required this.onInfo,
   });
-
-  /// Largeur demandée au serveur pour la vignette, en pixels.
-  static const _imageWidth = 400;
 
   final JellyfinApi api;
   final Episode episode;
   final VoidCallback onTap;
+  final VoidCallback onInfo;
 
   @override
   Widget build(BuildContext context) {
     final textTheme = Theme.of(context).textTheme;
-    final colors = Theme.of(context).colorScheme;
-    final url = api.episodeImageUrl(episode, width: _imageWidth);
-    final overview = episode.overview?.trim() ?? '';
-    final placeholder = Center(
-      child: Icon(Icons.tv, color: colors.onSurfaceVariant),
-    );
 
     return InkWell(
       onTap: onTap,
+      borderRadius: BorderRadius.circular(AppRadius.poster),
       child: Padding(
-        padding: const EdgeInsets.symmetric(vertical: 8),
+        padding: const EdgeInsets.symmetric(vertical: 7),
         child: Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             SizedBox(
-              width: 160,
-              child: AspectRatio(
-                aspectRatio: 16 / 9,
-                child: Card(
-                  child: Stack(
-                    fit: StackFit.expand,
-                    children: [
-                      if (url == null)
-                        placeholder
-                      else
-                        CachedNetworkImage(
-                          imageUrl: url,
-                          fit: BoxFit.cover,
-                          memCacheWidth: _imageWidth,
-                          placeholder: (_, _) => const SizedBox.shrink(),
-                          errorWidget: (_, _, _) => placeholder,
+              width: 138,
+              height: 78,
+              child: Stack(
+                fit: StackFit.expand,
+                children: [
+                  _EpisodeThumbnail(api: api, episode: episode),
+                  // Déjà vu : petite coche blanche en haut à droite
+                  if (episode.played)
+                    const Positioned(
+                      top: 6,
+                      right: 6,
+                      child: CircleAvatar(
+                        radius: 11,
+                        backgroundColor: AppColors.white,
+                        child: Icon(
+                          Icons.check_rounded,
+                          size: 15,
+                          color: AppColors.black,
                         ),
-                      // Déjà vu : petite coche en haut à droite
-                      if (episode.played)
-                        Positioned(
-                          top: 6,
-                          right: 6,
-                          child: CircleAvatar(
-                            radius: 11,
-                            backgroundColor: colors.primary,
-                            child: Icon(
-                              Icons.check,
-                              size: 14,
-                              color: colors.onPrimary,
-                            ),
-                          ),
-                        ),
-                    ],
-                  ),
-                ),
+                      ),
+                    ),
+                ],
               ),
             ),
             const SizedBox(width: 12),
@@ -441,32 +486,135 @@ class _EpisodeTile extends StatelessWidget {
                 children: [
                   Text(
                     episode.listTitle,
-                    maxLines: 2,
+                    maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: textTheme.titleSmall,
                   ),
-                  if (episode.infoLine.isNotEmpty)
-                    Text(
-                      episode.infoLine,
-                      style: textTheme.bodySmall?.copyWith(
-                        color: colors.onSurfaceVariant,
-                      ),
-                    ),
-                  if (overview.isNotEmpty) ...[
+                  if (episode.infoLine.isNotEmpty) ...[
                     const SizedBox(height: 4),
                     Text(
-                      overview,
+                      joinInfos(episode.infoLine.split(' · ')),
                       maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                      style: textTheme.bodySmall,
+                      style: textTheme.bodySmall?.copyWith(
+                        color: AppColors.grey,
+                      ),
                     ),
                   ],
                 ],
               ),
             ),
+            const SizedBox(width: 8),
+            GlassCircleButton(
+              icon: Icons.info_outline_rounded,
+              tooltip: 'Infos de l\'épisode',
+              size: 40,
+              onPressed: onInfo,
+            ),
           ],
         ),
       ),
+    );
+  }
+}
+
+/// Panneau d'infos d'un épisode : image, titre, infos, résumé, et bouton
+/// « Lire l'épisode » (ferme le panneau en renvoyant true).
+class _EpisodeSheet extends StatelessWidget {
+  const _EpisodeSheet({required this.api, required this.episode});
+
+  final JellyfinApi api;
+  final Episode episode;
+
+  @override
+  Widget build(BuildContext context) {
+    final textTheme = Theme.of(context).textTheme;
+    final overview = episode.overview?.trim() ?? '';
+    final season = episode.seasonNumber;
+    final number = episode.number;
+
+    return SafeArea(
+      child: ConstrainedBox(
+        // Pas plus de 85 % de l'écran : le résumé défile s'il est long
+        constraints: BoxConstraints(
+          maxHeight: MediaQuery.sizeOf(context).height * 0.85,
+        ),
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              AspectRatio(
+                aspectRatio: 16 / 9,
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(14),
+                  child: _EpisodeThumbnail(api: api, episode: episode),
+                ),
+              ),
+              const SizedBox(height: 18),
+              if (season != null && number != null)
+                Text(
+                  'Saison $season · Épisode $number',
+                  style: textTheme.labelLarge?.copyWith(color: AppColors.grey),
+                ),
+              const SizedBox(height: 6),
+              Text(episode.name, style: textTheme.headlineSmall),
+              if (episode.infoLine.isNotEmpty) ...[
+                const SizedBox(height: 6),
+                Text(
+                  joinInfos(episode.infoLine.split(' · ')),
+                  style: textTheme.bodyMedium?.copyWith(color: AppColors.grey),
+                ),
+              ],
+              const SizedBox(height: 16),
+              Text(
+                overview.isEmpty ? 'Pas de résumé disponible.' : overview,
+                style: textTheme.bodyLarge?.copyWith(
+                  color: overview.isEmpty ? AppColors.grey : AppColors.textSoft,
+                ),
+              ),
+              const SizedBox(height: 22),
+              FilledButton.icon(
+                onPressed: () => Navigator.of(context).pop(true),
+                icon: const Icon(Icons.play_arrow_rounded, size: 24),
+                label: const Text('Lire l\'épisode'),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Zones grises animées à la place des épisodes, pendant le chargement.
+class _EpisodesSkeleton extends StatelessWidget {
+  const _EpisodesSkeleton();
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      children: [
+        for (var i = 0; i < 3; i++)
+          const Padding(
+            padding: EdgeInsets.symmetric(vertical: 7),
+            child: Row(
+              children: [
+                SkeletonBox(width: 138, height: 78),
+                SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      SkeletonBox(height: 14, radius: 6),
+                      SizedBox(height: 8),
+                      SkeletonBox(width: 120, height: 12, radius: 6),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+      ],
     );
   }
 }

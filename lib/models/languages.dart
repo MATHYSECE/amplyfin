@@ -45,6 +45,31 @@ const _names = {
   'vie': 'Vietnamien',
 };
 
+/// Noms anglais des langues courantes : souvent utilisés comme titre de
+/// piste dans les fichiers (« French », « English »…).
+const _englishNames = {
+  'french',
+  'english',
+  'spanish',
+  'german',
+  'italian',
+  'portuguese',
+  'dutch',
+  'japanese',
+  'korean',
+  'chinese',
+  'russian',
+  'arabic',
+};
+
+/// Vrai si ce texte n'est qu'un nom de langue (en français ou en anglais) :
+/// il n'apporte alors rien de plus que la langue déjà affichée.
+bool isJustLanguageName(String text) {
+  final lower = text.trim().toLowerCase();
+  return _englishNames.contains(lower) ||
+      _names.values.any((name) => name.toLowerCase() == lower);
+}
+
 /// Code de langue unifié (minuscules, un seul code par langue),
 /// ou null si inconnu.
 String? normalizeLanguage(String? code) {

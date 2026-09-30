@@ -90,9 +90,11 @@ class MediaTrack {
           ).audioLabel
         : _subtitleFormat;
     final name = isForced ? '$languageLabel (forcés)' : languageLabel;
-    final extraTitle = (title != null && title!.trim().isNotEmpty)
-        ? title!.trim()
-        : null;
+    // Titre de la piste, sauf s'il répète juste la langue (« French »)
+    final trimmed = title?.trim() ?? '';
+    final extraTitle = (trimmed.isEmpty || isJustLanguageName(trimmed))
+        ? null
+        : trimmed;
     return [name, ?details, ?extraTitle].join(' · ');
   }
 

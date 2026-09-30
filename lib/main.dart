@@ -1,13 +1,30 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:media_kit/media_kit.dart';
 
 import 'screens/start_screen.dart';
+import 'theme/app_theme.dart';
 
 void main() {
   // Nécessaire avant d'utiliser le coffre-fort du téléphone
   WidgetsFlutterBinding.ensureInitialized();
   // Prépare le moteur vidéo (media_kit)
   MediaKit.ensureInitialized();
+  // Licence de la police Manrope, ajoutée aux mentions légales de l'appli
+  LicenseRegistry.addLicense(() async* {
+    final text = await rootBundle.loadString('assets/fonts/OFL.txt');
+    yield LicenseEntryWithLineBreaks(['Manrope'], text);
+  });
+  // Barres du système transparentes : le fond noir va jusqu'aux bords
+  SystemChrome.setSystemUIOverlayStyle(
+    const SystemUiOverlayStyle(
+      statusBarColor: Colors.transparent,
+      systemNavigationBarColor: Colors.transparent,
+      statusBarIconBrightness: Brightness.light,
+      statusBarBrightness: Brightness.dark,
+    ),
+  );
   runApp(const AmplyfinApp());
 }
 
@@ -19,17 +36,7 @@ class AmplyfinApp extends StatelessWidget {
     return MaterialApp(
       title: 'Amplyfin',
       debugShowCheckedModeBanner: false,
-      // Thème sombre, couleur inspirée de Jellyfin
-      theme: ThemeData(
-        colorSchemeSeed: const Color(0xFF00A4DC),
-        brightness: Brightness.dark,
-        // Cartes (affiches) : coins arrondis, contenu découpé à l'arrondi
-        cardTheme: CardThemeData(
-          margin: EdgeInsets.zero,
-          clipBehavior: Clip.antiAlias,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-        ),
-      ),
+      theme: buildAppTheme(),
       home: const StartScreen(),
     );
   }

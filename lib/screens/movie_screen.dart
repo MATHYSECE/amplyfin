@@ -7,6 +7,7 @@ import '../models/session.dart';
 import '../models/track_choice.dart';
 import '../widgets/details_page.dart';
 import '../widgets/track_picker.dart';
+import '../widgets/ui.dart';
 import 'player_screen.dart';
 
 /// Fiche d'un film : image de fond, affiche, infos, bouton lecture, résumé.
@@ -129,34 +130,39 @@ class _MovieScreenState extends State<MovieScreen> {
     );
   }
 
-  /// Les deux lignes de choix « Audio » et « Sous-titres ».
-  List<Widget> _buildTrackSelectors(ItemDetails details) {
+  /// Bloc en verre avec les deux choix « Audio » et « Sous-titres ».
+  Widget _buildTrackSelectors(ItemDetails details) {
     final audio = details.audioTracks
         .where((t) => t.index == _audioIndex)
         .firstOrNull;
     final subtitle = details.subtitleTracks
         .where((t) => t.index == _subtitleIndex)
         .firstOrNull;
-    return [
-      TrackSelectorTile(
-        icon: Icons.audiotrack,
-        title: 'Audio',
-        value: audio?.label ?? 'Par défaut',
-        onTap: details.audioTracks.length > 1
-            ? () => _chooseAudio(details)
-            : null,
+    return GlassPanel(
+      child: Column(
+        children: [
+          TrackSelectorTile(
+            icon: Icons.volume_up_outlined,
+            title: 'Audio',
+            value: audio?.label ?? 'Par défaut',
+            onTap: details.audioTracks.length > 1
+                ? () => _chooseAudio(details)
+                : null,
+          ),
+          const Divider(indent: 16, endIndent: 16),
+          TrackSelectorTile(
+            icon: Icons.subtitles_outlined,
+            title: 'Sous-titres',
+            value: details.subtitleTracks.isEmpty
+                ? 'Aucun disponible'
+                : (subtitle?.label ?? 'Aucun'),
+            onTap: details.subtitleTracks.isEmpty
+                ? null
+                : () => _chooseSubtitles(details),
+          ),
+        ],
       ),
-      TrackSelectorTile(
-        icon: Icons.subtitles,
-        title: 'Sous-titres',
-        value: details.subtitleTracks.isEmpty
-            ? 'Aucun disponible'
-            : (subtitle?.label ?? 'Aucun'),
-        onTap: details.subtitleTracks.isEmpty
-            ? null
-            : () => _chooseSubtitles(details),
-      ),
-    ];
+    );
   }
 
   @override
@@ -169,37 +175,34 @@ class _MovieScreenState extends State<MovieScreen> {
       item: movie,
       details: details,
       showBackdropFallback: !_loading,
+      header: DetailsHeader(
+        api: widget.api,
+        item: movie,
+        infos: [
+          if (movie.year != null) '${movie.year}',
+          ?details?.runtimeLabel,
+          ?details?.officialRating,
+        ],
+        rating: details?.ratingLabel,
+        // Qualité du fichier : 4K, HEVC, HDR10, E-AC3 5.1…
+        chips: details?.quality?.labels ?? const [],
+      ),
       children: [
-        DetailsHeader(
-          api: widget.api,
-          item: movie,
-          infos: [
-            if (movie.year != null) '${movie.year}',
-            ?details?.runtimeLabel,
-            ?details?.officialRating,
-          ],
-          rating: details?.ratingLabel,
-          // Qualité du fichier : 4K, HEVC, HDR10, E-AC3 5.1…
-          chips: details?.quality?.labels ?? const [],
-        ),
-        const SizedBox(height: 12),
-        if (details != null) ..._buildTrackSelectors(details),
-        const SizedBox(height: 12),
         FilledButton.icon(
           onPressed: _play,
-          icon: const Icon(Icons.play_arrow),
-          label: const Padding(
-            padding: EdgeInsets.symmetric(vertical: 12),
-            child: Text('Lecture'),
-          ),
+          style: FilledButton.styleFrom(minimumSize: const Size(0, 56)),
+          icon: const Icon(Icons.play_arrow_rounded, size: 26),
+          label: const Text('Lecture'),
         ),
-        const SizedBox(height: 24),
-        if (details != null)
-          DetailsOverview(details: details)
-        else if (_error != null)
+        const SizedBox(height: 18),
+        if (details != null) ...[
+          _buildTrackSelectors(details),
+          const SizedBox(height: 22),
+          DetailsOverview(details: details),
+        ] else if (_error != null)
           RetryMessage(message: _error!, onRetry: _load)
         else
-          const Center(child: CircularProgressIndicator()),
+          const DetailsOverviewSkeleton(),
       ],
     );
   }
