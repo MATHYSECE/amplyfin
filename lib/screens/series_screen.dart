@@ -24,11 +24,15 @@ class SeriesScreen extends StatefulWidget {
     required this.api,
     required this.session,
     required this.series,
+    this.initialSeasonId,
   });
 
   final JellyfinApi api;
   final Session session;
   final MediaItem series;
+
+  /// Saison à ouvrir (ex. celle de l'épisode en cours). Null : la saison 1.
+  final String? initialSeasonId;
 
   @override
   State<SeriesScreen> createState() => _SeriesScreenState();
@@ -55,6 +59,9 @@ class _SeriesScreenState extends State<SeriesScreen> {
   /// nouvelle saison, l'ancienne liste reste affichée : la page ne saute pas.
   String? _shownSeasonId;
   String? _episodesError;
+
+  /// Pastille de la saison choisie (pour la faire défiler jusqu'à l'écran).
+  final _selectedChipKey = GlobalKey();
 
   // Langues choisies pour toute la série (retenues sur le téléphone)
   final _trackPreferences = TrackPreferences();
@@ -161,13 +168,27 @@ class _SeriesScreenState extends State<SeriesScreen> {
       if (!mounted) return;
       setState(() => _seasons = seasons);
       if (seasons.isNotEmpty) {
-        // On ouvre la saison 1 plutôt que les « Spéciaux » (saison 0)
-        await _selectSeason(
-          seasons.firstWhere(
-            (s) => (s.number ?? 1) >= 1,
-            orElse: () => seasons.first,
-          ),
-        );
+        // La saison demandée, sinon la saison 1 plutôt que les « Spéciaux »
+        // (saison 0)
+        final initial =
+            seasons.where((s) => s.id == widget.initialSeasonId).firstOrNull ??
+            seasons.firstWhere(
+              (s) => (s.number ?? 1) >= 1,
+              orElse: () => seasons.first,
+            );
+        // Pastille de la saison bien visible, même loin à droite (seule la
+        // rangée des saisons défile, pas la page)
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          final chip = _selectedChipKey.currentContext;
+          final box = chip?.findRenderObject();
+          if (chip == null || !chip.mounted || box == null) return;
+          Scrollable.of(chip).position.ensureVisible(
+            box,
+            alignment: 0.5,
+            duration: AppDurations.medium,
+          );
+        });
+        await _selectSeason(initial);
         // Puis on prépare les autres saisons, pour qu'elles s'ouvrent aussitôt
         _prefetchSeasons(seasons);
       }
@@ -346,6 +367,7 @@ class _SeriesScreenState extends State<SeriesScreen> {
           children: [
             for (final season in seasons)
               Padding(
+                key: season.id == selected?.id ? _selectedChipKey : null,
                 padding: const EdgeInsets.only(right: 8),
                 child: ChoiceChip(
                   label: Text(season.name),

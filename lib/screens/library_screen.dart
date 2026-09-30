@@ -66,7 +66,7 @@ class _LibraryScreenState extends State<LibraryScreen>
   }
 
   /// Appui long sur une affiche de la rangée : reprendre, depuis le début,
-  /// ou retirer de la rangée.
+  /// aller à la fiche, ou retirer de la rangée.
   Future<void> _showResumeOptions(ResumeEntry entry) async {
     final action = await showResumeActions(context, entry);
     if (!mounted) return;
@@ -75,6 +75,9 @@ class _LibraryScreenState extends State<LibraryScreen>
         await _playResume(entry);
       case ResumeAction.restart:
         await _playResume(entry, start: Duration.zero);
+      case ResumeAction.openDetails:
+        // Fiche du film, ou de la série ouverte sur la saison de l'épisode
+        await _open(entry.poster, seasonId: entry.seasonId);
       case ResumeAction.remove:
         await _removeResume(entry);
       case null:
@@ -165,7 +168,8 @@ class _LibraryScreenState extends State<LibraryScreen>
 
   /// Ouvre la fiche d'un film ou d'une série. Au retour, la rangée
   /// « Continuer à regarder » est mise à jour.
-  Future<void> _open(MediaItem item) async {
+  /// [seasonId] : saison sur laquelle ouvrir une série.
+  Future<void> _open(MediaItem item, {String? seasonId}) async {
     await Navigator.of(context).push(
       MaterialPageRoute<void>(
         builder: (_) => item.isSeries
@@ -173,6 +177,7 @@ class _LibraryScreenState extends State<LibraryScreen>
                 api: widget.api,
                 session: widget.session,
                 series: item,
+                initialSeasonId: seasonId,
               )
             : MovieScreen(
                 api: widget.api,

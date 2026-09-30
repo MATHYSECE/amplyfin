@@ -16,6 +16,7 @@ class ResumeEntry {
     required this.progress,
     this.playerSubtitle,
     this.seriesId,
+    this.seasonId,
     this.runtime,
     this.tracks = const [],
   });
@@ -49,6 +50,7 @@ class ResumeEntry {
         playerTitle: episode.playerTitle,
         playerSubtitle: episode.playerSubtitle,
         seriesId: seriesId,
+        seasonId: json['SeasonId'] as String?,
         progress: progress,
         runtime: runtime,
         tracks: tracks,
@@ -87,6 +89,9 @@ class ResumeEntry {
 
   /// Série de l'épisode (null pour un film) : pour ses langues retenues.
   final String? seriesId;
+
+  /// Saison de l'épisode (null pour un film) : la fiche s'ouvre dessus.
+  final String? seasonId;
 
   final WatchProgress progress;
   final Duration? runtime;

@@ -90,6 +90,7 @@ void main() {
         'SeriesId': 'malcolm',
         'SeriesName': 'Malcolm',
         'SeriesPrimaryImageTag': 'tag-serie',
+        'SeasonId': 'saison5',
         'ParentIndexNumber': 5,
         'IndexNumber': 1,
         'RunTimeTicks': runtimeTicks,
@@ -99,6 +100,7 @@ void main() {
       expect(entry.isEpisode, isTrue);
       expect(entry.poster.id, 'malcolm');
       expect(entry.poster.posterTag, 'tag-serie');
+      expect(entry.seasonId, 'saison5');
       expect(entry.title, 'Malcolm');
       expect(entry.subtitle, 'S5 · É1');
       expect(entry.playerTitle, 'Malcolm');

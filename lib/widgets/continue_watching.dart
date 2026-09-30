@@ -7,7 +7,7 @@ import 'poster_image.dart';
 import 'ui.dart';
 
 /// Choix du panneau ouvert par un appui long sur une affiche de la rangée.
-enum ResumeAction { resume, restart, remove }
+enum ResumeAction { resume, restart, openDetails, remove }
 
 /// Rangée « Continuer à regarder » en haut de la bibliothèque : affiches des
 /// films et épisodes commencés, qui défilent de gauche à droite. Un appui
@@ -35,7 +35,8 @@ class ContinueWatchingRow extends StatelessWidget {
 
   final void Function(ResumeEntry entry) onPlay;
 
-  /// Appui long : reprendre, depuis le début, ou retirer de la rangée.
+  /// Appui long : reprendre, depuis le début, aller à la fiche, ou retirer
+  /// de la rangée.
   final void Function(ResumeEntry entry) onOptions;
 
   @override
@@ -207,7 +208,8 @@ class _ResumeCard extends StatelessWidget {
 }
 
 /// Panneau de l'appui long sur une affiche : le titre, puis « Reprendre
-/// à … », « Depuis le début » et « Retirer de Continuer à regarder ».
+/// à … », « Depuis le début », « Aller à la page du film / de la série » et
+/// « Retirer de Continuer à regarder ».
 /// Renvoie le choix, ou null si on ferme le panneau.
 Future<ResumeAction?> showResumeActions(
   BuildContext context,
@@ -237,6 +239,15 @@ Future<ResumeAction?> showResumeActions(
               leading: const Icon(Icons.replay_rounded),
               title: const Text('Depuis le début'),
               onTap: () => choose(ResumeAction.restart),
+            ),
+            ListTile(
+              leading: const Icon(Icons.info_outline_rounded),
+              title: Text(
+                entry.isEpisode
+                    ? 'Aller à la page de la série'
+                    : 'Aller à la page du film',
+              ),
+              onTap: () => choose(ResumeAction.openDetails),
             ),
             const Divider(),
             ListTile(
