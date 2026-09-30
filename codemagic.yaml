@@ -1,0 +1,28 @@
+# Fabrication de l'appli iPhone sur Codemagic (pas de Mac nécessaire).
+# Appli non signée : elle est signée ensuite sur le PC avec Sideloadly
+# (identifiant Apple gratuit, installation valable 7 jours).
+workflows:
+  ios-sans-signature:
+    name: iPhone (sans signature, pour Sideloadly)
+    # Lancement à la main uniquement, depuis le site de Codemagic
+    max_build_duration: 60
+    instance_type: mac_mini_m2
+    environment:
+      # Même version de Flutter que sur le PC de développement
+      flutter: 3.47.5
+      xcode: latest
+    scripts:
+      - name: Récupérer les bibliothèques
+        script: flutter pub get
+      - name: Lancer les tests
+        script: flutter test
+      - name: Fabriquer l'appli (sans signature)
+        script: flutter build ios --release --no-codesign
+      - name: Emballer en fichier .ipa
+        script: |
+          rm -rf Payload Amplyfin.ipa
+          mkdir Payload
+          cp -R build/ios/iphoneos/Runner.app Payload/
+          zip -qry Amplyfin.ipa Payload
+    artifacts:
+      - Amplyfin.ipa
