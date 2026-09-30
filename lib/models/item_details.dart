@@ -2,6 +2,7 @@ import 'durations.dart';
 import 'media_item.dart';
 import 'media_quality.dart';
 import 'media_track.dart';
+import 'watch_progress.dart';
 
 /// La fiche complète d'un film ou d'une série : ce qu'affiche l'écran de détail.
 class ItemDetails {
@@ -19,6 +20,7 @@ class ItemDetails {
     this.tracks = const [],
     this.defaultAudioIndex,
     this.defaultSubtitleIndex,
+    this.progress = const WatchProgress(),
   });
 
   /// Lit la fiche à partir du JSON renvoyé par GET /Items/{id}.
@@ -50,6 +52,9 @@ class ItemDetails {
       ),
       defaultAudioIndex: source?['DefaultAudioStreamIndex'] as int?,
       defaultSubtitleIndex: source?['DefaultSubtitleStreamIndex'] as int?,
+      progress: WatchProgress.fromUserData(
+        json['UserData'] as Map<String, dynamic>?,
+      ),
     );
   }
 
@@ -91,6 +96,9 @@ class ItemDetails {
 
   /// Sous-titres proposés par le serveur (-1 = aucun).
   final int? defaultSubtitleIndex;
+
+  /// Où en est la lecture (films) : position, part vue, déjà vu.
+  final WatchProgress progress;
 
   List<MediaTrack> get audioTracks =>
       tracks.where((t) => t.type == TrackType.audio).toList();

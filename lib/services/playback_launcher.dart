@@ -12,6 +12,7 @@ import 'device_capabilities.dart';
 /// Lance la lecture d'un film ou d'un épisode.
 /// Demande d'abord au serveur si la lecture directe est possible ; sinon,
 /// explique pourquoi et demande à l'utilisateur s'il veut convertir.
+/// [start] : position de départ (reprise de lecture), le début par défaut.
 /// Se termine quand on revient du lecteur (ou si on annule).
 Future<void> launchPlayback(
   BuildContext context, {
@@ -21,6 +22,7 @@ Future<void> launchPlayback(
   required String title,
   String? subtitle,
   TrackSelection tracks = const TrackSelection(),
+  Duration start = Duration.zero,
 }) async {
   final emulator = await DeviceCapabilities.isAndroidEmulator();
   final PlaybackInfo info;
@@ -29,6 +31,8 @@ Future<void> launchPlayback(
       userId: session.userId,
       itemId: itemId,
       quality: PlaybackQuality.original,
+      // En cas de conversion, le serveur commence au bon endroit
+      start: start,
       supports10Bit: !emulator,
       tracks: tracks,
     );
@@ -58,6 +62,7 @@ Future<void> launchPlayback(
         title: title,
         subtitle: subtitle,
         tracks: tracks,
+        start: start,
         // Réponse déjà obtenue : le lecteur démarre sans redemander
         initialInfo: info,
       ),

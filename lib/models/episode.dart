@@ -1,6 +1,7 @@
 import 'durations.dart';
 import 'media_quality.dart';
 import 'media_track.dart';
+import 'watch_progress.dart';
 
 /// Un épisode d'une série (GET /Shows/{id}/Episodes).
 class Episode {
@@ -13,14 +14,13 @@ class Episode {
     this.overview,
     this.runtime,
     this.imageTag,
-    this.played = false,
+    this.progress = const WatchProgress(),
     this.quality,
     this.tracks = const [],
   });
 
   factory Episode.fromJson(Map<String, dynamic> json) {
     final imageTags = json['ImageTags'] as Map<String, dynamic>?;
-    final userData = json['UserData'] as Map<String, dynamic>?;
     return Episode(
       id: json['Id'] as String,
       name: (json['Name'] as String?) ?? 'Sans titre',
@@ -30,7 +30,9 @@ class Episode {
       overview: json['Overview'] as String?,
       runtime: ticksToDuration(json['RunTimeTicks'] as int?),
       imageTag: imageTags?['Primary'] as String?,
-      played: userData?['Played'] == true,
+      progress: WatchProgress.fromUserData(
+        json['UserData'] as Map<String, dynamic>?,
+      ),
       quality: MediaQuality.fromItemJson(json),
       tracks: tracksFromStreams(json['MediaStreams'] as List<dynamic>?),
     );
@@ -56,8 +58,11 @@ class Episode {
   /// Empreinte de la vignette de l'épisode (null s'il n'y en a pas).
   final String? imageTag;
 
+  /// Où en est la lecture (position, part vue, déjà vu).
+  final WatchProgress progress;
+
   /// Vrai si l'épisode a déjà été vu.
-  final bool played;
+  bool get played => progress.played;
 
   /// Qualité technique du fichier (définition, codec, son), si connue.
   final MediaQuality? quality;

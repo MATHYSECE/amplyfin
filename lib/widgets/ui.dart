@@ -59,6 +59,43 @@ class GlowBackground extends StatelessWidget {
   }
 }
 
+/// Fine barre de progression (part déjà vue d'un film ou d'un épisode) :
+/// blanc sur fond blanc transparent. [value] va de 0 à 1.
+class ProgressLine extends StatelessWidget {
+  const ProgressLine({
+    super.key,
+    required this.value,
+    this.height = 3,
+    this.rounded = false,
+  });
+
+  final double value;
+  final double height;
+
+  /// Bouts arrondis (barre seule), ou droits (collée au bas d'une image).
+  final bool rounded;
+
+  @override
+  Widget build(BuildContext context) {
+    final radius = BorderRadius.circular(rounded ? height : 0);
+    return Container(
+      height: height,
+      decoration: BoxDecoration(color: AppColors.track, borderRadius: radius),
+      alignment: Alignment.centerLeft,
+      child: FractionallySizedBox(
+        widthFactor: value.clamp(0.0, 1.0),
+        heightFactor: 1,
+        child: DecoratedBox(
+          decoration: BoxDecoration(
+            color: AppColors.white,
+            borderRadius: radius,
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 /// Bouton rond « en verre » (retour, déconnexion, infos…).
 class GlassCircleButton extends StatelessWidget {
   const GlassCircleButton({

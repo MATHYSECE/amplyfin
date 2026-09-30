@@ -35,6 +35,7 @@ class PlayerScreen extends StatefulWidget {
     required this.title,
     this.subtitle,
     this.tracks = const TrackSelection(),
+    this.start = Duration.zero,
     this.initialInfo,
   });
 
@@ -52,6 +53,9 @@ class PlayerScreen extends StatefulWidget {
 
   /// Pistes audio et sous-titres choisies avant la lecture.
   final TrackSelection tracks;
+
+  /// Position de départ (reprise de lecture).
+  final Duration start;
 
   /// Réponse du serveur déjà obtenue avant d'ouvrir le lecteur (la fiche
   /// vérifie si la lecture directe est possible) : évite de redemander.
@@ -173,7 +177,11 @@ class _PlayerScreenState extends State<PlayerScreen> {
     );
     if (!mounted) return;
     setState(() => _controller = controller);
-    await _open(PlaybackQuality.original, prefetched: widget.initialInfo);
+    await _open(
+      PlaybackQuality.original,
+      start: widget.start,
+      prefetched: widget.initialInfo,
+    );
   }
 
   /// Réglage de l'affichage vidéo. Sur Android, la puce vidéo décode l'image

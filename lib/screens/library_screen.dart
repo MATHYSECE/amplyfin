@@ -4,9 +4,14 @@ import 'package:flutter/material.dart';
 
 import '../api/jellyfin_api.dart';
 import '../models/media_item.dart';
+import '../models/resume_entry.dart';
 import '../models/session.dart';
+import '../models/track_choice.dart';
+import '../services/playback_launcher.dart';
 import '../services/session_store.dart';
+import '../services/track_preferences.dart';
 import '../theme/app_theme.dart';
+import '../widgets/continue_watching.dart';
 import '../widgets/library_grid.dart';
 import '../widgets/ui.dart';
 import 'login_screen.dart';
@@ -29,16 +34,140 @@ class _LibraryScreenState extends State<LibraryScreen>
     with SingleTickerProviderStateMixin {
   late final _tabs = TabController(length: 2, vsync: this);
 
+  /// Films et épisodes commencés (rangée « Continuer à regarder »).
+  List<ResumeEntry> _resume = const [];
+
+  /// Vrai pendant le lancement d'une lecture depuis la rangée.
+  bool _starting = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadResume();
+  }
+
   @override
   void dispose() {
     _tabs.dispose();
     super.dispose();
   }
 
-  /// Ouvre la fiche d'un film ou d'une série.
-  void _open(MediaItem item) {
-    Navigator.of(context).push(
-      MaterialPageRoute(
+  /// Demande au serveur ce qui est en cours. En cas d'erreur, on garde
+  /// l'ancienne rangée (la grille affiche déjà le problème de connexion).
+  Future<void> _loadResume() async {
+    try {
+      final entries = await widget.api.getResumeItems(
+        userId: widget.session.userId,
+      );
+      if (mounted) setState(() => _resume = entries);
+    } on JellyfinException {
+      // Rien à faire : la rangée sera mise à jour la prochaine fois
+    }
+  }
+
+  /// Appui long sur une affiche de la rangée : reprendre, depuis le début,
+  /// ou retirer de la rangée.
+  Future<void> _showResumeOptions(ResumeEntry entry) async {
+    final action = await showResumeActions(context, entry);
+    if (!mounted) return;
+    switch (action) {
+      case ResumeAction.resume:
+        await _playResume(entry);
+      case ResumeAction.restart:
+        await _playResume(entry, start: Duration.zero);
+      case ResumeAction.remove:
+        await _removeResume(entry);
+      case null:
+        break;
+    }
+  }
+
+  /// Efface la progression d'un film ou d'un épisode (comme jamais regardé) :
+  /// il disparaît tout de suite de la rangée, avec « Annuler » quelques
+  /// secondes pour remettre la position d'avant.
+  Future<void> _removeResume(ResumeEntry entry) async {
+    final messenger = ScaffoldMessenger.of(context);
+    setState(
+      () => _resume = [
+        for (final other in _resume)
+          if (other.id != entry.id) other,
+      ],
+    );
+    try {
+      await widget.api.updateWatchProgress(
+        userId: widget.session.userId,
+        itemId: entry.id,
+        position: Duration.zero,
+        played: false,
+      );
+    } on JellyfinException catch (e) {
+      // Échec : la rangée revient comme avant
+      messenger.showSnackBar(SnackBar(content: Text(e.message)));
+      await _loadResume();
+      return;
+    }
+    messenger.showSnackBar(
+      SnackBar(
+        content: const Text('Retiré de Continuer à regarder'),
+        action: SnackBarAction(
+          label: 'Annuler',
+          textColor: AppColors.white,
+          onPressed: () => _undoRemove(entry),
+        ),
+      ),
+    );
+  }
+
+  /// « Annuler » : remet la position d'avant, puis recharge la rangée.
+  Future<void> _undoRemove(ResumeEntry entry) async {
+    try {
+      await widget.api.updateWatchProgress(
+        userId: widget.session.userId,
+        itemId: entry.id,
+        position: entry.progress.position,
+        played: entry.progress.played,
+      );
+    } on JellyfinException catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text(e.message)));
+      }
+    }
+    await _loadResume();
+  }
+
+  /// Reprend la lecture d'un film ou d'un épisode de la rangée
+  /// (ou à la position [start] si elle est précisée).
+  Future<void> _playResume(ResumeEntry entry, {Duration? start}) async {
+    if (_starting) return;
+    _starting = true;
+    // Épisode : les langues choisies pour sa série
+    var tracks = const TrackSelection();
+    final seriesId = entry.seriesId;
+    if (seriesId != null) {
+      final languages = await TrackPreferences().load(seriesId);
+      tracks = languages.resolve(entry.tracks);
+    }
+    if (!mounted) return;
+    await launchPlayback(
+      context,
+      api: widget.api,
+      session: widget.session,
+      itemId: entry.id,
+      title: entry.playerTitle,
+      subtitle: entry.playerSubtitle,
+      tracks: tracks,
+      start: start ?? entry.progress.position,
+    );
+    _starting = false;
+    await _loadResume();
+  }
+
+  /// Ouvre la fiche d'un film ou d'une série. Au retour, la rangée
+  /// « Continuer à regarder » est mise à jour.
+  Future<void> _open(MediaItem item) async {
+    await Navigator.of(context).push(
+      MaterialPageRoute<void>(
         builder: (_) => item.isSeries
             ? SeriesScreen(
                 api: widget.api,
@@ -52,6 +181,7 @@ class _LibraryScreenState extends State<LibraryScreen>
               ),
       ),
     );
+    await _loadResume();
   }
 
   Future<void> _logout() async {
@@ -80,15 +210,27 @@ class _LibraryScreenState extends State<LibraryScreen>
     // Hauteur de l'en-tête : les grilles commencent juste en dessous
     final headerHeight = topInset + 132;
 
-    LibraryGrid grid(String type, String emptyMessage) => LibraryGrid(
-      api: widget.api,
-      session: widget.session,
-      itemType: type,
-      emptyMessage: emptyMessage,
-      topPadding: headerHeight,
-      onOpen: _open,
-      onUnauthorized: _backToLogin,
-    );
+    LibraryGrid grid(String type, String emptyMessage, String gridTitle) =>
+        LibraryGrid(
+          api: widget.api,
+          session: widget.session,
+          itemType: type,
+          emptyMessage: emptyMessage,
+          topPadding: headerHeight,
+          onOpen: _open,
+          onUnauthorized: _backToLogin,
+          onRefresh: _loadResume,
+          // Rangée « Continuer à regarder », seulement s'il y a du contenu
+          header: _resume.isEmpty
+              ? null
+              : ContinueWatchingRow(
+                  api: widget.api,
+                  entries: _resume,
+                  gridTitle: gridTitle,
+                  onPlay: _playResume,
+                  onOptions: _showResumeOptions,
+                ),
+        );
 
     return Scaffold(
       body: GlowBackground(
@@ -97,8 +239,16 @@ class _LibraryScreenState extends State<LibraryScreen>
             TabBarView(
               controller: _tabs,
               children: [
-                grid('Movie', 'Aucun film trouvé sur ce serveur.'),
-                grid('Series', 'Aucune série trouvée sur ce serveur.'),
+                grid(
+                  'Movie',
+                  'Aucun film trouvé sur ce serveur.',
+                  'Tous les films',
+                ),
+                grid(
+                  'Series',
+                  'Aucune série trouvée sur ce serveur.',
+                  'Toutes les séries',
+                ),
               ],
             ),
             // En-tête en verre dépoli : les affiches défilent dessous

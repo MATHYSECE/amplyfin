@@ -5,6 +5,7 @@ import '../models/item_details.dart';
 import '../models/media_item.dart';
 import '../models/session.dart';
 import '../models/track_choice.dart';
+import '../models/watch_progress.dart';
 import '../services/playback_launcher.dart';
 import '../theme/app_theme.dart';
 import '../widgets/details_page.dart';
@@ -48,8 +49,9 @@ class _MovieScreenState extends State<MovieScreen> {
     _load();
   }
 
-  /// Demande la fiche complète au serveur.
-  Future<void> _load() async {
+  /// Demande la fiche complète au serveur. [keepTracks] : garde les pistes
+  /// déjà choisies (mise à jour au retour du lecteur).
+  Future<void> _load({bool keepTracks = false}) async {
     setState(() {
       _loading = true;
       _error = null;
@@ -62,7 +64,7 @@ class _MovieScreenState extends State<MovieScreen> {
       if (!mounted) return;
       setState(() {
         _details = details;
-        _presetTracks(details);
+        if (!keepTracks) _presetTracks(details);
       });
     } on JellyfinException catch (e) {
       if (mounted) setState(() => _error = e.message);
@@ -118,8 +120,8 @@ class _MovieScreenState extends State<MovieScreen> {
   }
 
   /// Vérifie avec le serveur si la lecture directe est possible (fenêtre
-  /// d'explication sinon), puis ouvre le lecteur.
-  Future<void> _play() async {
+  /// d'explication sinon), puis ouvre le lecteur à la position [start].
+  Future<void> _play({Duration start = Duration.zero}) async {
     if (_starting) return;
     setState(() => _starting = true);
     await launchPlayback(
@@ -132,8 +134,68 @@ class _MovieScreenState extends State<MovieScreen> {
         audioIndex: _audioIndex,
         subtitleIndex: _subtitleIndex,
       ),
+      start: start,
     );
-    if (mounted) setState(() => _starting = false);
+    if (!mounted) return;
+    setState(() => _starting = false);
+    // Au retour : position et barre de progression à jour
+    _load(keepTracks: true);
+  }
+
+  /// Bouton principal (« Lecture » ou « Reprendre à … »), et pour un film
+  /// commencé : où on en est, et « Depuis le début ».
+  List<Widget> _buildPlayButtons(ItemDetails? details) {
+    final progress = details?.progress ?? const WatchProgress();
+    final resume = progress.canResume;
+    final spinner = const SizedBox(
+      width: 22,
+      height: 22,
+      child: CircularProgressIndicator(
+        strokeWidth: 2.5,
+        color: AppColors.black,
+      ),
+    );
+    return [
+      FilledButton.icon(
+        onPressed: () =>
+            _play(start: resume ? progress.position : Duration.zero),
+        style: FilledButton.styleFrom(minimumSize: const Size(0, 56)),
+        icon: _starting
+            ? spinner
+            : const Icon(Icons.play_arrow_rounded, size: 26),
+        label: Text(resume ? progress.resumeLabel : 'Lecture'),
+      ),
+      if (resume) ...[
+        const SizedBox(height: 14),
+        Row(
+          children: [
+            Expanded(
+              child: ProgressLine(
+                value: progress.fraction,
+                height: 4,
+                rounded: true,
+              ),
+            ),
+            if (progress.remainingLabel(details?.runtime) case final left?) ...[
+              const SizedBox(width: 12),
+              Text(
+                left,
+                style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                  color: AppColors.grey,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ],
+          ],
+        ),
+        const SizedBox(height: 14),
+        OutlinedButton.icon(
+          onPressed: _starting ? null : () => _play(),
+          icon: const Icon(Icons.replay_rounded, size: 22),
+          label: const Text('Depuis le début'),
+        ),
+      ],
+    ];
   }
 
   /// Bloc en verre avec les deux choix « Audio » et « Sous-titres ».
@@ -194,21 +256,7 @@ class _MovieScreenState extends State<MovieScreen> {
         chips: details?.quality?.labels ?? const [],
       ),
       children: [
-        FilledButton.icon(
-          onPressed: _play,
-          style: FilledButton.styleFrom(minimumSize: const Size(0, 56)),
-          icon: _starting
-              ? const SizedBox(
-                  width: 22,
-                  height: 22,
-                  child: CircularProgressIndicator(
-                    strokeWidth: 2.5,
-                    color: AppColors.black,
-                  ),
-                )
-              : const Icon(Icons.play_arrow_rounded, size: 26),
-          label: const Text('Lecture'),
-        ),
+        ..._buildPlayButtons(details),
         const SizedBox(height: 18),
         if (details != null) ...[
           _buildTrackSelectors(details),

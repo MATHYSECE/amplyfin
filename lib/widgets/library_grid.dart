@@ -19,6 +19,8 @@ class LibraryGrid extends StatefulWidget {
     required this.topPadding,
     required this.onOpen,
     required this.onUnauthorized,
+    this.header,
+    this.onRefresh,
   });
 
   final JellyfinApi api;
@@ -38,6 +40,13 @@ class LibraryGrid extends StatefulWidget {
 
   /// Appelé si le serveur refuse le jeton (retour à la connexion).
   final VoidCallback onUnauthorized;
+
+  /// Bloc au-dessus des affiches, qui défile avec elles
+  /// (ex. « Continuer à regarder »).
+  final Widget? header;
+
+  /// Appelé aussi quand on tire la grille vers le bas pour rafraîchir.
+  final Future<void> Function()? onRefresh;
 
   @override
   State<LibraryGrid> createState() => _LibraryGridState();
@@ -123,8 +132,10 @@ class _LibraryGridState extends State<LibraryGrid>
     }
   }
 
-  /// Tirer vers le bas : on recharge depuis le début.
-  Future<void> _refresh() => _loadMore(reset: true);
+  /// Tirer vers le bas : on recharge depuis le début (et le bloc du haut).
+  Future<void> _refresh() async {
+    await Future.wait([_loadMore(reset: true), ?widget.onRefresh?.call()]);
+  }
 
   /// Grille commune : vraies affiches, ou zones grises pendant le chargement.
   static const _gridDelegate = SliverGridDelegateWithMaxCrossAxisExtent(
@@ -138,12 +149,18 @@ class _LibraryGridState extends State<LibraryGrid>
   @override
   Widget build(BuildContext context) {
     super.build(context); // nécessaire pour AutomaticKeepAliveClientMixin
-    final padding = EdgeInsets.fromLTRB(16, widget.topPadding + 12, 16, 12);
+    final header = widget.header;
+    final padding = EdgeInsets.fromLTRB(
+      16,
+      header == null ? widget.topPadding + 12 : 14,
+      16,
+      12,
+    );
 
     // Premier chargement : la grille a déjà sa forme, en zones grises
     if (_items.isEmpty && _loading) {
       return GridView.builder(
-        padding: padding,
+        padding: EdgeInsets.fromLTRB(16, widget.topPadding + 12, 16, 12),
         physics: const NeverScrollableScrollPhysics(),
         gridDelegate: _gridDelegate,
         itemCount: 12,
@@ -178,6 +195,11 @@ class _LibraryGridState extends State<LibraryGrid>
         // Permet de tirer pour rafraîchir même avec peu d'éléments
         physics: const AlwaysScrollableScrollPhysics(),
         slivers: [
+          if (header != null)
+            SliverPadding(
+              padding: EdgeInsets.only(top: widget.topPadding + 16),
+              sliver: SliverToBoxAdapter(child: header),
+            ),
           SliverPadding(
             padding: padding,
             sliver: SliverGrid.builder(

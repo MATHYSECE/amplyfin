@@ -10,6 +10,7 @@ import '../models/item_details.dart';
 import '../models/media_item.dart';
 import '../models/playback_info.dart';
 import '../models/playback_quality.dart';
+import '../models/resume_entry.dart';
 import '../models/season.dart';
 import '../models/session.dart';
 import '../models/track_choice.dart';
@@ -195,6 +196,50 @@ class JellyfinApi {
     final items = (json['Items'] as List<dynamic>?) ?? [];
     return [for (final item in items) Episode.fromJson(item)];
   }
+
+  /// GET /UserItems/Resume : films et épisodes commencés, du plus récent
+  /// au plus ancien (rangée « Continuer à regarder »).
+  Future<List<ResumeEntry>> getResumeItems({
+    required String userId,
+    int limit = 20,
+  }) async {
+    final json = await _send(
+      'GET',
+      '/UserItems/Resume',
+      query: {
+        'userId': userId,
+        'limit': '$limit',
+        'includeItemTypes': 'Movie,Episode',
+        'mediaTypes': 'Video',
+        // Pistes : pour appliquer les langues choisies pour la série
+        'fields': 'MediaStreams',
+        'enableUserData': 'true',
+        'enableImageTypes': 'Primary',
+        'imageTypeLimit': '1',
+        'enableTotalRecordCount': 'false',
+      },
+    );
+    final items = (json['Items'] as List<dynamic>?) ?? [];
+    return [for (final item in items) ResumeEntry.fromJson(item)];
+  }
+
+  /// POST /UserItems/{id}/UserData : change où en est la lecture d'un film
+  /// ou d'un épisode. Position 0 et [played] faux : comme jamais regardé
+  /// (il sort aussi de « Continuer à regarder »).
+  Future<void> updateWatchProgress({
+    required String userId,
+    required String itemId,
+    required Duration position,
+    required bool played,
+  }) => _send(
+    'POST',
+    '/UserItems/$itemId/UserData',
+    query: {'userId': userId},
+    body: {
+      'PlaybackPositionTicks': durationToTicks(position),
+      'Played': played,
+    },
+  );
 
   /// Adresse de l'affiche d'un film ou d'une série, [width] pixels de large.
   /// Null s'il n'y a pas d'affiche.

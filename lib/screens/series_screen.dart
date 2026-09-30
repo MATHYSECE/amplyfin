@@ -226,8 +226,10 @@ class _SeriesScreenState extends State<SeriesScreen> {
   }
 
   /// Vérifie avec le serveur si la lecture directe est possible (fenêtre
-  /// d'explication sinon), puis ouvre le lecteur.
-  Future<void> _play(Episode episode) async {
+  /// d'explication sinon), puis ouvre le lecteur. Un épisode commencé
+  /// reprend là où il s'était arrêté, sauf [start] précisé.
+  Future<void> _play(Episode episode, {Duration? start}) async {
+    final progress = episode.progress;
     await launchPlayback(
       context,
       api: widget.api,
@@ -237,8 +239,9 @@ class _SeriesScreenState extends State<SeriesScreen> {
       subtitle: episode.playerSubtitle,
       // Les langues de la série, appliquées aux pistes de cet épisode
       tracks: _languages.resolve(episode.tracks),
+      start: start ?? (progress.canResume ? progress.position : Duration.zero),
     );
-    // Au retour : met à jour les coches « déjà vu »
+    // Au retour : met à jour les coches « déjà vu » et les progressions
     final season = _selectedSeason;
     if (season != null && mounted) _loadEpisodes(season);
   }
@@ -385,13 +388,14 @@ class _SeriesScreenState extends State<SeriesScreen> {
   }
 
   /// Bouton ⓘ : infos de l'épisode dans un panneau qui monte du bas.
+  /// Le panneau renvoie la position de départ choisie (null : fermé).
   Future<void> _showEpisodeInfo(Episode episode) async {
-    final play = await showModalBottomSheet<bool>(
+    final start = await showModalBottomSheet<Duration>(
       context: context,
       isScrollControlled: true,
       builder: (context) => _EpisodeSheet(api: widget.api, episode: episode),
     );
-    if (play == true && mounted) await _play(episode);
+    if (start != null && mounted) await _play(episode, start: start);
   }
 }
 
@@ -461,6 +465,19 @@ class _EpisodeTile extends StatelessWidget {
                 fit: StackFit.expand,
                 children: [
                   _EpisodeThumbnail(api: api, episode: episode),
+                  // Commencé : fine barre de progression en bas de l'image
+                  if (episode.progress.canResume && !episode.played)
+                    Positioned(
+                      left: 0,
+                      right: 0,
+                      bottom: 0,
+                      child: ClipRRect(
+                        borderRadius: const BorderRadius.vertical(
+                          bottom: Radius.circular(AppRadius.poster),
+                        ),
+                        child: ProgressLine(value: episode.progress.fraction),
+                      ),
+                    ),
                   // Déjà vu : petite coche blanche en haut à droite
                   if (episode.played)
                     const Positioned(
@@ -517,8 +534,9 @@ class _EpisodeTile extends StatelessWidget {
   }
 }
 
-/// Panneau d'infos d'un épisode : image, titre, infos, résumé, et bouton
-/// « Lire l'épisode » (ferme le panneau en renvoyant true).
+/// Panneau d'infos d'un épisode : image, titre, infos, résumé, et boutons de
+/// lecture (« Lire l'épisode », ou « Reprendre à … » et « Depuis le début »).
+/// Ferme le panneau en renvoyant la position de départ choisie.
 class _EpisodeSheet extends StatelessWidget {
   const _EpisodeSheet({required this.api, required this.episode});
 
@@ -529,6 +547,7 @@ class _EpisodeSheet extends StatelessWidget {
   Widget build(BuildContext context) {
     final textTheme = Theme.of(context).textTheme;
     final overview = episode.overview?.trim() ?? '';
+    final progress = episode.progress;
     final season = episode.seasonNumber;
     final number = episode.number;
 
@@ -573,11 +592,30 @@ class _EpisodeSheet extends StatelessWidget {
                 ),
               ),
               const SizedBox(height: 22),
-              FilledButton.icon(
-                onPressed: () => Navigator.of(context).pop(true),
-                icon: const Icon(Icons.play_arrow_rounded, size: 24),
-                label: const Text('Lire l\'épisode'),
-              ),
+              if (progress.canResume && !episode.played) ...[
+                ProgressLine(
+                  value: progress.fraction,
+                  height: 4,
+                  rounded: true,
+                ),
+                const SizedBox(height: 14),
+                FilledButton.icon(
+                  onPressed: () => Navigator.of(context).pop(progress.position),
+                  icon: const Icon(Icons.play_arrow_rounded, size: 24),
+                  label: Text(progress.resumeLabel),
+                ),
+                const SizedBox(height: 10),
+                OutlinedButton.icon(
+                  onPressed: () => Navigator.of(context).pop(Duration.zero),
+                  icon: const Icon(Icons.replay_rounded, size: 22),
+                  label: const Text('Depuis le début'),
+                ),
+              ] else
+                FilledButton.icon(
+                  onPressed: () => Navigator.of(context).pop(Duration.zero),
+                  icon: const Icon(Icons.play_arrow_rounded, size: 24),
+                  label: const Text('Lire l\'épisode'),
+                ),
             ],
           ),
         ),
