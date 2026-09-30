@@ -159,6 +159,32 @@ class JellyfinApi {
     return ItemDetails.fromJson(json as Map<String, dynamic>);
   }
 
+  /// GET /Items/{id}?userId=… : la fiche complète, telle quelle (gardée avec
+  /// un téléchargement pour l'afficher et le lire sans le serveur).
+  Future<Map<String, dynamic>> getItemJson({
+    required String userId,
+    required String itemId,
+  }) async {
+    final json = await _send(
+      'GET',
+      '/Items/$itemId',
+      query: {'userId': userId},
+    );
+    return json as Map<String, dynamic>;
+  }
+
+  /// GET /Items/{id}/Download : le fichier d'origine, pour le télécharger
+  /// (le compte doit avoir le droit de télécharger sur le serveur).
+  String downloadUrl(String itemId) => '$serverUrl/Items/$itemId/Download';
+
+  /// Sous-titres séparés d'un fichier, convertis au format SRT
+  /// (GET /Videos/{id}/{source}/Subtitles/{numéro}/Stream.srt).
+  String subtitleFileUrl({
+    required String itemId,
+    required String mediaSourceId,
+    required int index,
+  }) => '$serverUrl/Videos/$itemId/$mediaSourceId/Subtitles/$index/Stream.srt';
+
   /// GET /Shows/{id}/Seasons : les saisons d'une série.
   Future<List<Season>> getSeasons({
     required String userId,
@@ -349,8 +375,11 @@ class JellyfinApi {
 
   /// Adresse complète à partir d'une adresse partielle du serveur
   /// (ex. l'adresse d'un fichier de sous-titres).
+  /// Les fichiers du téléphone (« file:// ») sont gardés tels quels.
   String absoluteUrl(String url) =>
-      url.startsWith('http') ? url : '$serverUrl$url';
+      url.startsWith('http') || url.startsWith('file:')
+      ? url
+      : '$serverUrl$url';
 
   /// En-têtes à joindre aux requêtes du lecteur vidéo (identification).
   Map<String, String> get streamHeaders => {

@@ -21,6 +21,7 @@ class ItemDetails {
     this.defaultAudioIndex,
     this.defaultSubtitleIndex,
     this.progress = const WatchProgress(),
+    this.fileSize,
   });
 
   /// Lit la fiche à partir du JSON renvoyé par GET /Items/{id}.
@@ -55,6 +56,7 @@ class ItemDetails {
       progress: WatchProgress.fromUserData(
         json['UserData'] as Map<String, dynamic>?,
       ),
+      fileSize: source?['Size'] as int?,
     );
   }
 
@@ -99,6 +101,9 @@ class ItemDetails {
 
   /// Où en est la lecture (films) : position, part vue, déjà vu.
   final WatchProgress progress;
+
+  /// Taille du fichier vidéo en octets (films), pour « Télécharger · 12,4 Go ».
+  final int? fileSize;
 
   List<MediaTrack> get audioTracks =>
       tracks.where((t) => t.type == TrackType.audio).toList();

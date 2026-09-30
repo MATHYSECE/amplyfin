@@ -13,6 +13,7 @@ class PlaybackInfo {
     this.defaultAudioIndex,
     this.defaultSubtitleIndex,
     this.hasVideo = true,
+    this.localPath,
   });
 
   /// Lit la réponse. Lève une [FormatException] si le film ne peut pas
@@ -77,6 +78,12 @@ class PlaybackInfo {
 
   /// Vrai si le fichier contient une image (pas seulement du son).
   final bool hasVideo;
+
+  /// Fichier téléchargé sur le téléphone (null : lecture depuis le serveur).
+  final String? localPath;
+
+  /// Vrai si on lit le fichier téléchargé, sans passer par le serveur.
+  bool get isLocal => localPath != null;
 
   /// Codes des raisons de la conversion, donnés par le serveur dans
   /// l'adresse du flux converti (« TranscodeReasons=… »). Vide en lecture

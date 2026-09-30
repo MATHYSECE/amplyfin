@@ -6,9 +6,11 @@ import '../models/media_item.dart';
 import '../models/session.dart';
 import '../models/track_choice.dart';
 import '../models/watch_progress.dart';
+import '../services/download_manager.dart';
 import '../services/playback_launcher.dart';
 import '../theme/app_theme.dart';
 import '../widgets/details_page.dart';
+import '../widgets/download_controls.dart';
 import '../widgets/track_picker.dart';
 import '../widgets/ui.dart';
 
@@ -142,8 +144,8 @@ class _MovieScreenState extends State<MovieScreen> {
     _load(keepTracks: true);
   }
 
-  /// Bouton principal (« Lecture » ou « Reprendre à … »), et pour un film
-  /// commencé : où on en est, et « Depuis le début ».
+  /// Bouton principal (« Lecture » ou « Reprendre à … »), pour un film
+  /// commencé : où on en est et « Depuis le début », puis « Télécharger ».
   List<Widget> _buildPlayButtons(ItemDetails? details) {
     final progress = details?.progress ?? const WatchProgress();
     final resume = progress.canResume;
@@ -188,14 +190,49 @@ class _MovieScreenState extends State<MovieScreen> {
             ],
           ],
         ),
-        const SizedBox(height: 14),
-        OutlinedButton.icon(
-          onPressed: _starting ? null : () => _play(),
-          icon: const Icon(Icons.replay_rounded, size: 22),
-          label: const Text('Depuis le début'),
-        ),
       ],
+      const SizedBox(height: 14),
+      _buildSecondaryButtons(details, resume: resume),
     ];
+  }
+
+  /// « Depuis le début » (film commencé) et le bouton de téléchargement :
+  /// côte à côte tant que rien n'est téléchargé, l'un sous l'autre sinon
+  /// (la progression du téléchargement a besoin de place).
+  Widget _buildSecondaryButtons(ItemDetails? details, {required bool resume}) {
+    final restart = OutlinedButton.icon(
+      onPressed: _starting ? null : () => _play(),
+      icon: const Icon(Icons.replay_rounded, size: 22),
+      label: const Text('Depuis le début'),
+    );
+    MovieDownloadButton download({bool compact = false}) => MovieDownloadButton(
+      api: widget.api,
+      userId: widget.session.userId,
+      itemId: widget.movie.id,
+      fileSize: details?.fileSize,
+      compact: compact,
+    );
+    if (!resume) return download();
+
+    final manager = DownloadManager.instance;
+    return ListenableBuilder(
+      listenable: manager,
+      builder: (context, _) {
+        if (manager.stateOf(widget.movie.id).phase == DownloadPhase.none) {
+          return Row(
+            children: [
+              Expanded(child: restart),
+              const SizedBox(width: 10),
+              Expanded(child: download(compact: true)),
+            ],
+          );
+        }
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [restart, const SizedBox(height: 10), download()],
+        );
+      },
+    );
   }
 
   /// Bloc en verre avec les deux choix « Audio » et « Sous-titres ».

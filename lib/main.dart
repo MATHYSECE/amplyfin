@@ -1,9 +1,12 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:media_kit/media_kit.dart';
 
 import 'screens/start_screen.dart';
+import 'services/download_manager.dart';
 import 'theme/app_theme.dart';
 
 void main() {
@@ -11,6 +14,8 @@ void main() {
   WidgetsFlutterBinding.ensureInitialized();
   // Prépare le moteur vidéo (media_kit)
   MediaKit.ensureInitialized();
+  // Reprend le suivi des téléchargements (terminés ou en cours)
+  unawaited(DownloadManager.instance.init());
   // Licence de la police Manrope, ajoutée aux mentions légales de l'appli
   LicenseRegistry.addLicense(() async* {
     final text = await rootBundle.loadString('assets/fonts/OFL.txt');

@@ -10,10 +10,12 @@ import '../models/media_track.dart';
 import '../models/season.dart';
 import '../models/session.dart';
 import '../models/track_choice.dart';
+import '../services/download_manager.dart';
 import '../services/playback_launcher.dart';
 import '../services/track_preferences.dart';
 import '../theme/app_theme.dart';
 import '../widgets/details_page.dart';
+import '../widgets/download_controls.dart';
 import '../widgets/track_picker.dart';
 import '../widgets/ui.dart';
 
@@ -402,6 +404,7 @@ class _SeriesScreenState extends State<SeriesScreen> {
         for (final episode in episodes)
           _EpisodeTile(
             api: widget.api,
+            userId: _userId,
             episode: episode,
             onTap: () => _play(episode),
             onInfo: () => _showEpisodeInfo(episode),
@@ -459,12 +462,14 @@ class _EpisodeThumbnail extends StatelessWidget {
 class _EpisodeTile extends StatelessWidget {
   const _EpisodeTile({
     required this.api,
+    required this.userId,
     required this.episode,
     required this.onTap,
     required this.onInfo,
   });
 
   final JellyfinApi api;
+  final String userId;
   final Episode episode;
   final VoidCallback onTap;
   final VoidCallback onInfo;
@@ -529,19 +534,33 @@ class _EpisodeTile extends StatelessWidget {
                     overflow: TextOverflow.ellipsis,
                     style: textTheme.titleSmall,
                   ),
-                  if (episode.infoLine.isNotEmpty) ...[
-                    const SizedBox(height: 4),
-                    Text(
-                      joinInfos(episode.infoLine.split(' · ')),
-                      maxLines: 2,
-                      style: textTheme.bodySmall?.copyWith(
-                        color: AppColors.grey,
-                      ),
-                    ),
-                  ],
+                  // Infos habituelles, ou l'état du téléchargement
+                  ListenableBuilder(
+                    listenable: DownloadManager.instance,
+                    builder: (context, _) {
+                      final status = downloadStatusLabel(
+                        DownloadManager.instance.stateOf(episode.id),
+                      );
+                      final line =
+                          status ?? joinInfos(episode.infoLine.split(' · '));
+                      if (line.isEmpty) return const SizedBox.shrink();
+                      return Padding(
+                        padding: const EdgeInsets.only(top: 4),
+                        child: Text(
+                          line,
+                          maxLines: 2,
+                          style: textTheme.bodySmall?.copyWith(
+                            color: AppColors.grey,
+                          ),
+                        ),
+                      );
+                    },
+                  ),
                 ],
               ),
             ),
+            const SizedBox(width: 8),
+            EpisodeDownloadButton(api: api, userId: userId, itemId: episode.id),
             const SizedBox(width: 8),
             GlassCircleButton(
               icon: Icons.info_outline_rounded,

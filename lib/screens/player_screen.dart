@@ -272,16 +272,24 @@ class _PlayerScreenState extends State<PlayerScreen> {
         await _player.stop();
       }
 
+      // Fichier téléchargé : lu depuis le téléphone, sans le serveur
+      final localPath = info.localPath;
       await _player.open(
-        Media(
-          widget.api.streamUrl(info),
-          httpHeaders: widget.api.streamHeaders,
-          start: start,
-        ),
+        localPath != null
+            ? Media(localPath, start: start)
+            : Media(
+                widget.api.streamUrl(info),
+                httpHeaders: widget.api.streamHeaders,
+                start: start,
+              ),
       );
       if (!mounted) return;
       _info.value = info;
-      _sourceLabel.value = info.directPlay ? 'ORIGINAL' : 'CONVERTI';
+      _sourceLabel.value = info.isLocal
+          ? 'TÉLÉCHARGÉ'
+          : info.directPlay
+          ? 'ORIGINAL'
+          : 'CONVERTI';
       setState(() => _quality = quality);
       _report(() => widget.api.reportPlaybackStart(info, start));
       await _applyTracks(info);

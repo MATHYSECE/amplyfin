@@ -1,6 +1,12 @@
-<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
     <!-- Accès à internet / au réseau local (serveur Jellyfin) -->
     <uses-permission android:name="android.permission.INTERNET"/>
+    <!-- Téléchargements : notification de progression (Android 13+), et
+         service de premier plan pour les longs téléchargements (Android 14+) -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE"/>
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC"/>
 
     <!-- usesCleartextTraffic : autorise les serveurs en http:// (courant à la maison)
          allowBackup=false : le jeton chiffré ne doit pas partir dans les sauvegardes Google -->
@@ -32,6 +38,11 @@
                 <category android:name="android.intent.category.LAUNCHER"/>
             </intent-filter>
         </activity>
+        <!-- Téléchargements longs : service de premier plan de type « données » -->
+        <service
+            android:name="androidx.work.impl.foreground.SystemForegroundService"
+            android:foregroundServiceType="dataSync"
+            tools:node="merge" />
         <!-- Don't delete the meta-data below.
              This is used by the Flutter tool to generate GeneratedPluginRegistrant.java -->
         <meta-data
