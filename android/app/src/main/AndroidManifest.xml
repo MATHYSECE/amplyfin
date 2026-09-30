@@ -1,8 +1,15 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- Accès à internet / au réseau local (serveur Jellyfin) -->
+    <uses-permission android:name="android.permission.INTERNET"/>
+
+    <!-- usesCleartextTraffic : autorise les serveurs en http:// (courant à la maison)
+         allowBackup=false : le jeton chiffré ne doit pas partir dans les sauvegardes Google -->
     <application
-        android:label="amplyfin"
+        android:label="Amplyfin"
         android:name="${applicationName}"
-        android:icon="@mipmap/ic_launcher">
+        android:icon="@mipmap/ic_launcher"
+        android:usesCleartextTraffic="true"
+        android:allowBackup="false">
         <activity
             android:name=".MainActivity"
             android:exported="true"
