@@ -35,6 +35,10 @@ abstract final class AppColors {
   static const glow = Color(0x24FFFFFF); // 14 %
   static const glowSoft = Color(0x0FFFFFFF); // 6 %
 
+  /// Barres de progression et jauges : fond, et partie déjà chargée.
+  static const track = Color(0x33FFFFFF); // 20 %
+  static const trackBuffer = Color(0x59FFFFFF); // 35 %
+
   /// Voiles noirs transparents (sur les images, sous les boutons en verre).
   static const scrim35 = Color(0x59000000);
   static const scrim55 = Color(0x8C000000);

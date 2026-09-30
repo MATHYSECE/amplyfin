@@ -167,6 +167,16 @@ void main() {
     }
   });
 
+  test('position façon chronomètre', () {
+    expect(formatPosition(const Duration(minutes: 12, seconds: 58)), '12:58');
+    expect(formatPosition(const Duration(seconds: 5)), '00:05');
+    expect(
+      formatPosition(const Duration(hours: 1, minutes: 5, seconds: 9)),
+      '1:05:09',
+    );
+    expect(formatPosition(const Duration(seconds: -3)), '00:00');
+  });
+
   test('position en ticks', () {
     expect(durationToTicks(const Duration(seconds: 1)), 10000000);
     expect(

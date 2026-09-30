@@ -79,10 +79,8 @@ void main() {
     test('titres : liste et lecteur', () {
       expect(episode.listTitle, '3. La Poudre et la Toile');
       expect(episode.code, 'S1E3');
-      expect(
-        episode.playerTitle,
-        'Breaking Bad · S1E3 · La Poudre et la Toile',
-      );
+      expect(episode.playerTitle, 'Breaking Bad');
+      expect(episode.playerSubtitle, 'S1 · É3 · La Poudre et la Toile');
     });
 
     test('ligne d\'infos : durée puis qualité', () {
@@ -102,6 +100,7 @@ void main() {
       final bare = Episode.fromJson({'Id': 'ep', 'Name': 'Bonus'});
       expect(bare.listTitle, 'Bonus');
       expect(bare.playerTitle, 'Bonus');
+      expect(bare.playerSubtitle, isNull);
       expect(bare.played, isFalse);
     });
 

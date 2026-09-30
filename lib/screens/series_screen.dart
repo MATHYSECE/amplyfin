@@ -233,6 +233,7 @@ class _SeriesScreenState extends State<SeriesScreen> {
           session: widget.session,
           itemId: episode.id,
           title: episode.playerTitle,
+          subtitle: episode.playerSubtitle,
           // Les langues de la série, appliquées aux pistes de cet épisode
           tracks: _languages.resolve(episode.tracks),
         ),

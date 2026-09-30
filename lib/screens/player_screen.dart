@@ -15,7 +15,10 @@ import '../models/playback_info.dart';
 import '../models/playback_quality.dart';
 import '../models/session.dart';
 import '../models/track_choice.dart';
+import '../theme/app_theme.dart';
+import '../widgets/player_controls.dart';
 import '../widgets/track_picker.dart';
+import '../widgets/ui.dart';
 
 /// Lecteur vidéo plein écran, à l'horizontale.
 /// Par défaut le fichier original est lu tel quel (lecture directe) ;
@@ -28,6 +31,7 @@ class PlayerScreen extends StatefulWidget {
     required this.session,
     required this.itemId,
     required this.title,
+    this.subtitle,
     this.tracks = const TrackSelection(),
   });
 
@@ -37,8 +41,11 @@ class PlayerScreen extends StatefulWidget {
   /// Film ou épisode à lire.
   final String itemId;
 
-  /// Titre affiché en haut du lecteur.
+  /// Titre affiché en haut du lecteur (le film, ou la série).
   final String title;
+
+  /// Petite ligne sous le titre (ex. « S1 · É3 · Titre »), facultative.
+  final String? subtitle;
 
   /// Pistes audio et sous-titres choisies avant la lecture.
   final TrackSelection tracks;
@@ -405,58 +412,28 @@ class _PlayerScreenState extends State<PlayerScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final colors = Theme.of(context).colorScheme;
     final controller = _controller;
 
-    // Commandes toutes prêtes de media_kit (personnalisées à l'étape design)
-    final controlsTheme = MaterialVideoControlsThemeData(
-      seekOnDoubleTap: true,
-      seekBarPositionColor: colors.primary,
-      seekBarThumbColor: colors.primary,
-      topButtonBar: [
-        MaterialCustomButton(
-          icon: const Icon(Icons.arrow_back),
-          onPressed: () => Navigator.of(context).maybePop(),
-        ),
-        const SizedBox(width: 12),
-        Expanded(
-          child: Text(
-            widget.title,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: Theme.of(context).textTheme.titleMedium,
-          ),
-        ),
-        _SourceLabel(info: _info),
-        const SizedBox(width: 8),
-        MaterialCustomButton(
-          icon: const Icon(Icons.audiotrack),
-          onPressed: _chooseAudio,
-        ),
-        MaterialCustomButton(
-          icon: const Icon(Icons.subtitles),
-          onPressed: _chooseSubtitles,
-        ),
-        MaterialCustomButton(
-          icon: const Icon(Icons.high_quality_outlined),
-          onPressed: _chooseQuality,
-        ),
-      ],
-      bottomButtonBar: const [MaterialPositionIndicator(), Spacer()],
-    );
-
     return Scaffold(
+      backgroundColor: AppColors.black,
       body: Stack(
+        fit: StackFit.expand,
         children: [
-          if (controller != null)
-            MaterialVideoControlsTheme(
-              normal: controlsTheme,
-              fullscreen: controlsTheme,
-              child: Video(
-                controller: controller,
-                controls: MaterialVideoControls,
-              ),
+          if (controller != null) ...[
+            // La vidéo seule (les commandes de media_kit sont désactivées)
+            Video(controller: controller, controls: NoVideoControls),
+            // Nos commandes, dessinées comme sur la maquette
+            PlayerControls(
+              player: _player,
+              title: widget.title,
+              subtitle: widget.subtitle,
+              source: _info,
+              onBack: () => Navigator.of(context).maybePop(),
+              onAudio: _chooseAudio,
+              onSubtitles: _chooseSubtitles,
+              onQuality: _chooseQuality,
             ),
+          ],
           if (_opening && _info.value == null)
             const Center(child: CircularProgressIndicator()),
           if (_error != null)
@@ -467,33 +444,6 @@ class _PlayerScreenState extends State<PlayerScreen> {
             ),
         ],
       ),
-    );
-  }
-}
-
-/// Petite mention « ORIGINAL » (lecture directe) ou « CONVERTI » (transcodage).
-/// Rien tant que la vidéo n'est pas ouverte.
-class _SourceLabel extends StatelessWidget {
-  const _SourceLabel({required this.info});
-
-  final ValueListenable<PlaybackInfo?> info;
-
-  @override
-  Widget build(BuildContext context) {
-    return ValueListenableBuilder(
-      valueListenable: info,
-      builder: (context, info, _) => info == null
-          ? const SizedBox.shrink()
-          : _buildLabel(context, info.directPlay),
-    );
-  }
-
-  Widget _buildLabel(BuildContext context, bool directPlay) {
-    final colors = Theme.of(context).colorScheme;
-    return Text(
-      directPlay ? 'ORIGINAL' : 'CONVERTI',
-      style: Theme.of(context).textTheme.labelMedium
-          ?.copyWith(color: directPlay ? colors.primary : colors.tertiary),
     );
   }
 }
@@ -512,22 +462,33 @@ class _ErrorOverlay extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return ColoredBox(
-      color: Theme.of(context).colorScheme.surface,
+    return GlowBackground(
+      center: Alignment.topCenter,
       child: Center(
         child: Padding(
           padding: const EdgeInsets.all(24),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              const Icon(Icons.error_outline, size: 48),
+              const Icon(
+                Icons.error_outline_rounded,
+                size: 48,
+                color: AppColors.grey,
+              ),
               const SizedBox(height: 16),
-              Text(message, textAlign: TextAlign.center),
-              const SizedBox(height: 16),
+              Text(
+                message,
+                textAlign: TextAlign.center,
+                style: Theme.of(context).textTheme.bodyLarge,
+              ),
+              const SizedBox(height: 20),
               Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  TextButton(onPressed: onBack, child: const Text('Retour')),
+                  OutlinedButton(
+                    onPressed: onBack,
+                    child: const Text('Retour'),
+                  ),
                   const SizedBox(width: 12),
                   FilledButton(
                     onPressed: onRetry,

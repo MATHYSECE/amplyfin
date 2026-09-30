@@ -73,8 +73,17 @@ class Episode {
       ? 'S${seasonNumber}E$number'
       : null;
 
-  /// Titre affiché dans le lecteur : « Série · S1E3 · Titre ».
-  String get playerTitle => [?seriesName, ?code, name].join(' · ');
+  /// Titre en gras dans le lecteur : la série (ou l'épisode seul).
+  String get playerTitle => seriesName ?? name;
+
+  /// Petite ligne sous le titre du lecteur : « S1 · É3 · Titre ».
+  String? get playerSubtitle {
+    if (seriesName == null) return null;
+    final shortCode = (seasonNumber != null && number != null)
+        ? 'S$seasonNumber · É$number'
+        : null;
+    return [?shortCode, name].join(' · ');
+  }
 
   String? get runtimeLabel => formatRuntime(runtime);
 
