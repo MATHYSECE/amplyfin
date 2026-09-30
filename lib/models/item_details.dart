@@ -1,10 +1,11 @@
+import 'durations.dart';
+import 'media_item.dart';
 import 'media_quality.dart';
-import 'movie.dart';
 
-/// La fiche complète d'un film : ce qu'affiche l'écran de détail.
-class MovieDetails {
-  const MovieDetails({
-    required this.movie,
+/// La fiche complète d'un film ou d'une série : ce qu'affiche l'écran de détail.
+class ItemDetails {
+  const ItemDetails({
+    required this.item,
     this.overview,
     this.genres = const [],
     this.runtime,
@@ -12,14 +13,17 @@ class MovieDetails {
     this.communityRating,
     this.backdropTag,
     this.quality,
+    this.endYear,
+    this.status,
   });
 
   /// Lit la fiche à partir du JSON renvoyé par GET /Items/{id}.
-  factory MovieDetails.fromJson(Map<String, dynamic> json) {
+  factory ItemDetails.fromJson(Map<String, dynamic> json) {
     final ticks = json['RunTimeTicks'] as int?;
     final backdropTags = json['BackdropImageTags'] as List<dynamic>?;
-    return MovieDetails(
-      movie: Movie.fromJson(json),
+    final endDate = json['EndDate'] as String?;
+    return ItemDetails(
+      item: MediaItem.fromJson(json),
       overview: json['Overview'] as String?,
       genres: [for (final g in (json['Genres'] as List<dynamic>?) ?? []) '$g'],
       runtime: ticksToDuration(ticks),
@@ -29,19 +33,21 @@ class MovieDetails {
           ? backdropTags.first as String?
           : null,
       quality: MediaQuality.fromItemJson(json),
+      endYear: endDate == null ? null : DateTime.tryParse(endDate)?.year,
+      status: json['Status'] as String?,
     );
   }
 
   /// Titre, année, affiche (les mêmes infos que dans la grille).
-  final Movie movie;
+  final MediaItem item;
 
-  /// Résumé du film.
+  /// Résumé.
   final String? overview;
 
   /// Genres (Action, Comédie…).
   final List<String> genres;
 
-  /// Durée du film.
+  /// Durée (films).
   final Duration? runtime;
 
   /// Âge conseillé (ex. « PG-13 », « FR-12 »).
@@ -53,29 +59,35 @@ class MovieDetails {
   /// Empreinte de l'image de fond, ou null s'il n'y en a pas.
   final String? backdropTag;
 
-  /// Qualité technique du fichier (définition, HDR, son), si connue.
+  /// Qualité technique du fichier (films), si connue.
   final MediaQuality? quality;
 
+  /// Année de fin (séries terminées).
+  final int? endYear;
+
+  /// État d'une série pour le serveur : « Continuing », « Ended »…
+  final String? status;
+
   /// Durée lisible : « 2 h 04 », « 1 h » ou « 45 min ».
-  String? get runtimeLabel {
-    final d = runtime;
-    if (d == null || d.inSeconds <= 0) return null;
-    final totalMinutes = (d.inSeconds / 60).round();
-    final hours = totalMinutes ~/ 60;
-    final minutes = totalMinutes % 60;
-    if (hours == 0) return '$minutes min';
-    if (minutes == 0) return '$hours h';
-    return '$hours h ${minutes.toString().padLeft(2, '0')}';
-  }
+  String? get runtimeLabel => formatRuntime(runtime);
 
   /// Note lisible à la française : « 7,8 ».
   String? get ratingLabel =>
       communityRating?.toStringAsFixed(1).replaceAll('.', ',');
+
+  /// Années d'une série : « 2008 – 2013 », ou juste « 2008 ».
+  String? get yearsLabel {
+    final start = item.year;
+    if (start == null) return endYear?.toString();
+    if (endYear == null || endYear == start) return '$start';
+    return '$start – $endYear';
+  }
+
+  /// État d'une série, en français.
+  String? get statusLabel => switch (status) {
+    'Continuing' => 'En cours',
+    'Ended' => 'Terminée',
+    'Unreleased' => 'À venir',
+    _ => null,
+  };
 }
-
-/// Jellyfin compte les durées en « ticks » : 10 millions par seconde.
-Duration? ticksToDuration(int? ticks) =>
-    ticks == null ? null : Duration(microseconds: ticks ~/ 10);
-
-/// L'inverse : une durée en « ticks » (pour les signalements au serveur).
-int durationToTicks(Duration duration) => duration.inMicroseconds * 10;

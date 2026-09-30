@@ -10,7 +10,6 @@ import 'package:media_kit/media_kit.dart';
 import 'package:media_kit_video/media_kit_video.dart';
 
 import '../api/jellyfin_api.dart';
-import '../models/movie.dart';
 import '../models/playback_info.dart';
 import '../models/playback_quality.dart';
 import '../models/session.dart';
@@ -23,12 +22,18 @@ class PlayerScreen extends StatefulWidget {
     super.key,
     required this.api,
     required this.session,
-    required this.movie,
+    required this.itemId,
+    required this.title,
   });
 
   final JellyfinApi api;
   final Session session;
-  final Movie movie;
+
+  /// Film ou épisode à lire.
+  final String itemId;
+
+  /// Titre affiché en haut du lecteur.
+  final String title;
 
   @override
   State<PlayerScreen> createState() => _PlayerScreenState();
@@ -51,6 +56,9 @@ class _PlayerScreenState extends State<PlayerScreen> {
 
   /// Affichage de la vidéo (créé au démarrage, selon l'appareil).
   VideoController? _controller;
+
+  /// Vrai sur l'émulateur Android (réglages vidéo particuliers).
+  bool _onEmulator = false;
   final List<StreamSubscription<dynamic>> _subscriptions = [];
   Timer? _progressTimer;
 
@@ -97,27 +105,31 @@ class _PlayerScreenState extends State<PlayerScreen> {
 
   /// Prépare l'affichage puis lance le film.
   Future<void> _start() async {
+    _onEmulator = await _isAndroidEmulator();
     final controller = VideoController(
       _player,
-      configuration: await _videoConfiguration(),
+      configuration: _videoConfiguration(),
     );
     if (!mounted) return;
     setState(() => _controller = controller);
     await _open(PlaybackQuality.original);
   }
 
+  static Future<bool> _isAndroidEmulator() async {
+    if (!Platform.isAndroid) return false;
+    final device = await DeviceInfoPlugin().androidInfo;
+    return !device.isPhysicalDevice;
+  }
+
   /// Réglage de l'affichage vidéo. Sur l'émulateur Android, l'affichage
   /// OpenGL habituel de media_kit ne fonctionne pas (écran noir) : on envoie
   /// alors l'image décodée par Android directement à l'écran.
-  static Future<VideoControllerConfiguration> _videoConfiguration() async {
-    if (Platform.isAndroid) {
-      final device = await DeviceInfoPlugin().androidInfo;
-      if (!device.isPhysicalDevice) {
-        return const VideoControllerConfiguration(
-          vo: 'mediacodec_embed',
-          hwdec: 'mediacodec',
-        );
-      }
+  VideoControllerConfiguration _videoConfiguration() {
+    if (_onEmulator) {
+      return const VideoControllerConfiguration(
+        vo: 'mediacodec_embed',
+        hwdec: 'mediacodec',
+      );
     }
     return const VideoControllerConfiguration();
   }
@@ -163,9 +175,12 @@ class _PlayerScreenState extends State<PlayerScreen> {
     try {
       final info = await widget.api.getPlaybackInfo(
         userId: widget.session.userId,
-        itemId: widget.movie.id,
+        itemId: widget.itemId,
         quality: quality,
         start: start,
+        // Le décodeur vidéo de l'émulateur ne sait pas lire le 10 bits :
+        // le serveur convertit alors ces vidéos
+        supports10Bit: !_onEmulator,
       );
       if (!mounted) return;
 
@@ -194,11 +209,13 @@ class _PlayerScreenState extends State<PlayerScreen> {
   }
 
   /// Erreur signalée par le lecteur lui-même (fichier illisible, coupure…).
+  /// Le moteur signale aussi des erreurs sans gravité (il essaie une autre
+  /// méthode et la lecture continue) : on ne prévient que si la vidéo n'a
+  /// jamais pu démarrer.
   void _onPlayerError(String message) {
-    if (!mounted) return;
-    ScaffoldMessenger.of(
-      context,
-    ).showSnackBar(SnackBar(content: Text('Problème de lecture : $message')));
+    if (!mounted || _error != null) return;
+    if (_player.state.duration > Duration.zero) return;
+    setState(() => _error = 'Lecture impossible : $message');
   }
 
   void _reportProgress() {
@@ -275,7 +292,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
         const SizedBox(width: 12),
         Expanded(
           child: Text(
-            widget.movie.name,
+            widget.title,
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
             style: Theme.of(context).textTheme.titleMedium,

@@ -1,6 +1,6 @@
 import 'package:amplyfin/api/device_profile.dart';
 import 'package:amplyfin/api/jellyfin_api.dart';
-import 'package:amplyfin/models/movie_details.dart';
+import 'package:amplyfin/models/durations.dart';
 import 'package:amplyfin/models/playback_info.dart';
 import 'package:amplyfin/models/playback_quality.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -43,6 +43,18 @@ void main() {
 
     test('qualité originale : aucune limite de largeur', () {
       expect(profile.containsKey('CodecProfiles'), isFalse);
+    });
+
+    test('appareil sans 10 bits : profondeur de couleur limitée à 8', () {
+      final emulator = buildDeviceProfile(
+        maxBitrate: originalMaxBitrate,
+        maxBitDepth: 8,
+      );
+      final conditions =
+          (emulator['CodecProfiles'] as List).first['Conditions'] as List;
+      expect(conditions, hasLength(1));
+      expect(conditions.first['Property'], 'VideoBitDepth');
+      expect(conditions.first['Value'], '8');
     });
 
     test('qualité réduite : largeur maximum imposée', () {

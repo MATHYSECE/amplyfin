@@ -50,10 +50,18 @@ const _externalSubtitles = ['srt', 'subrip', 'ass', 'ssa', 'vtt', 'webvtt'];
 
 /// Construit le profil. [maxBitrate] : débit maximum accepté, en bits/s.
 /// [maxWidth] : largeur d'image maximum, pour forcer une définition réduite.
+/// [maxBitDepth] : profondeur de couleur maximum (8 = pas de vidéo 10 bits),
+/// pour un appareil qui ne sait pas décoder le 10 bits (l'émulateur).
 Map<String, dynamic> buildDeviceProfile({
   required int maxBitrate,
   int? maxWidth,
+  int? maxBitDepth,
 }) {
+  // Limites imposées à toutes les vidéos : au-delà, le serveur convertit
+  final videoConditions = [
+    if (maxWidth != null) _lessThanOrEqual('Width', maxWidth),
+    if (maxBitDepth != null) _lessThanOrEqual('VideoBitDepth', maxBitDepth),
+  ];
   return {
     'Name': 'Amplyfin',
     'MaxStreamingBitrate': maxBitrate,
@@ -74,20 +82,9 @@ Map<String, dynamic> buildDeviceProfile({
         'MinSegments': 1,
       },
     ],
-    // Qualité réduite : limite de largeur pour toutes les vidéos
-    if (maxWidth != null)
+    if (videoConditions.isNotEmpty)
       'CodecProfiles': [
-        {
-          'Type': 'Video',
-          'Conditions': [
-            {
-              'Condition': 'LessThanEqual',
-              'Property': 'Width',
-              'Value': '$maxWidth',
-              'IsRequired': true,
-            },
-          ],
-        },
+        {'Type': 'Video', 'Conditions': videoConditions},
       ],
     'SubtitleProfiles': [
       for (final format in _embeddedSubtitles)
@@ -97,3 +94,11 @@ Map<String, dynamic> buildDeviceProfile({
     ],
   };
 }
+
+/// Condition « [property] ≤ [value] » d'un profil de codec.
+Map<String, dynamic> _lessThanOrEqual(String property, int value) => {
+  'Condition': 'LessThanEqual',
+  'Property': property,
+  'Value': '$value',
+  'IsRequired': true,
+};

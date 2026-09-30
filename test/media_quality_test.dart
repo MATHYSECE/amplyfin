@@ -1,5 +1,5 @@
+import 'package:amplyfin/models/item_details.dart';
 import 'package:amplyfin/models/media_quality.dart';
-import 'package:amplyfin/models/movie_details.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 // Tests de la qualité affichée sur la fiche (définition, HDR, son)
@@ -63,7 +63,7 @@ void main() {
   });
 
   test('la fiche du film lit aussi la qualité', () {
-    final details = MovieDetails.fromJson(
+    final details = ItemDetails.fromJson(
       item([
         {'Type': 'Video', 'Codec': 'av1', 'Width': 1920, 'Height': 1080},
       ]),

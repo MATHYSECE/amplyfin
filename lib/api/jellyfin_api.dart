@@ -4,10 +4,13 @@ import 'dart:io';
 
 import 'package:http/http.dart' as http;
 
-import '../models/movie.dart';
-import '../models/movie_details.dart';
+import '../models/durations.dart';
+import '../models/episode.dart';
+import '../models/item_details.dart';
+import '../models/media_item.dart';
 import '../models/playback_info.dart';
 import '../models/playback_quality.dart';
+import '../models/season.dart';
 import '../models/session.dart';
 import 'device_profile.dart';
 
@@ -108,10 +111,12 @@ class JellyfinApi {
   /// POST /Sessions/Logout : invalide le jeton côté serveur.
   Future<void> logout() => _send('POST', '/Sessions/Logout');
 
-  /// GET /Items : une page de films de l'utilisateur, triés par titre.
-  /// [startIndex] = position du premier film voulu, [limit] = taille de la page.
-  Future<MoviePage> getMovies({
+  /// GET /Items : une page de films ou de séries de l'utilisateur, triés
+  /// par titre. [type] : « Movie » ou « Series ».
+  /// [startIndex] = position du premier élément voulu, [limit] = taille de la page.
+  Future<ItemPage> getItems({
     required String userId,
+    required String type,
     int startIndex = 0,
     int limit = 50,
   }) async {
@@ -120,7 +125,7 @@ class JellyfinApi {
       '/Items',
       query: {
         'userId': userId,
-        'includeItemTypes': 'Movie',
+        'includeItemTypes': type,
         'recursive': 'true',
         'sortBy': 'SortName',
         'sortOrder': 'Ascending',
@@ -133,34 +138,77 @@ class JellyfinApi {
       },
     );
     final items = (json['Items'] as List<dynamic>?) ?? [];
-    return MoviePage(
-      movies: [for (final item in items) Movie.fromJson(item)],
+    return ItemPage(
+      items: [for (final item in items) MediaItem.fromJson(item)],
       totalCount: (json['TotalRecordCount'] as int?) ?? items.length,
     );
   }
 
-  /// GET /Items/{id}?userId=… : la fiche complète d'un film.
-  Future<MovieDetails> getMovieDetails({
+  /// GET /Items/{id}?userId=… : la fiche complète d'un film ou d'une série.
+  Future<ItemDetails> getItemDetails({
     required String userId,
-    required String movieId,
+    required String itemId,
   }) async {
     final json = await _send(
       'GET',
-      '/Items/$movieId',
+      '/Items/$itemId',
       query: {'userId': userId},
     );
-    return MovieDetails.fromJson(json as Map<String, dynamic>);
+    return ItemDetails.fromJson(json as Map<String, dynamic>);
   }
 
-  /// Adresse de l'affiche d'un film, [width] pixels de large.
-  /// Null si le film n'a pas d'affiche.
-  String? posterUrl(Movie movie, {required int width}) =>
-      _imageUrl(movie.id, 'Primary', movie.posterTag, width);
+  /// GET /Shows/{id}/Seasons : les saisons d'une série.
+  Future<List<Season>> getSeasons({
+    required String userId,
+    required String seriesId,
+  }) async {
+    final json = await _send(
+      'GET',
+      '/Shows/$seriesId/Seasons',
+      query: {'userId': userId, 'enableImages': 'false'},
+    );
+    final items = (json['Items'] as List<dynamic>?) ?? [];
+    return [for (final item in items) Season.fromJson(item)];
+  }
 
-  /// Adresse de l'image de fond d'un film, [width] pixels de large.
-  /// Null si le film n'a pas d'image de fond.
-  String? backdropUrl(MovieDetails details, {required int width}) =>
-      _imageUrl(details.movie.id, 'Backdrop', details.backdropTag, width);
+  /// GET /Shows/{id}/Episodes : les épisodes d'une saison.
+  Future<List<Episode>> getEpisodes({
+    required String userId,
+    required String seriesId,
+    required String seasonId,
+  }) async {
+    final json = await _send(
+      'GET',
+      '/Shows/$seriesId/Episodes',
+      query: {
+        'userId': userId,
+        'seasonId': seasonId,
+        // Résumé et pistes (pour la qualité) ne sont pas envoyés par défaut
+        'fields': 'Overview,MediaStreams',
+        'enableImageTypes': 'Primary',
+        'imageTypeLimit': '1',
+        // Pour savoir si l'épisode a déjà été vu
+        'enableUserData': 'true',
+      },
+    );
+    final items = (json['Items'] as List<dynamic>?) ?? [];
+    return [for (final item in items) Episode.fromJson(item)];
+  }
+
+  /// Adresse de l'affiche d'un film ou d'une série, [width] pixels de large.
+  /// Null s'il n'y a pas d'affiche.
+  String? posterUrl(MediaItem item, {required int width}) =>
+      _imageUrl(item.id, 'Primary', item.posterTag, width);
+
+  /// Adresse de l'image de fond, [width] pixels de large.
+  /// Null s'il n'y a pas d'image de fond.
+  String? backdropUrl(ItemDetails details, {required int width}) =>
+      _imageUrl(details.item.id, 'Backdrop', details.backdropTag, width);
+
+  /// Adresse de la vignette d'un épisode, [width] pixels de large.
+  /// Null si l'épisode n'a pas de vignette.
+  String? episodeImageUrl(Episode episode, {required int width}) =>
+      _imageUrl(episode.id, 'Primary', episode.imageTag, width);
 
   /// GET /Items/{id}/Images/{type} : image redimensionnée par le serveur.
   /// Cet appel ne demande pas de jeton. Le [tag] (empreinte de l'image)
@@ -182,11 +230,13 @@ class JellyfinApi {
   /// Qualité réduite : flux converti par le serveur (débit et largeur limités).
   /// [start] : position de départ, pour que le serveur commence sa conversion
   /// directement au bon endroit (sinon il part du début et le lecteur attend).
+  /// [supports10Bit] : faux si l'appareil ne décode pas les vidéos 10 bits.
   Future<PlaybackInfo> getPlaybackInfo({
     required String userId,
     required String itemId,
     required PlaybackQuality quality,
     Duration start = Duration.zero,
+    bool supports10Bit = true,
   }) async {
     final bitrate = quality.maxBitrate ?? originalMaxBitrate;
     final json = await _send(
@@ -200,6 +250,7 @@ class JellyfinApi {
         'DeviceProfile': buildDeviceProfile(
           maxBitrate: bitrate,
           maxWidth: quality.maxWidth,
+          maxBitDepth: supports10Bit ? null : 8,
         ),
         'EnableDirectPlay': quality.isOriginal,
         'EnableDirectStream': quality.isOriginal,

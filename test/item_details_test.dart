@@ -1,13 +1,14 @@
 import 'package:amplyfin/api/jellyfin_api.dart';
-import 'package:amplyfin/models/movie.dart';
-import 'package:amplyfin/models/movie_details.dart';
+import 'package:amplyfin/models/durations.dart';
+import 'package:amplyfin/models/item_details.dart';
+import 'package:amplyfin/models/media_item.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 // Tests de la fiche d'un film : lecture du JSON, durée, note, image de fond
 void main() {
-  group('MovieDetails.fromJson', () {
+  group('ItemDetails.fromJson', () {
     test('lit toutes les infos de la fiche', () {
-      final details = MovieDetails.fromJson({
+      final details = ItemDetails.fromJson({
         'Id': 'abc123',
         'Name': 'Le Voyage de Chihiro',
         'ProductionYear': 2001,
@@ -19,8 +20,8 @@ void main() {
         'CommunityRating': 8.5,
         'BackdropImageTags': ['fond1', 'fond2'],
       });
-      expect(details.movie.name, 'Le Voyage de Chihiro');
-      expect(details.movie.posterTag, 'tag42');
+      expect(details.item.name, 'Le Voyage de Chihiro');
+      expect(details.item.posterTag, 'tag42');
       expect(details.overview, 'Une petite fille dans un monde d\'esprits.');
       expect(details.genres, ['Animation', 'Fantastique']);
       expect(details.runtimeLabel, '2 h 04');
@@ -30,7 +31,7 @@ void main() {
     });
 
     test('accepte une fiche presque vide', () {
-      final details = MovieDetails.fromJson({
+      final details = ItemDetails.fromJson({
         'Id': 'abc123',
         'BackdropImageTags': [],
       });
@@ -42,7 +43,7 @@ void main() {
     });
 
     test('lit une note entière (7 → « 7,0 »)', () {
-      final details = MovieDetails.fromJson({
+      final details = ItemDetails.fromJson({
         'Id': 'abc123',
         'CommunityRating': 7,
       });
@@ -51,8 +52,8 @@ void main() {
   });
 
   group('runtimeLabel', () {
-    String? label(Duration d) => MovieDetails(
-      movie: const Movie(id: 'x', name: 'x'),
+    String? label(Duration d) => ItemDetails(
+      item: const MediaItem(id: 'x', name: 'x'),
       runtime: d,
     ).runtimeLabel;
 
@@ -82,8 +83,8 @@ void main() {
     final api = JellyfinApi(serverUrl: 'http://serveur:8096', deviceId: 'test');
 
     test('construit l\'adresse de l\'image de fond', () {
-      const details = MovieDetails(
-        movie: Movie(id: 'abc123', name: 'Film'),
+      const details = ItemDetails(
+        item: MediaItem(id: 'abc123', name: 'Film'),
         backdropTag: 'fond1',
       );
       expect(
@@ -94,8 +95,8 @@ void main() {
     });
 
     test('renvoie null sans image de fond', () {
-      const details = MovieDetails(
-        movie: Movie(id: 'abc123', name: 'Film'),
+      const details = ItemDetails(
+        item: MediaItem(id: 'abc123', name: 'Film'),
       );
       expect(api.backdropUrl(details, width: 1200), isNull);
     });

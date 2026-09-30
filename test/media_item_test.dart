@@ -1,12 +1,12 @@
 import 'package:amplyfin/api/jellyfin_api.dart';
-import 'package:amplyfin/models/movie.dart';
+import 'package:amplyfin/models/media_item.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 // Tests de la lecture d'un film et de l'adresse de son affiche
 void main() {
-  group('Movie.fromJson', () {
+  group('MediaItem.fromJson', () {
     test('lit titre, année et empreinte de l\'affiche', () {
-      final movie = Movie.fromJson({
+      final movie = MediaItem.fromJson({
         'Id': 'abc123',
         'Name': 'Le Voyage de Chihiro',
         'ProductionYear': 2001,
@@ -19,7 +19,7 @@ void main() {
     });
 
     test('accepte un film sans année, sans titre ni affiche', () {
-      final movie = Movie.fromJson({'Id': 'abc123'});
+      final movie = MediaItem.fromJson({'Id': 'abc123'});
       expect(movie.name, 'Sans titre');
       expect(movie.year, isNull);
       expect(movie.posterTag, isNull);
@@ -31,7 +31,7 @@ void main() {
         JellyfinApi(serverUrl: serverUrl, deviceId: 'test');
 
     test('construit l\'adresse de l\'affiche à la bonne taille', () {
-      const movie = Movie(id: 'abc123', name: 'Film', posterTag: 'tag42');
+      const movie = MediaItem(id: 'abc123', name: 'Film', posterTag: 'tag42');
       expect(
         api('http://192.168.1.10:8096').posterUrl(movie, width: 400),
         'http://192.168.1.10:8096/Items/abc123/Images/Primary'
@@ -40,7 +40,7 @@ void main() {
     });
 
     test('garde le chemin du serveur (ex. /jellyfin)', () {
-      const movie = Movie(id: 'abc123', name: 'Film', posterTag: 'tag42');
+      const movie = MediaItem(id: 'abc123', name: 'Film', posterTag: 'tag42');
       expect(
         api('https://maison.fr/jellyfin').posterUrl(movie, width: 300),
         startsWith('https://maison.fr/jellyfin/Items/abc123/Images/Primary?'),
@@ -48,7 +48,7 @@ void main() {
     });
 
     test('renvoie null si le film n\'a pas d\'affiche', () {
-      const movie = Movie(id: 'abc123', name: 'Film');
+      const movie = MediaItem(id: 'abc123', name: 'Film');
       expect(api('http://serveur:8096').posterUrl(movie, width: 400), isNull);
     });
   });
