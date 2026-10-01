@@ -219,17 +219,25 @@ class DownloadManager extends ChangeNotifier {
     }
     notifyListeners();
     await _askNotificationPermission();
+    // Fiches des séries, demandées une seule fois pour toute une saison
+    final series = <String, Map<String, dynamic>?>{};
     for (final id in todo) {
       // Annulé entre-temps : on passe au suivant
       if (_states[id]?.phase != DownloadPhase.waiting) continue;
-      await _enqueue(api, userId, id);
+      await _enqueue(api, userId, id, series);
     }
   }
 
-  /// Récupère la fiche de l'élément, puis le met dans la file.
-  Future<void> _enqueue(JellyfinApi api, String userId, String itemId) async {
+  /// Récupère la fiche de l'élément (et celle de sa série, gardée dans
+  /// [series]), puis le met dans la file.
+  Future<void> _enqueue(
+    JellyfinApi api,
+    String userId,
+    String itemId,
+    Map<String, Map<String, dynamic>?> series,
+  ) async {
     final createdAt = _states[itemId]?.createdAt;
-    final DownloadInfo info;
+    DownloadInfo info;
     try {
       info = DownloadInfo.fromItemJson(
         await api.getItemJson(userId: userId, itemId: itemId),
@@ -245,6 +253,23 @@ class DownloadManager extends ChangeNotifier {
         ),
       );
       return;
+    }
+    // Épisode : résumé et années de la série, pour sa fiche hors ligne
+    final seriesId = info.seriesId;
+    if (info.isEpisode && seriesId != null) {
+      if (!series.containsKey(seriesId)) {
+        try {
+          series[seriesId] = await api.getItemJson(
+            userId: userId,
+            itemId: seriesId,
+          );
+        } on JellyfinException {
+          // Pas grave : la fiche hors ligne sera juste moins complète
+          series[seriesId] = null;
+        }
+      }
+      final seriesJson = series[seriesId];
+      if (seriesJson != null) info = info.withSeries(seriesJson);
     }
     // Annulé pendant qu'on attendait le serveur
     if (!_states.containsKey(itemId)) return;
@@ -415,6 +440,28 @@ class DownloadManager extends ChangeNotifier {
   File? posterFile(String itemId) => _localFile(_posterFile(itemId));
   File? backdropFile(String itemId) => _localFile(_backdropFile(itemId));
   File? thumbFile(String itemId) => _localFile(_thumbFile(itemId));
+
+  /// Affiche gardée sur le téléphone pour un film ou une série (celle
+  /// téléchargée avec l'un de ses épisodes). Null s'il n'y en a pas.
+  File? localPoster(String itemId) => _existing(itemId, _posterFile);
+
+  /// Image de fond gardée pour un film ou une série (null s'il n'y en a pas).
+  File? localBackdrop(String itemId) => _existing(itemId, _backdropFile);
+
+  /// Fichier [name] de l'élément s'il existe, sinon celui d'un épisode
+  /// téléchargé de cette série.
+  File? _existing(String itemId, String Function(String) name) {
+    final ids = [
+      itemId,
+      for (final MapEntry(key: id, value: state) in _states.entries)
+        if (state.info?.seriesId == itemId) id,
+    ];
+    for (final id in ids) {
+      final file = _localFile(name(id));
+      if (file != null && file.existsSync()) return file;
+    }
+    return null;
+  }
 
   File? _localFile(String name) {
     final directory = _directoryPath;

@@ -4,8 +4,10 @@ import 'package:flutter/material.dart';
 import '../api/jellyfin_api.dart';
 import '../models/download_info.dart';
 import '../models/file_size.dart';
+import '../services/connection_monitor.dart';
 import '../services/download_groups.dart';
 import '../services/download_manager.dart';
+import '../services/offline_progress.dart';
 import '../theme/app_theme.dart';
 import 'download_controls.dart';
 import 'poster_image.dart';
@@ -23,12 +25,16 @@ class DownloadPoster extends StatelessWidget {
     required this.info,
     this.width = 52,
     this.hero = false,
+    this.showProgress = false,
   });
 
   final JellyfinApi api;
   final DownloadInfo info;
   final double width;
   final bool hero;
+
+  /// Fine barre en bas : où en est la lecture.
+  final bool showProgress;
 
   @override
   Widget build(BuildContext context) {
@@ -53,7 +59,13 @@ class DownloadPoster extends StatelessWidget {
         child: image,
       );
     }
-    return SizedBox(width: width, height: width * 1.5, child: image);
+    return SizedBox(
+      width: width,
+      height: width * 1.5,
+      child: showProgress
+          ? _WithProgress(itemId: info.itemId, child: image)
+          : image,
+    );
   }
 }
 
@@ -65,11 +77,15 @@ class DownloadThumbnail extends StatelessWidget {
     required this.api,
     required this.info,
     this.width = 112,
+    this.showProgress = false,
   });
 
   final JellyfinApi api;
   final DownloadInfo info;
   final double width;
+
+  /// Fine barre en bas : où en est la lecture.
+  final bool showProgress;
 
   @override
   Widget build(BuildContext context) {
@@ -96,19 +112,68 @@ class DownloadThumbnail extends StatelessWidget {
             errorWidget: (_, _, _) => placeholder,
           );
     final file = DownloadManager.instance.thumbFile(info.itemId);
+    final image = Card(
+      child: file == null
+          ? network
+          : Image.file(
+              file,
+              fit: BoxFit.cover,
+              cacheWidth: 480,
+              errorBuilder: (_, _, _) => network,
+            ),
+    );
     return SizedBox(
       width: width,
       height: width * 9 / 16,
-      child: Card(
-        child: file == null
-            ? network
-            : Image.file(
-                file,
-                fit: BoxFit.cover,
-                cacheWidth: 480,
-                errorBuilder: (_, _, _) => network,
+      child: showProgress
+          ? _WithProgress(itemId: info.itemId, child: image)
+          : image,
+    );
+  }
+}
+
+/// Image avec, en bas, la part déjà vue (position gardée sur le téléphone),
+/// ou une coche si c'est déjà vu.
+class _WithProgress extends StatelessWidget {
+  const _WithProgress({required this.itemId, required this.child});
+
+  final String itemId;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    final saved = OfflineProgress.instance.of(itemId);
+    return Stack(
+      fit: StackFit.expand,
+      children: [
+        child,
+        if (saved != null && saved.played)
+          const Positioned(
+            top: 4,
+            right: 4,
+            child: CircleAvatar(
+              radius: 9,
+              backgroundColor: AppColors.white,
+              child: Icon(
+                Icons.check_rounded,
+                size: 12,
+                color: AppColors.black,
               ),
-      ),
+            ),
+          )
+        else if (saved != null && saved.fraction > 0)
+          Positioned(
+            left: 0,
+            right: 0,
+            bottom: 0,
+            child: ClipRRect(
+              borderRadius: const BorderRadius.vertical(
+                bottom: Radius.circular(AppRadius.poster),
+              ),
+              child: ProgressLine(value: saved.fraction),
+            ),
+          ),
+      ],
     );
   }
 }
@@ -226,7 +291,9 @@ class PendingDownloadRow extends StatelessWidget {
 
   final JellyfinApi api;
   final DownloadEntry entry;
-  final VoidCallback onRetry;
+
+  /// « Réessayer » après un échec (null : bouton masqué, ex. hors ligne).
+  final VoidCallback? onRetry;
 
   /// Vignette d'épisode et « 6. Titre » (écran d'une série), au lieu de
   /// l'affiche et du nom de la série.
@@ -283,12 +350,15 @@ class PendingDownloadRow extends StatelessWidget {
           ),
           const SizedBox(width: 10),
           if (failed)
-            GlassCircleButton(
-              icon: Icons.refresh_rounded,
-              tooltip: 'Réessayer',
-              size: 40,
-              onPressed: onRetry,
-            )
+            if (onRetry != null)
+              GlassCircleButton(
+                icon: Icons.refresh_rounded,
+                tooltip: 'Réessayer',
+                size: 40,
+                onPressed: onRetry,
+              )
+            else
+              const SizedBox.shrink()
           else
             // En attente : pas de pause possible, le bouton s'efface
             AnimatedScale(
@@ -417,6 +487,7 @@ Future<DownloadAction?> showDownloadActions(
   BuildContext context, {
   required JellyfinApi api,
   required DownloadInfo info,
+  bool showDetails = true,
 }) {
   final textTheme = Theme.of(context).textTheme;
   return showModalBottomSheet<DownloadAction>(
@@ -477,11 +548,14 @@ Future<DownloadAction?> showDownloadActions(
               const Divider(),
               const SizedBox(height: 6),
               option(DownloadAction.play, Icons.play_arrow_rounded, 'Lire'),
-              option(
-                DownloadAction.details,
-                Icons.info_outline_rounded,
-                info.isEpisode ? 'Voir la fiche de la série' : 'Voir la fiche',
-              ),
+              if (showDetails)
+                option(
+                  DownloadAction.details,
+                  Icons.info_outline_rounded,
+                  info.isEpisode
+                      ? 'Voir la fiche de la série'
+                      : 'Voir la fiche',
+                ),
               option(
                 DownloadAction.delete,
                 Icons.delete_outline_rounded,
@@ -526,5 +600,111 @@ mixin UndoDelete<T extends StatefulWidget> on State<T> {
       }
       if (mounted) setState(() => hiddenDownloads.removeAll(itemIds));
     });
+  }
+}
+
+/// Bandeau de connexion en haut des téléchargements : « Hors ligne » (avec
+/// « Réessayer »), puis « Connexion retrouvée » si [onOpenLibrary] est
+/// donné (démarrage hors ligne). Rien quand tout va bien.
+class ConnectionBanner extends StatelessWidget {
+  const ConnectionBanner({super.key, this.onOpenLibrary});
+
+  final VoidCallback? onOpenLibrary;
+
+  @override
+  Widget build(BuildContext context) {
+    final connection = ConnectionMonitor.instance;
+    return ListenableBuilder(
+      listenable: connection,
+      builder: (context, _) {
+        final Widget banner;
+        if (!connection.online) {
+          banner = _banner(
+            context,
+            key: 'offline',
+            icon: Icons.cloud_off_rounded,
+            title: 'Hors ligne',
+            message: 'Tes téléchargements restent disponibles.',
+            action: connection.checking
+                ? const Padding(
+                    padding: EdgeInsets.all(12),
+                    child: SizedBox.square(
+                      dimension: 20,
+                      child: CircularProgressIndicator(strokeWidth: 2.5),
+                    ),
+                  )
+                : TextButton(
+                    onPressed: connection.check,
+                    child: const Text('Réessayer'),
+                  ),
+          );
+        } else if (connection.recovered && onOpenLibrary != null) {
+          banner = _banner(
+            context,
+            key: 'recovered',
+            icon: Icons.cloud_done_outlined,
+            title: 'Connexion retrouvée',
+            message: 'Le serveur répond de nouveau.',
+            action: TextButton(
+              onPressed: onOpenLibrary,
+              child: const Text('Ouvrir la bibliothèque'),
+            ),
+          );
+        } else {
+          banner = const SizedBox(
+            key: ValueKey('none'),
+            width: double.infinity,
+          );
+        }
+        return AnimatedSize(
+          duration: AppDurations.medium,
+          curve: Curves.easeInOutCubic,
+          alignment: Alignment.topCenter,
+          child: AnimatedSwitcher(duration: AppDurations.medium, child: banner),
+        );
+      },
+    );
+  }
+
+  Widget _banner(
+    BuildContext context, {
+    required String key,
+    required IconData icon,
+    required String title,
+    required String message,
+    required Widget action,
+  }) {
+    final textTheme = Theme.of(context).textTheme;
+    return Padding(
+      key: ValueKey(key),
+      padding: const EdgeInsets.only(top: 16),
+      child: GlassPanel(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(16, 10, 6, 10),
+          child: Row(
+            children: [
+              Icon(icon, size: 22),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(title, style: textTheme.titleSmall),
+                    const SizedBox(height: 2),
+                    Text(
+                      message,
+                      style: textTheme.bodySmall?.copyWith(
+                        color: AppColors.grey,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              action,
+            ],
+          ),
+        ),
+      ),
+    );
   }
 }

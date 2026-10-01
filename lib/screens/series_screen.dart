@@ -2,6 +2,7 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 
 import '../api/jellyfin_api.dart';
+import '../models/download_info.dart';
 import '../models/episode.dart';
 import '../models/item_details.dart';
 import '../models/languages.dart';
@@ -10,7 +11,10 @@ import '../models/media_track.dart';
 import '../models/season.dart';
 import '../models/session.dart';
 import '../models/track_choice.dart';
+import '../services/connection_monitor.dart';
+import '../services/download_groups.dart';
 import '../services/download_manager.dart';
+import '../services/offline_progress.dart';
 import '../services/playback_launcher.dart';
 import '../services/track_preferences.dart';
 import '../theme/app_theme.dart';
@@ -20,6 +24,8 @@ import '../widgets/track_picker.dart';
 import '../widgets/ui.dart';
 
 /// Fiche d'une série : infos, résumé, choix de la saison, liste des épisodes.
+/// Sans serveur, si des épisodes sont téléchargés : la même fiche, avec
+/// seulement ces épisodes (et leurs saisons).
 class SeriesScreen extends StatefulWidget {
   const SeriesScreen({
     super.key,
@@ -73,14 +79,84 @@ class _SeriesScreenState extends State<SeriesScreen> {
   final _trackPreferences = TrackPreferences();
   LanguagePreference _languages = const LanguagePreference();
 
+  /// Vrai quand la fiche vient des épisodes téléchargés (pas de serveur).
+  bool _offline = false;
+
   String get _userId => widget.session.userId;
 
   @override
   void initState() {
     super.initState();
-    _loadDetails();
-    _loadSeasons();
     _loadLanguages();
+    // Déjà hors ligne : directement les épisodes téléchargés
+    if (!ConnectionMonitor.instance.online && _downloaded().isNotEmpty) {
+      _showOffline();
+    } else {
+      _loadDetails();
+      _loadSeasons();
+    }
+    DownloadManager.instance.addListener(_onDownloadsChanged);
+  }
+
+  @override
+  void dispose() {
+    DownloadManager.instance.removeListener(_onDownloadsChanged);
+    super.dispose();
+  }
+
+  /// Épisodes de la série entièrement téléchargés.
+  List<DownloadInfo> _downloaded() => [
+    for (final state in DownloadManager.instance.states.values)
+      if (state.phase == DownloadPhase.complete &&
+          state.info?.seriesId == widget.series.id)
+        state.info!,
+  ];
+
+  /// Attente courte du serveur quand on peut se passer de lui.
+  Future<T> _request<T>(Future<T> request) => _downloaded().isEmpty
+      ? request
+      : request.timeout(const Duration(seconds: 5));
+
+  /// Remplit la fiche avec les épisodes téléchargés (serveur injoignable).
+  /// Faux s'il n'y en a pas.
+  bool _showOffline() {
+    final downloaded = _downloaded();
+    if (downloaded.isEmpty || !mounted) return false;
+    final offline = OfflineSeries.of(
+      downloaded,
+      progressOf: (id) => OfflineProgress.instance.of(id)?.toWatchProgress(),
+    );
+    setState(() {
+      _offline = true;
+      _details = offline.details;
+      _detailsError = null;
+      _seasons = offline.seasons;
+      _seasonsError = null;
+      _episodesError = null;
+      _loadingSeasons.clear();
+      _episodes
+        ..clear()
+        ..addAll(offline.episodes);
+      final wanted = _selectedSeason?.id ?? widget.initialSeasonId;
+      final season =
+          offline.seasons.where((s) => s.id == wanted).firstOrNull ??
+          offline.seasons.first;
+      _selectedSeason = season;
+      _shownSeasonId = season.id;
+    });
+    return true;
+  }
+
+  /// Hors ligne, un épisode supprimé disparaît de la fiche (et la fiche se
+  /// ferme s'il n'en reste plus).
+  void _onDownloadsChanged() {
+    if (!_offline || !mounted) return;
+    if (_downloaded().isEmpty) {
+      Navigator.of(context).maybePop();
+      return;
+    }
+    final shown = _episodes.values.fold(0, (sum, list) => sum + list.length);
+    if (shown != _downloaded().length) _showOffline();
   }
 
   Future<void> _loadLanguages() async {
@@ -152,13 +228,19 @@ class _SeriesScreenState extends State<SeriesScreen> {
       _detailsError = null;
     });
     try {
-      final details = await widget.api.getItemDetails(
-        userId: _userId,
-        itemId: widget.series.id,
+      final details = await _request(
+        widget.api.getItemDetails(userId: _userId, itemId: widget.series.id),
       );
-      if (mounted) setState(() => _details = details);
-    } on JellyfinException catch (e) {
-      if (mounted) setState(() => _detailsError = e.message);
+      if (mounted && !_offline) setState(() => _details = details);
+    } on Exception catch (e) {
+      if (_showOffline()) return;
+      if (mounted) {
+        setState(
+          () => _detailsError = e is JellyfinException
+              ? e.message
+              : 'Le serveur ne répond pas.',
+        );
+      }
     } finally {
       if (mounted) setState(() => _detailsLoading = false);
     }
@@ -167,11 +249,10 @@ class _SeriesScreenState extends State<SeriesScreen> {
   Future<void> _loadSeasons() async {
     setState(() => _seasonsError = null);
     try {
-      final seasons = await widget.api.getSeasons(
-        userId: _userId,
-        seriesId: widget.series.id,
+      final seasons = await _request(
+        widget.api.getSeasons(userId: _userId, seriesId: widget.series.id),
       );
-      if (!mounted) return;
+      if (!mounted || _offline) return;
       setState(() => _seasons = seasons);
       if (seasons.isNotEmpty) {
         // La saison demandée, sinon la saison 1 plutôt que les « Spéciaux »
@@ -198,8 +279,15 @@ class _SeriesScreenState extends State<SeriesScreen> {
         // Puis on prépare les autres saisons, pour qu'elles s'ouvrent aussitôt
         _prefetchSeasons(seasons);
       }
-    } on JellyfinException catch (e) {
-      if (mounted) setState(() => _seasonsError = e.message);
+    } on Exception catch (e) {
+      if (_showOffline()) return;
+      if (mounted) {
+        setState(
+          () => _seasonsError = e is JellyfinException
+              ? e.message
+              : 'Le serveur ne répond pas.',
+        );
+      }
     }
   }
 
@@ -269,6 +357,10 @@ class _SeriesScreenState extends State<SeriesScreen> {
       start: start ?? (progress.canResume ? progress.position : Duration.zero),
     );
     // Au retour : met à jour les coches « déjà vu » et les progressions
+    if (_offline) {
+      _showOffline();
+      return;
+    }
     final season = _selectedSeason;
     if (season != null && mounted) _loadEpisodes(season);
   }
@@ -386,8 +478,33 @@ class _SeriesScreenState extends State<SeriesScreen> {
           ],
         ),
       ),
+      // Hors ligne : on précise ce qui est affiché
+      if (_offline) ...[
+        const SizedBox(height: 12),
+        Row(
+          children: [
+            const Icon(
+              Icons.cloud_off_rounded,
+              size: 16,
+              color: AppColors.grey,
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                'Hors ligne : seuls les épisodes téléchargés sont affichés.',
+                style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                  color: AppColors.grey,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ]
       // Télécharger toute la saison affichée
-      if (episodes != null && episodes.isNotEmpty && shownSeason != null) ...[
+      else if (episodes != null &&
+          episodes.isNotEmpty &&
+          shownSeason != null) ...[
         const SizedBox(height: 12),
         SeasonDownloadButton(
           key: ValueKey(shownSeason.id),
@@ -454,9 +571,21 @@ class _EpisodeThumbnail extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final url = api.episodeImageUrl(episode, width: _episodeImageWidth);
-    const placeholder = Center(
+    const icon = Center(
       child: Icon(Icons.tv_rounded, color: AppColors.greyDark),
     );
+    // Hors ligne : la vignette téléchargée avec l'épisode, s'il y en a une
+    final file = DownloadManager.instance.thumbFile(episode.id);
+    final placeholder = file == null
+        ? icon
+        : Image.file(
+            file,
+            fit: BoxFit.cover,
+            width: double.infinity,
+            height: double.infinity,
+            cacheWidth: _episodeImageWidth,
+            errorBuilder: (_, _, _) => icon,
+          );
     return Card(
       child: url == null
           ? placeholder

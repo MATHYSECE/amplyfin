@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../api/jellyfin_api.dart';
+import '../services/connection_monitor.dart';
 import '../services/session_store.dart';
 import '../theme/app_theme.dart';
 import '../widgets/ui.dart';
@@ -74,6 +75,8 @@ class _LoginScreenState extends State<LoginScreen> {
       await _store.save(session);
       _passwordController.clear();
 
+      // Suivi de la connexion pour cette nouvelle session
+      ConnectionMonitor.instance.start(api, session.userId, online: true);
       if (!mounted) return;
       Navigator.of(context).pushReplacement(
         MaterialPageRoute(

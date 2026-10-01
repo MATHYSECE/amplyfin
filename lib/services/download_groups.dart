@@ -1,5 +1,8 @@
 import '../models/download_info.dart';
 import '../models/episode.dart';
+import '../models/item_details.dart';
+import '../models/season.dart';
+import '../models/watch_progress.dart';
 import 'download_manager.dart';
 
 /// Un téléchargement : identifiant de l'élément, son état et ses infos.
@@ -51,6 +54,21 @@ class SeriesDownloads {
       (seasons[e.info.seasonNumber] ??= []).add(e);
     }
     return seasons;
+  }
+
+  /// Épisode dont la saison s'ouvre sur la fiche de la série : le premier
+  /// épisode téléchargé pas encore vu (là où on en est) ; si tout est vu,
+  /// le dernier téléchargé. [isWatched] : vrai si l'épisode a été vu.
+  DownloadInfo episodeToOpen({
+    required bool Function(String itemId) isWatched,
+  }) {
+    final done = complete;
+    if (done.isEmpty) return sample;
+    for (final e in done) {
+      if (!isWatched(e.id)) return e.info;
+    }
+    DateTime created(DownloadEntry e) => e.state.createdAt ?? DateTime(2000);
+    return done.reduce((a, b) => created(b).isAfter(created(a)) ? b : a).info;
   }
 
   /// Dernier épisode demandé (pour ranger les séries).
@@ -209,4 +227,69 @@ class SeasonDownloadSummary {
 
   /// Épisodes demandés : terminés et en cours.
   int get tracked => completeIds.length + pendingIds.length;
+}
+
+/// Fiche d'une série sans le serveur, faite de ses épisodes téléchargés :
+/// infos de la série, saisons (seulement celles qui ont des épisodes
+/// téléchargés) et épisodes par saison.
+class OfflineSeries {
+  const OfflineSeries._({
+    required this.details,
+    required this.seasons,
+    required this.episodes,
+  });
+
+  /// [downloaded] : les épisodes téléchargés de la série (au moins un).
+  /// [progressOf] : où en est la lecture d'un épisode (null : pas commencé).
+  factory OfflineSeries.of(
+    List<DownloadInfo> downloaded, {
+    WatchProgress? Function(String itemId)? progressOf,
+  }) {
+    final sorted = [...downloaded]
+      ..sort((a, b) {
+        final season = (a.seasonNumber ?? 0).compareTo(b.seasonNumber ?? 0);
+        if (season != 0) return season;
+        return (a.episodeNumber ?? 0).compareTo(b.episodeNumber ?? 0);
+      });
+    // Infos de la série : celles d'un épisode qui les a (téléchargement
+    // récent)
+    final withSeries =
+        sorted.where((e) => e.seriesOverview != null).firstOrNull ??
+        sorted.first;
+    final seasons = <Season>[];
+    final episodes = <String, List<Episode>>{};
+    for (final info in sorted) {
+      final number = info.seasonNumber;
+      final id = info.seasonId ?? 'saison-${number ?? '?'}';
+      if (!episodes.containsKey(id)) {
+        seasons.add(
+          Season(
+            id: id,
+            name: switch (number) {
+              null => 'Épisodes',
+              0 => 'Spéciaux',
+              _ => 'Saison $number',
+            },
+            number: number,
+          ),
+        );
+      }
+      (episodes[id] ??= []).add(
+        info.toEpisode(
+          progress: progressOf?.call(info.itemId) ?? const WatchProgress(),
+        ),
+      );
+    }
+    return OfflineSeries._(
+      details: withSeries.toSeriesDetails(),
+      seasons: seasons,
+      episodes: episodes,
+    );
+  }
+
+  final ItemDetails details;
+  final List<Season> seasons;
+
+  /// Épisodes par identifiant de saison.
+  final Map<String, List<Episode>> episodes;
 }

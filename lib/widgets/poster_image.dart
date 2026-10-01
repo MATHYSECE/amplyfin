@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 
 import '../api/jellyfin_api.dart';
 import '../models/media_item.dart';
+import '../services/download_manager.dart';
 
 /// Affiche d'un film ou d'une série aux coins arrondis (via le thème, Card).
 /// Utilisée dans la grille et sur la fiche : même adresse partout, donc
@@ -29,7 +30,7 @@ class PosterImage extends StatelessWidget {
     final url = api.posterUrl(item, width: pixelWidth);
     return Card(
       child: url == null
-          ? const PosterPlaceholder()
+          ? _fallback()
           : CachedNetworkImage(
               imageUrl: url,
               fit: BoxFit.cover,
@@ -39,8 +40,22 @@ class PosterImage extends StatelessWidget {
               memCacheWidth: pixelWidth,
               fadeInDuration: const Duration(milliseconds: 200),
               placeholder: (_, _) => const SizedBox.shrink(),
-              errorWidget: (_, _, _) => const PosterPlaceholder(),
+              // Hors ligne : l'affiche téléchargée avec le film, s'il y en a une
+              errorWidget: (_, _, _) => _fallback(),
             ),
+    );
+  }
+
+  Widget _fallback() {
+    final file = DownloadManager.instance.localPoster(item.id);
+    if (file == null) return const PosterPlaceholder();
+    return Image.file(
+      file,
+      fit: BoxFit.cover,
+      width: double.infinity,
+      height: double.infinity,
+      cacheWidth: pixelWidth,
+      errorBuilder: (_, _, _) => const PosterPlaceholder(),
     );
   }
 }

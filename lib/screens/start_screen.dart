@@ -3,9 +3,12 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 
 import '../api/jellyfin_api.dart';
+import '../services/connection_monitor.dart';
+import '../services/download_manager.dart';
 import '../services/session_store.dart';
 import '../theme/app_theme.dart';
 import '../widgets/splash_view.dart';
+import 'downloads_screen.dart';
 import 'library_screen.dart';
 import 'login_screen.dart';
 
@@ -49,19 +52,28 @@ class _StartScreenState extends State<StartScreen> {
       token: session.accessToken,
     );
 
-    // Le jeton est-il toujours accepté par le serveur ?
-    try {
-      await api.checkToken();
-    } on JellyfinException catch (e) {
-      if (e.isUnauthorized) {
+    // Le jeton est-il toujours accepté par le serveur ? (4 s au plus)
+    switch (await checkServer(api)) {
+      case ServerStatus.unauthorized:
         // Jeton révoqué (ex. déconnecté depuis le tableau de bord Jellyfin)
         await store.clear();
         return const LoginScreen();
-      }
-      // Serveur injoignable pour l'instant : on garde la session quand même
+      case ServerStatus.reachable:
+        ConnectionMonitor.instance.start(api, session.userId, online: true);
+        return LibraryScreen(api: api, session: session);
+      case ServerStatus.unreachable:
+        // Hors ligne : on garde la session, et on ouvre les téléchargements
+        // s'il y en a
+        ConnectionMonitor.instance.start(api, session.userId, online: false);
+        final downloads = DownloadManager.instance;
+        await downloads.init();
+        final hasDownloads = downloads.states.values.any(
+          (s) => s.phase == DownloadPhase.complete,
+        );
+        return hasDownloads
+            ? DownloadsScreen(api: api, session: session, isRoot: true)
+            : LibraryScreen(api: api, session: session);
     }
-
-    return LibraryScreen(api: api, session: session);
   }
 
   /// Passe à l'écran suivant en fondu.

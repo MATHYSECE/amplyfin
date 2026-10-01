@@ -14,6 +14,7 @@ import '../models/session.dart';
 import '../models/subtitle_size.dart';
 import '../models/track_choice.dart';
 import '../services/device_capabilities.dart';
+import '../services/offline_progress.dart';
 import '../services/player_preferences.dart';
 import '../theme/app_theme.dart';
 import '../widgets/player_controls.dart';
@@ -210,6 +211,23 @@ class _PlayerScreenState extends State<PlayerScreen> {
     if (info != null) {
       final position = _player.state.position;
       _report(() => widget.api.reportPlaybackStopped(info, position));
+      if (info.isLocal) {
+        // Fichier téléchargé : position gardée sur le téléphone, puis
+        // envoyée au serveur s'il répond (après la fermeture de l'écran)
+        final runtime = _player.state.duration;
+        final api = widget.api;
+        final userId = widget.session.userId;
+        unawaited(
+          Future(() async {
+            await OfflineProgress.instance.record(
+              widget.itemId,
+              position: position,
+              runtime: runtime > Duration.zero ? runtime : null,
+            );
+            await OfflineProgress.instance.sync(api, userId);
+          }),
+        );
+      }
     }
     _disposePlayer();
     _info.dispose();
@@ -396,6 +414,15 @@ class _PlayerScreenState extends State<PlayerScreen> {
     final info = _info.value;
     if (info == null) return;
     final state = _player.state;
+    // Fichier téléchargé : position aussi gardée sur le téléphone (si
+    // l'appli est fermée en pleine lecture, on reprend quand même)
+    if (info.isLocal) {
+      OfflineProgress.instance.record(
+        widget.itemId,
+        position: state.position,
+        runtime: state.duration > Duration.zero ? state.duration : null,
+      );
+    }
     _report(
       () => widget.api.reportPlaybackProgress(
         info,

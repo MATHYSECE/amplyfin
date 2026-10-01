@@ -257,6 +257,19 @@ void main() {
       );
     });
 
+    test('saison ouverte sur la fiche : là où on en est', () {
+      final series = DownloadGroups.of(states).series.single;
+      // Rien de vu : le premier épisode téléchargé (saison 4)
+      expect(series.episodeToOpen(isWatched: (_) => false).itemId, 'e41');
+      // Saison 4 vue : la saison 5
+      expect(
+        series.episodeToOpen(isWatched: (id) => id == 'e41').itemId,
+        'e51',
+      );
+      // Tout vu : le dernier téléchargé
+      expect(series.episodeToOpen(isWatched: (_) => true).itemId, 'e41');
+    });
+
     test('suppression en attente : cachée', () {
       final groups = DownloadGroups.of(
         states,

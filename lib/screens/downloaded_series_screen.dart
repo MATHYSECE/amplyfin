@@ -4,8 +4,10 @@ import '../api/jellyfin_api.dart';
 import '../models/download_info.dart';
 import '../models/file_size.dart';
 import '../models/session.dart';
+import '../services/connection_monitor.dart';
 import '../services/download_groups.dart';
 import '../services/download_manager.dart';
+import '../services/offline_progress.dart';
 import '../services/playback_launcher.dart';
 import '../theme/app_theme.dart';
 import '../widgets/download_rows.dart';
@@ -36,6 +38,7 @@ class DownloadedSeriesScreen extends StatefulWidget {
 class _DownloadedSeriesScreenState extends State<DownloadedSeriesScreen>
     with UndoDelete {
   final _manager = DownloadManager.instance;
+  final _connection = ConnectionMonitor.instance;
 
   /// Dernière version connue de la série (gardée pour le titre pendant
   /// qu'on revient en arrière, une fois tout supprimé).
@@ -128,7 +131,11 @@ class _DownloadedSeriesScreenState extends State<DownloadedSeriesScreen>
         // Tout l'écran, même si la liste est courte
         child: SizedBox.expand(
           child: ListenableBuilder(
-            listenable: _manager,
+            listenable: Listenable.merge([
+              _manager,
+              _connection,
+              OfflineProgress.instance,
+            ]),
             builder: (context, _) {
               final series = DownloadGroups.of(
                 _manager.states,
@@ -259,11 +266,14 @@ class _DownloadedSeriesScreenState extends State<DownloadedSeriesScreen>
                     api: widget.api,
                     entry: entry,
                     episodeStyle: true,
-                    onRetry: () => _manager.start(
-                      api: widget.api,
-                      userId: widget.session.userId,
-                      itemId: entry.id,
-                    ),
+                    // Hors ligne : rien à réessayer pour l'instant
+                    onRetry: _connection.online
+                        ? () => _manager.start(
+                            api: widget.api,
+                            userId: widget.session.userId,
+                            itemId: entry.id,
+                          )
+                        : null,
                   ),
           ),
       ],
@@ -323,7 +333,7 @@ class _EpisodeRow extends StatelessWidget {
         padding: const EdgeInsets.symmetric(vertical: 8),
         child: Row(
           children: [
-            DownloadThumbnail(api: api, info: info),
+            DownloadThumbnail(api: api, info: info, showProgress: true),
             const SizedBox(width: 12),
             Expanded(
               child: Column(

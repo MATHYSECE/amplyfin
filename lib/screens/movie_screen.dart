@@ -7,6 +7,7 @@ import '../models/session.dart';
 import '../models/track_choice.dart';
 import '../models/watch_progress.dart';
 import '../services/download_manager.dart';
+import '../services/offline_progress.dart';
 import '../services/playback_launcher.dart';
 import '../theme/app_theme.dart';
 import '../widgets/details_page.dart';
@@ -57,26 +58,54 @@ class _MovieScreenState extends State<MovieScreen> {
 
   /// Demande la fiche complète au serveur. [keepTracks] : garde les pistes
   /// déjà choisies (mise à jour au retour du lecteur).
+  /// Film téléchargé et serveur injoignable : la fiche gardée sur le
+  /// téléphone (attente courte, pour ne pas rester bloqué hors ligne).
   Future<void> _load({bool keepTracks = false}) async {
     setState(() {
       _loading = true;
       _error = null;
     });
+    final local = _localDetails();
     try {
-      final details = await widget.api.getItemDetails(
+      final request = widget.api.getItemDetails(
         userId: widget.session.userId,
         itemId: widget.movie.id,
       );
+      final details = local == null
+          ? await request
+          : await request.timeout(const Duration(seconds: 5));
       if (!mounted) return;
       setState(() {
         _details = details;
         if (!keepTracks) _presetTracks(details);
       });
-    } on JellyfinException catch (e) {
-      if (mounted) setState(() => _error = e.message);
+    } on Exception catch (e) {
+      if (!mounted) return;
+      setState(() {
+        if (local != null) {
+          _details = local;
+          if (!keepTracks) _presetTracks(local);
+        } else {
+          _error = e is JellyfinException
+              ? e.message
+              : 'Le serveur ne répond pas.';
+        }
+      });
     } finally {
       if (mounted) setState(() => _loading = false);
     }
+  }
+
+  /// Fiche gardée avec le téléchargement (null si le film n'est pas
+  /// téléchargé), avec la position de lecture du téléphone.
+  ItemDetails? _localDetails() {
+    final state = DownloadManager.instance.stateOf(widget.movie.id);
+    final info = state.info;
+    if (state.phase != DownloadPhase.complete || info == null) return null;
+    final saved = OfflineProgress.instance.of(widget.movie.id);
+    return info.toItemDetails(
+      progress: saved?.toWatchProgress() ?? const WatchProgress(),
+    );
   }
 
   /// Présélection : le choix proposé par le serveur (préférences Jellyfin

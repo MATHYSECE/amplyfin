@@ -10,6 +10,7 @@ import '../screens/player_screen.dart';
 import '../widgets/transcode_dialog.dart';
 import 'device_capabilities.dart';
 import 'download_manager.dart';
+import 'offline_progress.dart';
 import 'track_preferences.dart';
 
 /// Lance la lecture d'un film ou d'un épisode.
@@ -79,9 +80,9 @@ Future<void> launchPlayback(
   );
 }
 
-/// Lit un film ou un épisode depuis l'écran des téléchargements :
-/// épisode avec les langues choisies pour sa série, et reprise là où on
-/// s'était arrêté si le serveur répond vite (sinon depuis le début).
+/// Lit un film ou un épisode téléchargé : épisode avec les langues
+/// choisies pour sa série, et reprise à la position la plus récente,
+/// celle du téléphone ou celle du serveur (s'il répond vite).
 Future<void> launchDownloadPlayback(
   BuildContext context, {
   required JellyfinApi api,
@@ -94,14 +95,25 @@ Future<void> launchDownloadPlayback(
     final languages = await TrackPreferences().load(seriesId);
     tracks = languages.resolve(info.tracks);
   }
-  var start = Duration.zero;
+  final saved = OfflineProgress.instance.of(info.itemId);
+  var start = saved?.resumePosition ?? Duration.zero;
   try {
-    final details = await api
-        .getItemDetails(userId: session.userId, itemId: info.itemId)
-        .timeout(const Duration(seconds: 3));
-    if (details.progress.canResume) start = details.progress.position;
+    final server =
+        (await api
+                .getItemDetails(userId: session.userId, itemId: info.itemId)
+                .timeout(const Duration(seconds: 3)))
+            .progress;
+    if (saved == null || !phoneIsNewer(saved, server.lastPlayed)) {
+      start = server.canResume ? server.position : Duration.zero;
+      // Gardée aussi sur le téléphone, pour reprendre hors ligne
+      await OfflineProgress.instance.remember(
+        info.itemId,
+        server,
+        runtime: info.runtime,
+      );
+    }
   } on Exception {
-    // Pas de réseau (ou trop lent) : lecture depuis le début
+    // Pas de réseau (ou trop lent) : la position du téléphone
   }
   if (!context.mounted) return;
   await launchPlayback(

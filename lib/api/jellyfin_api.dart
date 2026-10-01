@@ -253,11 +253,13 @@ class JellyfinApi {
   /// POST /UserItems/{id}/UserData : change où en est la lecture d'un film
   /// ou d'un épisode. Position 0 et [played] faux : comme jamais regardé
   /// (il sort aussi de « Continuer à regarder »).
+  /// [lastPlayed] : quand la lecture a eu lieu (ex. hors ligne, plus tôt).
   Future<void> updateWatchProgress({
     required String userId,
     required String itemId,
     required Duration position,
     required bool played,
+    DateTime? lastPlayed,
   }) => _send(
     'POST',
     '/UserItems/$itemId/UserData',
@@ -265,6 +267,8 @@ class JellyfinApi {
     body: {
       'PlaybackPositionTicks': durationToTicks(position),
       'Played': played,
+      if (lastPlayed != null)
+        'LastPlayedDate': lastPlayed.toUtc().toIso8601String(),
     },
   );
 

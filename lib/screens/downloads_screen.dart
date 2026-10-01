@@ -7,9 +7,11 @@ import '../api/jellyfin_api.dart';
 import '../models/download_info.dart';
 import '../models/file_size.dart';
 import '../models/session.dart';
+import '../services/connection_monitor.dart';
 import '../services/device_storage.dart';
 import '../services/download_groups.dart';
 import '../services/download_manager.dart';
+import '../services/offline_progress.dart';
 import '../services/playback_launcher.dart';
 import '../theme/app_theme.dart';
 import '../widgets/download_rows.dart';
@@ -17,18 +19,30 @@ import '../widgets/poster_image.dart';
 import '../widgets/transitions.dart';
 import '../widgets/ui.dart';
 import 'downloaded_series_screen.dart';
+import 'library_screen.dart';
 import 'movie_screen.dart';
 import 'series_screen.dart';
 
 /// Écran « Téléchargements » : place sur le téléphone, téléchargements en
-/// cours (pause, reprise, annulation), films, et séries (un appui ouvre
-/// leurs épisodes). Un film téléchargé se lit d'un appui ; ⋯ ou un appui
-/// long ouvre le menu ; glisser vers la gauche supprime (avec « Annuler »).
+/// cours (pause, reprise, annulation), films et séries. Un appui ouvre la
+/// fiche (une série : sur la saison où on en est) ; ⋯ ou un appui long
+/// ouvre le menu (une série : ses épisodes téléchargés) ; glisser vers la
+/// gauche supprime un film (avec « Annuler »).
+/// Hors ligne, un bandeau le signale (avec « Réessayer »).
 class DownloadsScreen extends StatefulWidget {
-  const DownloadsScreen({super.key, required this.api, required this.session});
+  const DownloadsScreen({
+    super.key,
+    required this.api,
+    required this.session,
+    this.isRoot = false,
+  });
 
   final JellyfinApi api;
   final Session session;
+
+  /// Premier écran de l'appli (démarrage sans serveur) : pas de retour,
+  /// mais « Ouvrir la bibliothèque » quand la connexion revient.
+  final bool isRoot;
 
   @override
   State<DownloadsScreen> createState() => _DownloadsScreenState();
@@ -36,6 +50,7 @@ class DownloadsScreen extends StatefulWidget {
 
 class _DownloadsScreenState extends State<DownloadsScreen> with UndoDelete {
   final _manager = DownloadManager.instance;
+  final _connection = ConnectionMonitor.instance;
 
   /// Place libre et totale du téléphone (null tant qu'inconnue).
   DeviceSpace? _space;
@@ -118,10 +133,33 @@ class _DownloadsScreenState extends State<DownloadsScreen> with UndoDelete {
     }
   }
 
+  /// Démarrage hors ligne, connexion revenue : la bibliothèque remplace
+  /// cet écran.
+  void _openLibrary() {
+    Navigator.of(context).pushReplacement(
+      PageRouteBuilder<void>(
+        transitionDuration: AppDurations.medium,
+        pageBuilder: (_, _, _) =>
+            LibraryScreen(api: widget.api, session: widget.session),
+        transitionsBuilder: (_, animation, _, child) =>
+            FadeTransition(opacity: animation, child: child),
+      ),
+    );
+  }
+
   void _delete(DownloadEntry entry) =>
       deleteWithUndo([entry.id], '« ${entry.info.name} » supprimé');
 
-  void _openSeries(SeriesDownloads series) {
+  /// Appui sur une série : sa fiche, ouverte sur la saison où on en est
+  /// (hors ligne : avec seulement les épisodes téléchargés).
+  void _openSeries(SeriesDownloads series) => _openDetails(
+    series.episodeToOpen(
+      isWatched: (id) => OfflineProgress.instance.of(id)?.played ?? false,
+    ),
+  );
+
+  /// Les épisodes téléchargés d'une série (pour les lire ou les gérer).
+  void _openDownloadedEpisodes(SeriesDownloads series) {
     Navigator.of(context).push(
       MaterialPageRoute<void>(
         builder: (_) => DownloadedSeriesScreen(
@@ -140,7 +178,11 @@ class _DownloadsScreenState extends State<DownloadsScreen> with UndoDelete {
       body: GlowBackground(
         child: EdgeSwipeBack(
           child: ListenableBuilder(
-            listenable: _manager,
+            listenable: Listenable.merge([
+              _manager,
+              _connection,
+              OfflineProgress.instance,
+            ]),
             builder: (context, _) {
               final groups = DownloadGroups.of(
                 _manager.states,
@@ -158,12 +200,14 @@ class _DownloadsScreenState extends State<DownloadsScreen> with UndoDelete {
                   children: [
                     Row(
                       children: [
-                        GlassCircleButton(
-                          icon: Icons.chevron_left_rounded,
-                          tooltip: 'Retour',
-                          onPressed: () => Navigator.of(context).maybePop(),
-                        ),
-                        const SizedBox(width: 14),
+                        if (!widget.isRoot) ...[
+                          GlassCircleButton(
+                            icon: Icons.chevron_left_rounded,
+                            tooltip: 'Retour',
+                            onPressed: () => Navigator.of(context).maybePop(),
+                          ),
+                          const SizedBox(width: 14),
+                        ],
                         Expanded(
                           child: Text(
                             'Téléchargements',
@@ -173,6 +217,10 @@ class _DownloadsScreenState extends State<DownloadsScreen> with UndoDelete {
                           ),
                         ),
                       ],
+                    ),
+                    // Hors ligne, ou connexion revenue (démarrage hors ligne)
+                    ConnectionBanner(
+                      onOpenLibrary: widget.isRoot ? _openLibrary : null,
                     ),
                     const SizedBox(height: 18),
                     // Les blocs arrivent l'un après l'autre à l'ouverture
@@ -188,7 +236,11 @@ class _DownloadsScreenState extends State<DownloadsScreen> with UndoDelete {
                       child: AnimatedSwitcher(
                         duration: AppDurations.medium,
                         child: groups.isEmpty
-                            ? const _EmptyDownloads()
+                            ? _EmptyDownloads(
+                                onBrowse: widget.isRoot
+                                    ? _openLibrary
+                                    : () => Navigator.of(context).maybePop(),
+                              )
                             : MoveScope(
                                 child: Column(
                                   crossAxisAlignment:
@@ -227,7 +279,8 @@ class _DownloadsScreenState extends State<DownloadsScreen> with UndoDelete {
             PendingDownloadRow(
               api: widget.api,
               entry: entry,
-              onRetry: () => _retry(entry),
+              // Hors ligne : rien à réessayer pour l'instant
+              onRetry: _connection.online ? () => _retry(entry) : null,
             ),
           ),
       ],
@@ -248,7 +301,7 @@ class _DownloadsScreenState extends State<DownloadsScreen> with UndoDelete {
               child: _MovieRow(
                 api: widget.api,
                 entry: entry,
-                onPlay: () => _play(entry.info),
+                onTap: () => _openDetails(entry.info),
                 onActions: () => _showActions(entry),
               ),
             ),
@@ -269,6 +322,7 @@ class _DownloadsScreenState extends State<DownloadsScreen> with UndoDelete {
               api: widget.api,
               series: series,
               onTap: () => _openSeries(series),
+              onEpisodes: () => _openDownloadedEpisodes(series),
             ),
           ),
       ],
@@ -342,6 +396,8 @@ class _StorageCard extends StatelessWidget {
                           builder: (context, app, _) {
                             final width = constraints.maxWidth;
                             return Row(
+                              // Chaque morceau prend toute la hauteur
+                              crossAxisAlignment: CrossAxisAlignment.stretch,
                               children: [
                                 _BarPart(
                                   width: width * app.clamp(0.0, 1.0),
@@ -407,13 +463,15 @@ class _MovieRow extends StatelessWidget {
   const _MovieRow({
     required this.api,
     required this.entry,
-    required this.onPlay,
+    required this.onTap,
     required this.onActions,
   });
 
   final JellyfinApi api;
   final DownloadEntry entry;
-  final VoidCallback onPlay;
+
+  /// Appui sur la ligne : la fiche du film.
+  final VoidCallback onTap;
   final VoidCallback onActions;
 
   @override
@@ -421,14 +479,19 @@ class _MovieRow extends StatelessWidget {
     final textTheme = Theme.of(context).textTheme;
     final info = entry.info;
     return InkWell(
-      onTap: onPlay,
+      onTap: onTap,
       onLongPress: onActions,
       borderRadius: BorderRadius.circular(14),
       child: Padding(
         padding: const EdgeInsets.symmetric(vertical: 8),
         child: Row(
           children: [
-            DownloadPoster(api: api, info: info, hero: true),
+            DownloadPoster(
+              api: api,
+              info: info,
+              hero: true,
+              showProgress: true,
+            ),
             const SizedBox(width: 12),
             Expanded(
               child: Column(
@@ -469,17 +532,23 @@ class _MovieRow extends StatelessWidget {
   }
 }
 
-/// Ligne d'une série : affiche, nom, nombre d'épisodes et place prise.
+/// Ligne d'une série : affiche, nom, nombre d'épisodes et place prise, ⋯.
 class _SeriesRow extends StatelessWidget {
   const _SeriesRow({
     required this.api,
     required this.series,
     required this.onTap,
+    required this.onEpisodes,
   });
 
   final JellyfinApi api;
   final SeriesDownloads series;
+
+  /// Appui sur la ligne : la fiche de la série.
   final VoidCallback onTap;
+
+  /// Bouton ⋯ : les épisodes téléchargés.
+  final VoidCallback onEpisodes;
 
   @override
   Widget build(BuildContext context) {
@@ -514,7 +583,13 @@ class _SeriesRow extends StatelessWidget {
                 ],
               ),
             ),
-            const Icon(Icons.chevron_right_rounded, color: AppColors.greyDark),
+            const SizedBox(width: 10),
+            GlassCircleButton(
+              icon: Icons.more_horiz_rounded,
+              tooltip: 'Épisodes téléchargés',
+              size: 40,
+              onPressed: onEpisodes,
+            ),
           ],
         ),
       ),
@@ -524,7 +599,9 @@ class _SeriesRow extends StatelessWidget {
 
 /// Rien de téléchargé : où trouver le bouton.
 class _EmptyDownloads extends StatelessWidget {
-  const _EmptyDownloads();
+  const _EmptyDownloads({required this.onBrowse});
+
+  final VoidCallback onBrowse;
 
   @override
   Widget build(BuildContext context) {
@@ -554,7 +631,7 @@ class _EmptyDownloads extends StatelessWidget {
           ),
           const SizedBox(height: 18),
           OutlinedButton(
-            onPressed: () => Navigator.of(context).maybePop(),
+            onPressed: onBrowse,
             child: const Text('Parcourir la bibliothèque'),
           ),
         ],

@@ -7,6 +7,7 @@ import 'package:flutter/material.dart';
 import '../api/jellyfin_api.dart';
 import '../models/item_details.dart';
 import '../models/media_item.dart';
+import '../services/download_manager.dart';
 import '../theme/app_theme.dart';
 import 'poster_image.dart';
 import 'ui.dart';
@@ -207,8 +208,14 @@ class _Backdrop extends StatelessWidget {
         ? null
         : api.backdropUrl(details!, width: width);
 
+    // Image de fond téléchargée (film, ou épisode de la série) : sans
+    // attendre le serveur
+    final localBackdrop = DownloadManager.instance.localBackdrop(item.id);
+
     final Widget image;
-    if (backdropUrl != null) {
+    if (localBackdrop != null) {
+      image = Image.file(localBackdrop, fit: BoxFit.cover);
+    } else if (backdropUrl != null) {
       image = CachedNetworkImage(
         imageUrl: backdropUrl,
         fit: BoxFit.cover,

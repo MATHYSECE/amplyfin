@@ -1,7 +1,11 @@
 import 'durations.dart';
+import 'episode.dart';
+import 'item_details.dart';
 import 'media_item.dart';
+import 'media_quality.dart';
 import 'media_track.dart';
 import 'playback_info.dart';
+import 'watch_progress.dart';
 
 /// Ce qu'on garde d'un film ou d'un épisode téléchargé, pour l'afficher et
 /// le lire sans le serveur. Enregistré avec le téléchargement lui-même.
@@ -28,6 +32,10 @@ class DownloadInfo {
     this.imageTag,
     this.backdropItemId,
     this.backdropTag,
+    this.seriesOverview,
+    this.seriesYear,
+    this.seriesEndYear,
+    this.seriesStatus,
   });
 
   /// Lit la fiche complète renvoyée par GET /Items/{id} au moment du
@@ -103,7 +111,26 @@ class DownloadInfo {
     imageTag: json['imageTag'] as String?,
     backdropItemId: json['backdropItemId'] as String?,
     backdropTag: json['backdropTag'] as String?,
+    seriesOverview: json['seriesOverview'] as String?,
+    seriesYear: json['seriesYear'] as int?,
+    seriesEndYear: json['seriesEndYear'] as int?,
+    seriesStatus: json['seriesStatus'] as String?,
   );
+
+  /// Les mêmes infos, avec celles de la série (fiche GET /Items/{id} de la
+  /// série) : résumé, années, état. Pour afficher sa fiche sans le serveur.
+  DownloadInfo withSeries(Map<String, dynamic> series) {
+    final endDate = series['EndDate'] as String?;
+    return DownloadInfo.fromJson({
+      ...toJson(),
+      'seriesOverview': series['Overview'] as String?,
+      'seriesYear': series['ProductionYear'] as int?,
+      'seriesEndYear': endDate == null
+          ? null
+          : DateTime.tryParse(endDate)?.year,
+      'seriesStatus': series['Status'] as String?,
+    });
+  }
 
   Map<String, dynamic> toJson() => {
     'itemId': itemId,
@@ -127,6 +154,10 @@ class DownloadInfo {
     'imageTag': imageTag,
     'backdropItemId': backdropItemId,
     'backdropTag': backdropTag,
+    'seriesOverview': seriesOverview,
+    'seriesYear': seriesYear,
+    'seriesEndYear': seriesEndYear,
+    'seriesStatus': seriesStatus,
   };
 
   final String itemId;
@@ -175,6 +206,14 @@ class DownloadInfo {
   final String? backdropItemId;
   final String? backdropTag;
 
+  /// Infos de la série d'un épisode : résumé, première et dernière année,
+  /// état pour le serveur (« Ended »…). Null si inconnues (téléchargement
+  /// plus ancien, ou film).
+  final String? seriesOverview;
+  final int? seriesYear;
+  final int? seriesEndYear;
+  final String? seriesStatus;
+
   List<MediaTrack> get tracks => tracksFromStreams(streams);
 
   /// Sous-titres en fichier séparé sur le serveur : téléchargés à part.
@@ -198,7 +237,7 @@ class DownloadInfo {
     id: isEpisode ? (seriesId ?? itemId) : itemId,
     name: isEpisode ? (seriesName ?? name) : name,
     type: isEpisode ? 'Series' : 'Movie',
-    year: year,
+    year: isEpisode ? seriesYear : year,
     posterTag: posterTag,
   );
 
@@ -230,6 +269,48 @@ class DownloadInfo {
     if (!isEpisode) return null;
     return [?episodeCode, name].join(' · ');
   }
+
+  /// La fiche, telle qu'on peut l'afficher sans le serveur (sans genres
+  /// ni note : ils ne sont pas gardés). [progress] : où en est la lecture.
+  ItemDetails toItemDetails({WatchProgress progress = const WatchProgress()}) =>
+      ItemDetails(
+        item: posterItem,
+        overview: overview,
+        runtime: runtime,
+        quality: MediaQuality.fromItemJson({'MediaStreams': streams}),
+        tracks: tracks,
+        defaultAudioIndex: defaultAudioIndex,
+        defaultSubtitleIndex: defaultSubtitleIndex,
+        progress: progress,
+        fileSize: size,
+      );
+
+  /// Fiche de la série d'un épisode, telle qu'on peut l'afficher sans le
+  /// serveur.
+  ItemDetails toSeriesDetails() => ItemDetails(
+    item: posterItem,
+    overview: seriesOverview,
+    endYear: seriesEndYear,
+    status: seriesStatus,
+  );
+
+  /// L'épisode, comme s'il venait de la liste du serveur (pour la fiche
+  /// de la série sans le serveur). [progress] : où en est la lecture.
+  Episode toEpisode({WatchProgress progress = const WatchProgress()}) =>
+      Episode(
+        id: itemId,
+        name: name,
+        seriesName: seriesName,
+        seasonNumber: seasonNumber,
+        number: episodeNumber,
+        overview: overview,
+        runtime: runtime,
+        imageTag: imageTag,
+        progress: progress,
+        quality: MediaQuality.fromItemJson({'MediaStreams': streams}),
+        tracks: tracks,
+        fileSize: size,
+      );
 
   /// Comment lire le fichier téléchargé : lecture directe du fichier
   /// [filePath], sous-titres séparés pris dans [subtitleFiles]
