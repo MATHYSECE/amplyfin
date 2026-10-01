@@ -7,6 +7,7 @@ import 'package:media_kit/media_kit.dart';
 import 'package:media_kit_video/media_kit_video.dart';
 
 import '../api/jellyfin_api.dart';
+import '../models/device_decoders.dart';
 import '../models/media_track.dart';
 import '../models/next_episode.dart';
 import '../models/playback_info.dart';
@@ -96,8 +97,8 @@ class _PlayerScreenState extends State<PlayerScreen> {
   /// Affichage de la vidéo (créé au démarrage, selon l'appareil).
   VideoController? _controller;
 
-  /// Vrai sur l'émulateur Android (son décodeur ne lit pas le 10 bits).
-  bool _onEmulator = false;
+  /// Ce que la puce vidéo sait décoder (envoyé au serveur).
+  DeviceDecoders _decoders = const DeviceDecoders();
 
   /// Vrai quand l'appareil n'a pas réussi à décoder l'image en lecture
   /// directe et que l'utilisateur a accepté une vraie conversion.
@@ -223,7 +224,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
 
   /// Prépare l'affichage puis lance le film.
   Future<void> _start() async {
-    _onEmulator = await DeviceCapabilities.isAndroidEmulator();
+    _decoders = await DeviceCapabilities.decoders();
     final controller = VideoController(
       _player,
       configuration: _videoConfiguration(),
@@ -328,9 +329,8 @@ class _PlayerScreenState extends State<PlayerScreen> {
             itemId: _itemId,
             quality: quality,
             start: start,
-            // Le décodeur vidéo de l'émulateur ne sait pas lire le 10 bits :
-            // le serveur convertit alors ces vidéos
-            supports10Bit: !_onEmulator,
+            // Ce que la puce ne lit pas est converti par le serveur
+            decoders: _decoders,
             tracks: _tracks,
             allowDirectPlay: !_forceTranscode,
           );
@@ -605,7 +605,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
           itemId: next.itemId,
           quality: _quality,
           start: next.start,
-          supports10Bit: !_onEmulator,
+          decoders: _decoders,
           tracks: tracks,
           allowDirectPlay: !_forceTranscode,
         );

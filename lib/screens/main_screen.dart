@@ -7,11 +7,13 @@ import '../models/media_item.dart';
 import '../models/session.dart';
 import '../services/session_store.dart';
 import '../theme/app_theme.dart';
+import '../widgets/account_sheet.dart';
 import '../widgets/connection_pill.dart';
 import '../widgets/download_controls.dart';
 import '../widgets/library_grid.dart';
 import '../widgets/transitions.dart';
 import '../widgets/ui.dart';
+import 'device_info_screen.dart';
 import 'downloads_screen.dart';
 import 'home_tab.dart';
 import 'login_screen.dart';
@@ -157,6 +159,32 @@ class _MainScreenState extends State<MainScreen> {
     );
   }
 
+  /// Menu « Compte » : ce que l'appareil sait lire, ou déconnexion.
+  Future<void> _openAccount() async {
+    final action = await showAccountSheet(context, widget.session);
+    if (!mounted) return;
+    switch (action) {
+      case AccountAction.deviceInfo:
+        await Navigator.of(context).push(
+          MaterialPageRoute<void>(builder: (_) => const DeviceInfoScreen()),
+        );
+      case AccountAction.logout:
+        // Confirmation : évite de se déconnecter sans le faire exprès
+        final confirmed = await showConfirmDialog(
+          context,
+          title: 'Se déconnecter ?',
+          message:
+              'Il faudra saisir à nouveau ton mot de passe pour revenir. '
+              'Les téléchargements restent sur le téléphone.',
+          action: 'Se déconnecter',
+          cancel: 'Annuler',
+        );
+        if (confirmed) await _logout();
+      case null:
+        break;
+    }
+  }
+
   Future<void> _logout() async {
     // On prévient le serveur, mais on se déconnecte même s'il est injoignable
     try {
@@ -207,7 +235,7 @@ class _MainScreenState extends State<MainScreen> {
                 gutter: wide ? 40 : 20,
                 wide: wide,
                 onDownloads: _openDownloads,
-                onLogout: _logout,
+                onAccount: _openAccount,
               ),
             ),
             Positioned(
@@ -300,7 +328,7 @@ class _Header extends StatelessWidget {
     required this.gutter,
     required this.wide,
     required this.onDownloads,
-    required this.onLogout,
+    required this.onAccount,
   });
 
   final String title;
@@ -311,7 +339,7 @@ class _Header extends StatelessWidget {
   /// Tablette : la pastille de connexion affiche aussi son mot.
   final bool wide;
   final ValueChanged<Offset> onDownloads;
-  final VoidCallback onLogout;
+  final VoidCallback onAccount;
 
   @override
   Widget build(BuildContext context) {
@@ -364,9 +392,9 @@ class _Header extends StatelessWidget {
           DownloadsButton(onPressed: onDownloads),
           const SizedBox(width: 10),
           GlassCircleButton(
-            icon: Icons.logout_rounded,
-            tooltip: 'Se déconnecter',
-            onPressed: onLogout,
+            icon: Icons.person_rounded,
+            tooltip: 'Compte',
+            onPressed: onAccount,
           ),
         ],
       ),

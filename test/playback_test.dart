@@ -1,5 +1,6 @@
 import 'package:amplyfin/api/device_profile.dart';
 import 'package:amplyfin/api/jellyfin_api.dart';
+import 'package:amplyfin/models/device_decoders.dart';
 import 'package:amplyfin/models/durations.dart';
 import 'package:amplyfin/models/playback_info.dart';
 import 'package:amplyfin/models/playback_quality.dart';
@@ -41,31 +42,118 @@ void main() {
       expect(low['MaxStreamingBitrate'], 3000000);
     });
 
+    List<Map<String, dynamic>> conditionsOf(
+      Map<String, dynamic> profile, {
+      String? codec,
+    }) {
+      final codecProfile = (profile['CodecProfiles'] as List)
+          .cast<Map<String, dynamic>>()
+          .firstWhere((p) => p['Codec'] == codec);
+      return (codecProfile['Conditions'] as List).cast<Map<String, dynamic>>();
+    }
+
     test('qualité originale : aucune limite de largeur', () {
-      expect(profile.containsKey('CodecProfiles'), isFalse);
+      expect(
+        conditionsOf(profile).map((c) => c['Property']),
+        isNot(contains('Width')),
+      );
+    });
+
+    test('Dolby Vision profil 5 converti, profil 8 lu comme du HDR10', () {
+      final range = conditionsOf(profile)
+          .firstWhere((c) => c['Property'] == 'VideoRangeType');
+      final types = (range['Value'] as String).split('|');
+      expect(range['Condition'], 'EqualsAny');
+      expect(types, containsAll(['SDR', 'HDR10', 'HLG', 'DOVIWithHDR10']));
+      expect(types, isNot(contains('DOVI')));
     });
 
     test('appareil sans 10 bits : profondeur de couleur limitée à 8', () {
       final emulator = buildDeviceProfile(
         maxBitrate: originalMaxBitrate,
-        maxBitDepth: 8,
+        decoders: const DeviceDecoders(allow10Bit: false),
       );
-      final conditions =
-          (emulator['CodecProfiles'] as List).first['Conditions'] as List;
-      expect(conditions, hasLength(1));
-      expect(conditions.first['Property'], 'VideoBitDepth');
-      expect(conditions.first['Value'], '8');
+      final bitDepth = conditionsOf(emulator)
+          .firstWhere((c) => c['Property'] == 'VideoBitDepth');
+      expect(bitDepth['Value'], '8');
     });
 
     test('qualité réduite : largeur maximum imposée', () {
       final low = buildDeviceProfile(maxBitrate: 8000000, maxWidth: 1280);
-      final condition = (low['CodecProfiles'] as List).first['Conditions'][0];
-      expect(condition, {
+      expect(conditionsOf(low).first, {
         'Condition': 'LessThanEqual',
         'Property': 'Width',
         'Value': '1280',
         'IsRequired': true,
       });
+    });
+
+    group('selon la puce vidéo', () {
+      // Comme la tablette Huawei M5 : HEVC 4K mais pas en 10 bits, pas d'AV1
+      final tablet = buildDeviceProfile(
+        maxBitrate: originalMaxBitrate,
+        decoders: DeviceDecoders.fromMap({
+          'codecs': {
+            'h264': {'hardware': true, 'maxWidth': 3840, 'maxHeight': 2160},
+            'hevc': {
+              'hardware': true,
+              'maxWidth': 3840,
+              'maxHeight': 2160,
+              'tenBit': false,
+            },
+            'vp9': {'hardware': true, 'maxWidth': 3840, 'tenBit': true},
+          },
+        }),
+      );
+
+      test('liste des codecs lus directement', () {
+        final video = (tablet['DirectPlayProfiles'] as List).first as Map;
+        final codecs = (video['VideoCodec'] as String).split(',');
+        expect(codecs, containsAll(['h264', 'hevc', 'av1', 'mpeg2video']));
+      });
+
+      test("HEVC jusqu'en 4K, mais en 8 bits seulement", () {
+        final hevc = conditionsOf(tablet, codec: 'hevc');
+        expect(hevc.first['Value'], '3840');
+        expect(
+          hevc.firstWhere((c) => c['Property'] == 'VideoBitDepth')['Value'],
+          '8',
+        );
+      });
+
+      test('10 bits accepté quand la puce le lit', () {
+        final vp9 = conditionsOf(tablet, codec: 'vp9');
+        expect(vp9.map((c) => c['Property']), ['Width']);
+      });
+
+      test("sans la puce : processeur jusqu'en 1080p, 8 bits", () {
+        final av1 = conditionsOf(tablet, codec: 'av1');
+        expect(av1.first['Value'], '1920');
+        expect(av1.map((c) => c['Property']), contains('VideoBitDepth'));
+      });
+
+      test('conversion en H.264 si la puce ne lit pas le HEVC', () {
+        final old = buildDeviceProfile(
+          maxBitrate: originalMaxBitrate,
+          decoders: DeviceDecoders.fromMap({
+            'codecs': {
+              'h264': {'hardware': true, 'maxWidth': 1920},
+            },
+          }),
+        );
+        final transcoding = (old['TranscodingProfiles'] as List).first;
+        expect(transcoding['VideoCodec'], 'h264');
+        expect(
+          (tablet['TranscodingProfiles'] as List).first['VideoCodec'],
+          'h264,hevc',
+        );
+      });
+    });
+
+    test('définition lisible de la puce', () {
+      expect(const CodecSupport(maxWidth: 3840).resolutionLabel, '4K');
+      expect(const CodecSupport(maxWidth: 1920).resolutionLabel, '1080p');
+      expect(const CodecSupport().resolutionLabel, isNull);
     });
   });
 

@@ -13,7 +13,8 @@ const _messages = {
   'VideoBitDepthNotSupported':
       'Ton appareil ne sait pas lire la vidéo en 10\u00A0bits.',
   'VideoRangeTypeNotSupported':
-      'Le type d\'image (HDR, Dolby Vision) n\'est pas pris en charge.',
+      'Cette image Dolby Vision s\'afficherait avec de fausses couleurs '
+      'sur cet appareil.',
   'VideoResolutionNotSupported': 'La définition de la vidéo est trop élevée.',
   'VideoFramerateNotSupported':
       'Le nombre d\'images par seconde n\'est pas pris en charge.',

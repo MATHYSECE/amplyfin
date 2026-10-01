@@ -4,6 +4,7 @@ import 'dart:io';
 
 import 'package:http/http.dart' as http;
 
+import '../models/device_decoders.dart';
 import '../models/durations.dart';
 import '../models/episode.dart';
 import '../models/item_details.dart';
@@ -586,7 +587,7 @@ class JellyfinApi {
   /// Qualité réduite : flux converti par le serveur (débit et largeur limités).
   /// [start] : position de départ, pour que le serveur commence sa conversion
   /// directement au bon endroit (sinon il part du début et le lecteur attend).
-  /// [supports10Bit] : faux si l'appareil ne décode pas les vidéos 10 bits.
+  /// [decoders] : ce que la puce vidéo de l'appareil sait décoder.
   /// [tracks] : pistes audio et sous-titres voulues (le serveur les renvoie
   /// ensuite comme choix par défaut, et les met dans le flux s'il convertit).
   /// [allowDirectPlay] : faux pour forcer une vraie conversion (quand
@@ -596,7 +597,7 @@ class JellyfinApi {
     required String itemId,
     required PlaybackQuality quality,
     Duration start = Duration.zero,
-    bool supports10Bit = true,
+    DeviceDecoders decoders = const DeviceDecoders(),
     TrackSelection tracks = const TrackSelection(),
     bool allowDirectPlay = true,
   }) async {
@@ -615,7 +616,7 @@ class JellyfinApi {
         'DeviceProfile': buildDeviceProfile(
           maxBitrate: bitrate,
           maxWidth: quality.maxWidth,
-          maxBitDepth: supports10Bit ? null : 8,
+          decoders: decoders,
         ),
         'EnableDirectPlay': quality.isOriginal && allowDirectPlay,
         'EnableDirectStream': quality.isOriginal && allowDirectPlay,

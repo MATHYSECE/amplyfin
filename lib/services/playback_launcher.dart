@@ -36,7 +36,7 @@ Future<String?> launchPlayback(
   if (local != null) {
     info = local;
   } else {
-    final emulator = await DeviceCapabilities.isAndroidEmulator();
+    final decoders = await DeviceCapabilities.decoders();
     try {
       info = await api.getPlaybackInfo(
         userId: session.userId,
@@ -44,7 +44,8 @@ Future<String?> launchPlayback(
         quality: PlaybackQuality.original,
         // En cas de conversion, le serveur commence au bon endroit
         start: start,
-        supports10Bit: !emulator,
+        // Ce que la puce ne lit pas est converti par le serveur
+        decoders: decoders,
         tracks: tracks,
       );
     } on JellyfinException catch (e) {
