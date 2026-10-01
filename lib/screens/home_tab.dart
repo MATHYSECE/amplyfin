@@ -87,9 +87,15 @@ class HomeTabState extends State<HomeTab> {
     super.dispose();
   }
 
-  /// La connexion revient : l'accueil se remplit.
+  /// Dernier état connu de la connexion (pour repérer son retour).
+  bool _wasOnline = ConnectionMonitor.instance.online;
+
+  /// La connexion revient : l'accueil se met à jour sans tout effacer.
+  /// Hors ligne, il garde ce qu'il affiche.
   void _onConnection() {
-    if (_failed && ConnectionMonitor.instance.online) _load();
+    final online = ConnectionMonitor.instance.online;
+    if (online && !_wasOnline) _load();
+    _wasOnline = online;
   }
 
   /// Fait une demande sans jamais échouer : en cas d'erreur, null (la

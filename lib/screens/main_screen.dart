@@ -7,6 +7,7 @@ import '../models/media_item.dart';
 import '../models/session.dart';
 import '../services/session_store.dart';
 import '../theme/app_theme.dart';
+import '../widgets/connection_pill.dart';
 import '../widgets/download_controls.dart';
 import '../widgets/library_grid.dart';
 import '../widgets/transitions.dart';
@@ -204,6 +205,7 @@ class _MainScreenState extends State<MainScreen> {
                 solid: _solid,
                 height: headerHeight,
                 gutter: wide ? 40 : 20,
+                wide: wide,
                 onDownloads: _openDownloads,
                 onLogout: _logout,
               ),
@@ -294,6 +296,7 @@ class _Header extends StatelessWidget {
     required this.solid,
     required this.height,
     required this.gutter,
+    required this.wide,
     required this.onDownloads,
     required this.onLogout,
   });
@@ -302,6 +305,9 @@ class _Header extends StatelessWidget {
   final bool solid;
   final double height;
   final double gutter;
+
+  /// Tablette : la pastille de connexion affiche aussi son mot.
+  final bool wide;
   final ValueChanged<Offset> onDownloads;
   final VoidCallback onLogout;
 
@@ -351,6 +357,8 @@ class _Header extends StatelessWidget {
               ),
             ),
           ),
+          // État de la connexion (seulement s'il y a quelque chose à dire)
+          ConnectionPill(showLabel: wide),
           DownloadsButton(onPressed: onDownloads),
           const SizedBox(width: 10),
           GlassCircleButton(

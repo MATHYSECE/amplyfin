@@ -46,6 +46,7 @@ dependencies:
   screen_brightness: ^2.1.11
   volume_controller: ^3.7.1
   background_downloader: ^9.5.9
+  connectivity_plus: ^7.3.1
 
 dev_dependencies:
   flutter_test:

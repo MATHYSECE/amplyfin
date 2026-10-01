@@ -72,11 +72,22 @@ class _SearchTabState extends State<SearchTab> {
 
   String get _userId => widget.session.userId;
 
+  /// Dernier état connu de la connexion (pour relancer la recherche quand
+  /// il change : serveur, ou téléchargements).
+  bool _wasOnline = ConnectionMonitor.instance.online;
+
   @override
   void initState() {
     super.initState();
     _loadHistory();
     if (widget.active) _openKeyboard();
+    ConnectionMonitor.instance.addListener(_onConnection);
+  }
+
+  void _onConnection() {
+    final online = ConnectionMonitor.instance.online;
+    if (online != _wasOnline && _query.length >= _minLength) _search(_query);
+    _wasOnline = online;
   }
 
   @override
@@ -88,6 +99,7 @@ class _SearchTabState extends State<SearchTab> {
 
   @override
   void dispose() {
+    ConnectionMonitor.instance.removeListener(_onConnection);
     _debounce?.cancel();
     _text.dispose();
     _focus.dispose();

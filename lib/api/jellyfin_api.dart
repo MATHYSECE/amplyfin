@@ -60,6 +60,11 @@ class JellyfinApi {
   static const clientVersion = '1.0.0';
   static const _timeout = Duration(seconds: 15);
 
+  /// Prévenus quand une demande n'obtient aucune réponse du serveur, ou au
+  /// contraire en obtient une (pour le suivi de la connexion).
+  static void Function()? onServerUnreachable;
+  static void Function()? onServerReached;
+
   final String serverUrl;
   final String deviceId;
 
@@ -620,12 +625,15 @@ class JellyfinApi {
       final streamed = await _client.send(request).timeout(_timeout);
       response = await http.Response.fromStream(streamed).timeout(_timeout);
     } on TimeoutException {
+      onServerUnreachable?.call();
       throw JellyfinException('Le serveur ne répond pas (délai dépassé).');
     } on Exception {
+      onServerUnreachable?.call();
       throw JellyfinException(
         'Impossible de joindre le serveur. Vérifie l\'adresse et ta connexion.',
       );
     }
+    onServerReached?.call();
 
     if (response.statusCode == 401) {
       throw JellyfinException('Identification refusée.', statusCode: 401);

@@ -1,7 +1,9 @@
 import 'package:amplyfin/models/download_info.dart';
 import 'package:amplyfin/models/watch_progress.dart';
+import 'package:amplyfin/services/connection_monitor.dart';
 import 'package:amplyfin/services/download_groups.dart';
 import 'package:amplyfin/services/offline_progress.dart';
+import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 // Tests du mode hors ligne
@@ -237,6 +239,21 @@ void main() {
       expect(copy.seriesYear, 2000);
       expect(copy.seriesEndYear, 2006);
       expect(copy.seriesStatus, 'Ended');
+    });
+  });
+
+  group('Réseau du téléphone', () {
+    test('plus aucun réseau : hors ligne tout de suite', () {
+      expect(hasNoNetwork([ConnectivityResult.none]), isTrue);
+      expect(hasNoNetwork(const []), isTrue);
+    });
+
+    test('Wi-Fi ou données : on vérifie le serveur', () {
+      expect(hasNoNetwork([ConnectivityResult.wifi]), isFalse);
+      expect(
+        hasNoNetwork([ConnectivityResult.mobile, ConnectivityResult.vpn]),
+        isFalse,
+      );
     });
   });
 }
