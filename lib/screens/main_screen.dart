@@ -233,6 +233,8 @@ class _MainScreenState extends State<MainScreen> {
       controller: _scrolls[tab],
       onOpen: _open,
       onUnauthorized: _backToLogin,
+      // Genres en pastilles et bouton « Trier »
+      showFilters: true,
     );
     return switch (tab) {
       0 => HomeTab(

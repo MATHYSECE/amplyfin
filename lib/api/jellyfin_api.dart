@@ -126,6 +126,7 @@ class JellyfinApi {
   /// « PremiereDate » : sortis récemment), du plus récent au plus ancien.
   /// [releasedBefore] : seulement ceux déjà sortis à cette date.
   /// [personId] : seulement ceux où joue (ou qu'a réalisés) cette personne.
+  /// [genreId] : seulement ceux de ce genre.
   Future<ItemPage> getItems({
     required String userId,
     required String type,
@@ -134,6 +135,7 @@ class JellyfinApi {
     String? sortBy,
     DateTime? releasedBefore,
     String? personId,
+    String? genreId,
   }) async {
     final json = await _send(
       'GET',
@@ -147,6 +149,7 @@ class JellyfinApi {
         if (releasedBefore != null)
           'maxPremiereDate': releasedBefore.toUtc().toIso8601String(),
         'personIds': ?personId,
+        'genreIds': ?genreId,
         'startIndex': '$startIndex',
         'limit': '$limit',
         // On ne veut que l'affiche, pas les autres images
@@ -252,6 +255,61 @@ class JellyfinApi {
     return [
       for (final item in (json['Items'] as List<dynamic>?) ?? [])
         item as Map<String, dynamic>,
+    ];
+  }
+
+  /// GET /Genres : les genres des [types] (« Movie », « Series », ou les
+  /// deux), avec leur nombre de films et de séries.
+  Future<List<Map<String, dynamic>>> getGenres({
+    required String userId,
+    required String types,
+  }) async {
+    final json = await _send(
+      'GET',
+      '/Genres',
+      query: {
+        'userId': userId,
+        'includeItemTypes': types,
+        'fields': 'ItemCounts',
+        'sortBy': 'SortName',
+        'enableImages': 'false',
+        'enableTotalRecordCount': 'false',
+      },
+    );
+    return [
+      for (final item in (json['Items'] as List<dynamic>?) ?? [])
+        item as Map<String, dynamic>,
+    ];
+  }
+
+  /// GET /Items : les films et séries les plus récents du genre qui ont une
+  /// image de fond (candidats pour la carte du genre).
+  Future<List<ItemDetails>> getGenreCovers({
+    required String userId,
+    required String genreId,
+    int limit = 10,
+  }) async {
+    final json = await _send(
+      'GET',
+      '/Items',
+      query: {
+        'userId': userId,
+        'genreIds': genreId,
+        'includeItemTypes': 'Movie,Series',
+        'recursive': 'true',
+        'imageTypes': 'Backdrop',
+        'sortBy': 'DateCreated',
+        'sortOrder': 'Descending',
+        'limit': '$limit',
+        'enableImageTypes': 'Backdrop',
+        'imageTypeLimit': '1',
+        'enableUserData': 'false',
+        'enableTotalRecordCount': 'false',
+      },
+    );
+    return [
+      for (final item in (json['Items'] as List<dynamic>?) ?? [])
+        ItemDetails.fromJson(item as Map<String, dynamic>),
     ];
   }
 

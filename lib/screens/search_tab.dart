@@ -4,6 +4,7 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 
 import '../api/jellyfin_api.dart';
+import '../models/genre.dart';
 import '../models/media_item.dart';
 import '../models/search_results.dart';
 import '../models/session.dart';
@@ -11,8 +12,10 @@ import '../services/connection_monitor.dart';
 import '../services/download_manager.dart';
 import '../services/search_history.dart';
 import '../theme/app_theme.dart';
+import '../widgets/genre_card.dart';
 import '../widgets/media_row.dart';
 import '../widgets/ui.dart';
+import 'genre_screen.dart';
 import 'movie_screen.dart';
 import 'series_screen.dart';
 import 'sorted_items_screen.dart';
@@ -58,6 +61,9 @@ class _SearchTabState extends State<SearchTab> {
 
   List<String> _recent = const [];
 
+  /// Genres de « Parcourir par genre » (null tant qu'inconnus).
+  List<Genre>? _genres;
+
   /// Recherche affichée, et ses résultats (null : pas encore arrivés).
   String _query = '';
   SearchResults? _results;
@@ -80,12 +86,14 @@ class _SearchTabState extends State<SearchTab> {
   void initState() {
     super.initState();
     _loadHistory();
+    _loadGenres();
     if (widget.active) _openKeyboard();
     ConnectionMonitor.instance.addListener(_onConnection);
   }
 
   void _onConnection() {
     final online = ConnectionMonitor.instance.online;
+    if (online && _genres == null) _loadGenres();
     if (online != _wasOnline && _query.length >= _minLength) _search(_query);
     _wasOnline = online;
   }
@@ -115,6 +123,29 @@ class _SearchTabState extends State<SearchTab> {
   Future<void> _loadHistory() async {
     final recent = await _history.load();
     if (mounted) setState(() => _recent = recent);
+  }
+
+  Future<void> _loadGenres() async {
+    final json = await _safe(
+      widget.api.getGenres(userId: _userId, types: 'Movie,Series'),
+    );
+    if (!mounted || json == null) return;
+    final genres = usableGenres([
+      for (final item in json) Genre.fromJson(item),
+    ]);
+    // Images choisies ensemble : un titre ne sert qu'à un seul genre
+    prepareGenreCovers(widget.api, _userId, genres);
+    setState(() => _genres = genres);
+  }
+
+  void _openGenre(Genre genre) {
+    _focus.unfocus();
+    Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) =>
+            GenreScreen(api: widget.api, session: widget.session, genre: genre),
+      ),
+    );
   }
 
   Future<void> _remember(String term) async {
@@ -352,9 +383,13 @@ class _SearchTabState extends State<SearchTab> {
     );
   }
 
+  /// Avant de taper : recherches récentes, puis « Parcourir par genre »
+  /// (en ligne seulement).
   Widget _buildRecent(HomeLayout layout) {
     final textTheme = Theme.of(context).textTheme;
-    if (_recent.isEmpty) {
+    final genres = ConnectionMonitor.instance.online ? _genres : null;
+    final hasGenres = genres != null && genres.isNotEmpty;
+    if (_recent.isEmpty && !hasGenres) {
       return Padding(
         padding: const EdgeInsets.fromLTRB(36, 80, 36, 0),
         child: Text(
@@ -365,6 +400,64 @@ class _SearchTabState extends State<SearchTab> {
         ),
       );
     }
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        if (_recent.isNotEmpty) _buildRecentList(layout),
+        if (hasGenres) _buildGenres(layout, genres),
+      ],
+    );
+  }
+
+  /// « Parcourir par genre » : cartes avec image, 2 par ligne (4 sur
+  /// une tablette).
+  Widget _buildGenres(HomeLayout layout, List<Genre> genres) {
+    return Padding(
+      padding: EdgeInsets.fromLTRB(layout.gutter, 26, layout.gutter, 0),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'Parcourir par genre',
+            style: Theme.of(context).textTheme.titleMedium
+                ?.copyWith(fontSize: 18, fontWeight: FontWeight.w800),
+          ),
+          const SizedBox(height: 12),
+          LayoutBuilder(
+            builder: (context, constraints) {
+              const gap = 12.0;
+              final columns = layout.isWide ? 4 : 2;
+              final width =
+                  (constraints.maxWidth - gap * (columns - 1)) / columns;
+              return Wrap(
+                spacing: gap,
+                runSpacing: gap,
+                children: [
+                  for (final (i, genre) in genres.indexed)
+                    SizedBox(
+                      width: width,
+                      // Les cartes arrivent les unes après les autres
+                      child: EntranceAnimation(
+                        delay: Duration(milliseconds: 30 * i.clamp(0, 12)),
+                        child: GenreCard(
+                          api: widget.api,
+                          userId: _userId,
+                          genre: genre,
+                          onTap: () => _openGenre(genre),
+                        ),
+                      ),
+                    ),
+                ],
+              );
+            },
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildRecentList(HomeLayout layout) {
+    final textTheme = Theme.of(context).textTheme;
     return Padding(
       padding: EdgeInsets.fromLTRB(layout.gutter, 22, layout.gutter - 8, 0),
       // Surface transparente : l'effet d'appui des lignes reste visible

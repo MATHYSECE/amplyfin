@@ -13,7 +13,7 @@ import 'series_screen.dart';
 
 /// « Tout voir » d'une rangée de l'accueil : la grille complète, du plus
 /// récent au plus ancien (ajoutés, ou sortis récemment). Sert aussi pour
-/// les films et séries d'un acteur ([personId]).
+/// les films et séries d'un acteur ([personId]) ou d'un genre ([genreId]).
 class SortedItemsScreen extends StatelessWidget {
   const SortedItemsScreen({
     super.key,
@@ -24,6 +24,7 @@ class SortedItemsScreen extends StatelessWidget {
     required this.sortBy,
     this.releasedBefore,
     this.personId,
+    this.genreId,
   });
 
   final JellyfinApi api;
@@ -37,6 +38,7 @@ class SortedItemsScreen extends StatelessWidget {
   final String sortBy;
   final DateTime? releasedBefore;
   final String? personId;
+  final String? genreId;
 
   void _open(BuildContext context, MediaItem item) {
     Navigator.of(context).push(
@@ -63,6 +65,7 @@ class SortedItemsScreen extends StatelessWidget {
               sortBy: sortBy,
               releasedBefore: releasedBefore,
               personId: personId,
+              genreId: genreId,
               emptyMessage: 'Rien à afficher pour l\'instant.',
               topPadding: headerHeight,
               onOpen: (item) => _open(context, item),

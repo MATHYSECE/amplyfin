@@ -1,16 +1,21 @@
 import 'package:flutter/material.dart';
 
 import '../api/jellyfin_api.dart';
+import '../models/genre.dart';
 import '../models/media_item.dart';
 import '../models/session.dart';
+import '../services/connection_monitor.dart';
+import '../services/library_preferences.dart';
 import '../theme/app_theme.dart';
 import 'download_controls.dart';
 import 'poster_image.dart';
+import 'track_picker.dart';
 import 'ui.dart';
 
 /// Grille d'affiches d'un type d'élément (films ou séries), chargée page par
 /// page au fil du défilement. Garde sa position quand on change d'onglet.
 /// Triée par titre, ou par [sortBy] (« Tout voir » de l'accueil).
+/// Avec [showFilters] : genres en pastilles et bouton « Trier » en haut.
 class LibraryGrid extends StatefulWidget {
   const LibraryGrid({
     super.key,
@@ -26,12 +31,14 @@ class LibraryGrid extends StatefulWidget {
     this.sortBy,
     this.releasedBefore,
     this.personId,
+    this.genreId,
+    this.showFilters = false,
   });
 
   final JellyfinApi api;
   final Session session;
 
-  /// Type d'élément pour le serveur : « Movie » ou « Series ».
+  /// Type d'élément pour le serveur : « Movie », « Series » (ou les deux).
   final String itemType;
 
   /// Message affiché si la bibliothèque est vide.
@@ -60,6 +67,12 @@ class LibraryGrid extends StatefulWidget {
   /// Seulement les films et séries de cette personne (acteur, réalisateur).
   final String? personId;
 
+  /// Seulement les films et séries de ce genre.
+  final String? genreId;
+
+  /// Genres en pastilles et bouton « Trier » (onglets Films et Séries).
+  final bool showFilters;
+
   @override
   State<LibraryGrid> createState() => _LibraryGridState();
 }
@@ -75,10 +88,23 @@ class _LibraryGridState extends State<LibraryGrid>
   late final _scrollController = widget.controller ?? ScrollController();
   final List<MediaItem> _items = [];
 
+  /// Affiches déjà apparues (les autres arrivent en fondu).
+  final Set<String> _shown = {};
+
   /// Nombre total d'éléments sur le serveur (null tant qu'on ne le connaît pas).
   int? _totalCount;
   bool _loading = false;
   String? _error;
+
+  /// Numéro de la liste demandée : une réponse pour un ancien genre ou un
+  /// ancien tri, arrivée en retard, est ignorée.
+  int _generation = 0;
+
+  // Filtres (onglets Films et Séries)
+  final _preferences = LibraryPreferences();
+  LibrarySort _sort = LibrarySort.title;
+  String? _genreId;
+  List<Genre>? _genres;
 
   bool get _hasMore => _totalCount == null || _items.length < _totalCount!;
 
@@ -90,14 +116,52 @@ class _LibraryGridState extends State<LibraryGrid>
   void initState() {
     super.initState();
     _scrollController.addListener(_onScroll);
-    _loadMore();
+    if (widget.showFilters) {
+      _start();
+      ConnectionMonitor.instance.addListener(_onConnection);
+    } else {
+      _loadMore();
+    }
+  }
+
+  /// Onglets Films et Séries : tri retenu, puis grille et genres.
+  Future<void> _start() async {
+    final sort = await _preferences.loadSort(widget.itemType);
+    if (!mounted) return;
+    setState(() => _sort = sort);
+    await Future.wait([_loadMore(), _loadGenres()]);
   }
 
   @override
   void dispose() {
+    if (widget.showFilters) {
+      ConnectionMonitor.instance.removeListener(_onConnection);
+    }
     // Défilement fourni par l'écran : c'est lui qui le libère
     if (widget.controller == null) _scrollController.dispose();
     super.dispose();
+  }
+
+  /// La connexion revient : les genres (s'ils manquaient) arrivent.
+  void _onConnection() {
+    if (_genres == null && ConnectionMonitor.instance.online) _loadGenres();
+  }
+
+  Future<void> _loadGenres() async {
+    try {
+      final json = await widget.api.getGenres(
+        userId: widget.session.userId,
+        types: widget.itemType,
+      );
+      if (!mounted) return;
+      setState(
+        () => _genres = usableGenres([
+          for (final item in json) Genre.fromJson(item),
+        ], type: widget.itemType),
+      );
+    } on JellyfinException {
+      // Pas de genres pour l'instant : seulement « Trier »
+    }
   }
 
   /// Arrivé près du bas de la grille : on charge la page suivante.
@@ -113,6 +177,7 @@ class _LibraryGridState extends State<LibraryGrid>
   /// Avec [reset], recharge la première page et remplace toute la grille.
   Future<void> _loadMore({bool reset = false}) async {
     if (_loading || (!reset && !_hasMore)) return;
+    final generation = _generation;
     setState(() {
       _loading = true;
       _error = null;
@@ -124,19 +189,24 @@ class _LibraryGridState extends State<LibraryGrid>
         type: widget.itemType,
         startIndex: reset ? 0 : _items.length,
         limit: _pageSize,
-        sortBy: widget.sortBy,
+        sortBy: widget.showFilters ? _sort.sortBy : widget.sortBy,
         releasedBefore: widget.releasedBefore,
         personId: widget.personId,
+        genreId: _genreId ?? widget.genreId,
       );
-      if (!mounted) return;
+      if (!mounted || generation != _generation) return;
       setState(() {
-        if (reset) _items.clear();
+        if (reset) {
+          _items.clear();
+          _shown.clear();
+        }
         _items.addAll(page.items);
         _totalCount = page.totalCount;
         // Sécurité : le serveur n'a plus rien à donner
         if (page.items.isEmpty) _totalCount = _items.length;
       });
     } on JellyfinException catch (e) {
+      if (generation != _generation) return;
       if (e.isUnauthorized) {
         // Jeton révoqué pendant l'utilisation : retour à la connexion
         widget.onUnauthorized();
@@ -144,12 +214,49 @@ class _LibraryGridState extends State<LibraryGrid>
       }
       if (mounted) setState(() => _error = e.message);
     } finally {
-      if (mounted) setState(() => _loading = false);
+      if (mounted && generation == _generation) {
+        setState(() => _loading = false);
+      }
     }
   }
 
   /// Tirer vers le bas : on recharge depuis le début.
   Future<void> _refresh() => _loadMore(reset: true);
+
+  /// Nouveau genre ou nouveau tri : la grille repart du début.
+  void _restart() {
+    _generation++;
+    setState(() {
+      _items.clear();
+      _shown.clear();
+      _totalCount = null;
+      _error = null;
+      _loading = false;
+    });
+    if (_scrollController.hasClients) _scrollController.jumpTo(0);
+    _loadMore(reset: true);
+  }
+
+  void _selectGenre(String? genreId) {
+    if (genreId == _genreId) return;
+    _genreId = genreId;
+    _restart();
+  }
+
+  Future<void> _chooseSort() async {
+    final chosen = await showPicker(
+      context,
+      title: 'Trier',
+      options: [
+        for (final sort in LibrarySort.values) PickerOption(sort, sort.label),
+      ],
+      selected: _sort,
+    );
+    if (chosen == null || chosen.value == _sort) return;
+    _sort = chosen.value;
+    await _preferences.saveSort(widget.itemType, _sort);
+    _restart();
+  }
 
   /// Grille commune : vraies affiches, ou zones grises pendant le chargement.
   static const _gridDelegate = SliverGridDelegateWithMaxCrossAxisExtent(
@@ -163,34 +270,63 @@ class _LibraryGridState extends State<LibraryGrid>
   @override
   Widget build(BuildContext context) {
     super.build(context); // nécessaire pour AutomaticKeepAliveClientMixin
-    final padding = EdgeInsets.fromLTRB(16, widget.topPadding + 12, 16, 12);
+    const padding = EdgeInsets.fromLTRB(16, 12, 16, 12);
 
-    // Premier chargement : la grille a déjà sa forme, en zones grises
-    if (_items.isEmpty && _loading) {
-      return GridView.builder(
-        padding: EdgeInsets.fromLTRB(16, widget.topPadding + 12, 16, 12),
-        physics: const NeverScrollableScrollPhysics(),
-        gridDelegate: _gridDelegate,
-        itemCount: 12,
-        itemBuilder: (_, _) => const _PosterTileSkeleton(),
+    final Widget content;
+    if (_items.isEmpty && (_loading || _totalCount == null) && _error == null) {
+      // Chargement : la grille a déjà sa forme, en zones grises
+      content = SliverPadding(
+        padding: padding,
+        sliver: SliverGrid.builder(
+          gridDelegate: _gridDelegate,
+          itemCount: 12,
+          itemBuilder: (_, _) => const _PosterTileSkeleton(),
+        ),
       );
-    }
-    // Premier chargement raté
-    if (_items.isEmpty && _error != null) {
-      return _MessageView(
-        topPadding: widget.topPadding,
-        icon: Icons.cloud_off_rounded,
-        message: _error!,
-        onRetry: _loadMore,
+    } else if (_items.isEmpty && _error != null) {
+      content = SliverFillRemaining(
+        hasScrollBody: false,
+        child: _MessageView(
+          icon: Icons.cloud_off_rounded,
+          message: _error!,
+          onRetry: _refresh,
+        ),
       );
-    }
-    // Bibliothèque vide
-    if (_items.isEmpty && !_hasMore) {
-      return _MessageView(
-        topPadding: widget.topPadding,
-        icon: Icons.movie_outlined,
-        message: widget.emptyMessage,
-        onRetry: _refresh,
+    } else if (_items.isEmpty) {
+      content = SliverFillRemaining(
+        hasScrollBody: false,
+        child: _MessageView(
+          icon: Icons.movie_outlined,
+          message: _genreId != null
+              ? 'Rien dans ce genre pour l\'instant.'
+              : widget.emptyMessage,
+          onRetry: _refresh,
+        ),
+      );
+    } else {
+      content = SliverPadding(
+        padding: padding,
+        sliver: SliverGrid.builder(
+          // Le nombre de colonnes s'adapte à la largeur de l'écran
+          gridDelegate: _gridDelegate,
+          itemCount: _items.length,
+          itemBuilder: (context, index) {
+            final item = _items[index];
+            final tile = _PosterTile(
+              api: widget.api,
+              item: item,
+              onTap: () => widget.onOpen(item),
+            );
+            // Nouvelle affiche : arrive en fondu (une fois seulement)
+            if (!_shown.add(item.id)) return tile;
+            return EntranceAnimation(
+              delay: Duration(
+                milliseconds: 25 * (index % _pageSize).clamp(0, 12),
+              ),
+              child: tile,
+            );
+          },
+        ),
       );
     }
 
@@ -203,20 +339,19 @@ class _LibraryGridState extends State<LibraryGrid>
         // Permet de tirer pour rafraîchir même avec peu d'éléments
         physics: const AlwaysScrollableScrollPhysics(),
         slivers: [
-          SliverPadding(
-            padding: padding,
-            sliver: SliverGrid.builder(
-              // Le nombre de colonnes s'adapte à la largeur de l'écran
-              gridDelegate: _gridDelegate,
-              itemCount: _items.length,
-              itemBuilder: (context, index) => _PosterTile(
-                api: widget.api,
-                item: _items[index],
-                onTap: () => widget.onOpen(_items[index]),
+          SliverToBoxAdapter(child: SizedBox(height: widget.topPadding)),
+          if (widget.showFilters)
+            SliverToBoxAdapter(
+              child: _FilterBar(
+                genres: _genres,
+                selected: _genreId,
+                sort: _sort,
+                onGenre: _selectGenre,
+                onSort: _chooseSort,
               ),
             ),
-          ),
-          SliverToBoxAdapter(child: _buildFooter()),
+          content,
+          if (_items.isNotEmpty) SliverToBoxAdapter(child: _buildFooter()),
         ],
       ),
     );
@@ -257,7 +392,84 @@ class _LibraryGridState extends State<LibraryGrid>
   }
 }
 
+/// En haut de la grille : « Tous » et les genres en pastilles (qui
+/// défilent), et le bouton « Trier ». Hors ligne : seulement « Trier ».
+class _FilterBar extends StatelessWidget {
+  const _FilterBar({
+    required this.genres,
+    required this.selected,
+    required this.sort,
+    required this.onGenre,
+    required this.onSort,
+  });
+
+  final List<Genre>? genres;
+  final String? selected;
+  final LibrarySort sort;
+  final ValueChanged<String?> onGenre;
+  final VoidCallback onSort;
+
+  @override
+  Widget build(BuildContext context) {
+    final connection = ConnectionMonitor.instance;
+    return Padding(
+      padding: const EdgeInsets.only(top: 8),
+      child: Row(
+        children: [
+          Expanded(
+            child: ListenableBuilder(
+              listenable: connection,
+              builder: (context, _) {
+                final genres = _visibleGenres(connection.online);
+                return AnimatedSwitcher(
+                  duration: AppDurations.medium,
+                  child: genres == null
+                      ? const SizedBox(height: 40)
+                      : SizedBox(
+                          height: 40,
+                          child: ListView(
+                            scrollDirection: Axis.horizontal,
+                            padding: const EdgeInsets.only(left: 16, right: 8),
+                            children: [
+                              _chip('Tous', null),
+                              for (final genre in genres)
+                                _chip(genre.name, genre.id),
+                            ],
+                          ),
+                        ),
+                );
+              },
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.only(right: 16),
+            child: GlassCircleButton(
+              icon: Icons.swap_vert_rounded,
+              tooltip: 'Trier : ${sort.label}',
+              size: 40,
+              onPressed: onSort,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// Genres à montrer (null : rien, hors ligne ou pas encore chargés).
+  List<Genre>? _visibleGenres(bool online) => online ? genres : null;
+
+  Widget _chip(String label, String? genreId) => Padding(
+    padding: const EdgeInsets.only(right: 8),
+    child: ChoiceChip(
+      label: Text(label),
+      selected: selected == genreId,
+      onSelected: (_) => onGenre(genreId),
+    ),
+  );
+}
+
 /// Une case de la grille : affiche (avec une ombre douce), titre et année.
+/// S'enfonce un peu à l'appui.
 class _PosterTile extends StatelessWidget {
   const _PosterTile({
     required this.api,
@@ -273,7 +485,7 @@ class _PosterTile extends StatelessWidget {
   Widget build(BuildContext context) {
     final textTheme = Theme.of(context).textTheme;
 
-    return GestureDetector(
+    return PressableScale(
       onTap: onTap,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -328,7 +540,7 @@ class _PosterTile extends StatelessWidget {
   }
 }
 
-/// Case en zones grises animées, pendant le premier chargement.
+/// Case en zones grises animées, pendant le chargement.
 class _PosterTileSkeleton extends StatelessWidget {
   const _PosterTileSkeleton();
 
@@ -347,16 +559,14 @@ class _PosterTileSkeleton extends StatelessWidget {
   }
 }
 
-/// Message plein écran avec un bouton « Réessayer ».
+/// Message (bibliothèque vide, erreur) avec un bouton « Réessayer ».
 class _MessageView extends StatelessWidget {
   const _MessageView({
-    required this.topPadding,
     required this.icon,
     required this.message,
     required this.onRetry,
   });
 
-  final double topPadding;
   final IconData icon;
   final String message;
   final VoidCallback onRetry;
@@ -364,7 +574,7 @@ class _MessageView extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: EdgeInsets.fromLTRB(32, topPadding, 32, 0),
+      padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 24),
       child: Center(
         child: Column(
           mainAxisSize: MainAxisSize.min,
