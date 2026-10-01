@@ -10,6 +10,7 @@ import 'ui.dart';
 
 /// Grille d'affiches d'un type d'élément (films ou séries), chargée page par
 /// page au fil du défilement. Garde sa position quand on change d'onglet.
+/// Triée par titre, ou par [sortBy] (« Tout voir » de l'accueil).
 class LibraryGrid extends StatefulWidget {
   const LibraryGrid({
     super.key,
@@ -20,8 +21,10 @@ class LibraryGrid extends StatefulWidget {
     required this.topPadding,
     required this.onOpen,
     required this.onUnauthorized,
-    this.header,
-    this.onRefresh,
+    this.controller,
+    this.bottomPadding = 0,
+    this.sortBy,
+    this.releasedBefore,
   });
 
   final JellyfinApi api;
@@ -42,12 +45,16 @@ class LibraryGrid extends StatefulWidget {
   /// Appelé si le serveur refuse le jeton (retour à la connexion).
   final VoidCallback onUnauthorized;
 
-  /// Bloc au-dessus des affiches, qui défile avec elles
-  /// (ex. « Continuer à regarder »).
-  final Widget? header;
+  /// Défilement (ex. pour remonter en haut d'un appui sur l'onglet).
+  final ScrollController? controller;
 
-  /// Appelé aussi quand on tire la grille vers le bas pour rafraîchir.
-  final Future<void> Function()? onRefresh;
+  /// Espace laissé en bas pour la barre de navigation.
+  final double bottomPadding;
+
+  /// Tri du plus récent au plus ancien (« DateCreated », « PremiereDate »),
+  /// et seulement les éléments déjà sortis à [releasedBefore].
+  final String? sortBy;
+  final DateTime? releasedBefore;
 
   @override
   State<LibraryGrid> createState() => _LibraryGridState();
@@ -61,7 +68,7 @@ class _LibraryGridState extends State<LibraryGrid>
   /// On charge la suite quand il reste moins de cette distance à défiler.
   static const _loadMoreThreshold = 800.0;
 
-  final _scrollController = ScrollController();
+  late final _scrollController = widget.controller ?? ScrollController();
   final List<MediaItem> _items = [];
 
   /// Nombre total d'éléments sur le serveur (null tant qu'on ne le connaît pas).
@@ -84,7 +91,8 @@ class _LibraryGridState extends State<LibraryGrid>
 
   @override
   void dispose() {
-    _scrollController.dispose();
+    // Défilement fourni par l'écran : c'est lui qui le libère
+    if (widget.controller == null) _scrollController.dispose();
     super.dispose();
   }
 
@@ -112,6 +120,8 @@ class _LibraryGridState extends State<LibraryGrid>
         type: widget.itemType,
         startIndex: reset ? 0 : _items.length,
         limit: _pageSize,
+        sortBy: widget.sortBy,
+        releasedBefore: widget.releasedBefore,
       );
       if (!mounted) return;
       setState(() {
@@ -133,10 +143,8 @@ class _LibraryGridState extends State<LibraryGrid>
     }
   }
 
-  /// Tirer vers le bas : on recharge depuis le début (et le bloc du haut).
-  Future<void> _refresh() async {
-    await Future.wait([_loadMore(reset: true), ?widget.onRefresh?.call()]);
-  }
+  /// Tirer vers le bas : on recharge depuis le début.
+  Future<void> _refresh() => _loadMore(reset: true);
 
   /// Grille commune : vraies affiches, ou zones grises pendant le chargement.
   static const _gridDelegate = SliverGridDelegateWithMaxCrossAxisExtent(
@@ -150,13 +158,7 @@ class _LibraryGridState extends State<LibraryGrid>
   @override
   Widget build(BuildContext context) {
     super.build(context); // nécessaire pour AutomaticKeepAliveClientMixin
-    final header = widget.header;
-    final padding = EdgeInsets.fromLTRB(
-      16,
-      header == null ? widget.topPadding + 12 : 14,
-      16,
-      12,
-    );
+    final padding = EdgeInsets.fromLTRB(16, widget.topPadding + 12, 16, 12);
 
     // Premier chargement : la grille a déjà sa forme, en zones grises
     if (_items.isEmpty && _loading) {
@@ -196,11 +198,6 @@ class _LibraryGridState extends State<LibraryGrid>
         // Permet de tirer pour rafraîchir même avec peu d'éléments
         physics: const AlwaysScrollableScrollPhysics(),
         slivers: [
-          if (header != null)
-            SliverPadding(
-              padding: EdgeInsets.only(top: widget.topPadding + 16),
-              sliver: SliverToBoxAdapter(child: header),
-            ),
           SliverPadding(
             padding: padding,
             sliver: SliverGrid.builder(
@@ -249,7 +246,9 @@ class _LibraryGridState extends State<LibraryGrid>
         ),
       );
     }
-    return SizedBox(height: MediaQuery.paddingOf(context).bottom + 24);
+    return SizedBox(
+      height: MediaQuery.paddingOf(context).bottom + widget.bottomPadding + 24,
+    );
   }
 }
 

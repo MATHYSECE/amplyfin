@@ -9,8 +9,8 @@ import '../services/session_store.dart';
 import '../theme/app_theme.dart';
 import '../widgets/splash_view.dart';
 import 'downloads_screen.dart';
-import 'library_screen.dart';
 import 'login_screen.dart';
+import 'main_screen.dart';
 
 /// Premier écran affiché : le logo animé, pendant qu'on vérifie
 /// s'il faut se connecter ou si la session enregistrée est encore valable.
@@ -60,7 +60,7 @@ class _StartScreenState extends State<StartScreen> {
         return const LoginScreen();
       case ServerStatus.reachable:
         ConnectionMonitor.instance.start(api, session.userId, online: true);
-        return LibraryScreen(api: api, session: session);
+        return MainScreen(api: api, session: session);
       case ServerStatus.unreachable:
         // Hors ligne : on garde la session, et on ouvre les téléchargements
         // s'il y en a
@@ -72,7 +72,7 @@ class _StartScreenState extends State<StartScreen> {
         );
         return hasDownloads
             ? DownloadsScreen(api: api, session: session, isRoot: true)
-            : LibraryScreen(api: api, session: session);
+            : MainScreen(api: api, session: session);
     }
   }
 

@@ -19,7 +19,7 @@ import '../widgets/poster_image.dart';
 import '../widgets/transitions.dart';
 import '../widgets/ui.dart';
 import 'downloaded_series_screen.dart';
-import 'library_screen.dart';
+import 'main_screen.dart';
 import 'movie_screen.dart';
 import 'series_screen.dart';
 
@@ -140,7 +140,7 @@ class _DownloadsScreenState extends State<DownloadsScreen> with UndoDelete {
       PageRouteBuilder<void>(
         transitionDuration: AppDurations.medium,
         pageBuilder: (_, _, _) =>
-            LibraryScreen(api: widget.api, session: widget.session),
+            MainScreen(api: widget.api, session: widget.session),
         transitionsBuilder: (_, animation, _, child) =>
             FadeTransition(opacity: animation, child: child),
       ),

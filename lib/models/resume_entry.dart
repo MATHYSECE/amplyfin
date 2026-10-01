@@ -4,8 +4,9 @@ import 'media_item.dart';
 import 'media_track.dart';
 import 'watch_progress.dart';
 
-/// Un film ou un épisode commencé, pour la rangée « Continuer à regarder »
-/// (GET /UserItems/Resume).
+/// Un film ou un épisode de la rangée « Continuer à regarder » : commencé
+/// (GET /UserItems/Resume), ou prochain épisode d'une série en cours
+/// (GET /Shows/NextUp, avec [nextLabel]).
 class ResumeEntry {
   const ResumeEntry({
     required this.id,
@@ -19,9 +20,12 @@ class ResumeEntry {
     this.seasonId,
     this.runtime,
     this.tracks = const [],
+    this.nextLabel,
   });
 
-  factory ResumeEntry.fromJson(Map<String, dynamic> json) {
+  /// [nextLabel] : « Épisode suivant » ou « Nouvel épisode » pour un
+  /// épisode pas encore commencé.
+  factory ResumeEntry.fromJson(Map<String, dynamic> json, {String? nextLabel}) {
     final progress = WatchProgress.fromUserData(
       json['UserData'] as Map<String, dynamic>?,
     );
@@ -54,6 +58,7 @@ class ResumeEntry {
         progress: progress,
         runtime: runtime,
         tracks: tracks,
+        nextLabel: nextLabel,
       );
     }
 
@@ -99,7 +104,13 @@ class ResumeEntry {
   /// Pistes audio et sous-titres (pour appliquer les langues de la série).
   final List<MediaTrack> tracks;
 
+  /// « Épisode suivant » / « Nouvel épisode » (null : déjà commencé).
+  final String? nextLabel;
+
   bool get isEpisode => seriesId != null;
+
+  /// Vrai pour un épisode suivant, pas encore commencé.
+  bool get isNext => nextLabel != null;
 
   /// Temps restant affiché sur l'affiche : « Reste 14 min ».
   String? get remainingLabel => progress.remainingLabel(runtime);

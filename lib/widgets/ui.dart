@@ -427,3 +427,52 @@ class _EntranceAnimationState extends State<EntranceAnimation>
     );
   }
 }
+
+/// Rétrécit un peu [child] pendant qu'on appuie dessus (comme sur iPhone),
+/// puis lance [onTap] (ou [onLongPress] pour un appui long).
+class PressableScale extends StatefulWidget {
+  const PressableScale({
+    super.key,
+    required this.child,
+    this.onTap,
+    this.onLongPress,
+  });
+
+  final Widget child;
+  final VoidCallback? onTap;
+  final VoidCallback? onLongPress;
+
+  @override
+  State<PressableScale> createState() => _PressableScaleState();
+}
+
+class _PressableScaleState extends State<PressableScale> {
+  bool _pressed = false;
+
+  void _press(bool pressed) {
+    if (pressed != _pressed) setState(() => _pressed = pressed);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTapDown: (_) => _press(true),
+      onTapUp: (_) => _press(false),
+      onTapCancel: () => _press(false),
+      onTap: widget.onTap,
+      onLongPress: widget.onLongPress == null
+          ? null
+          : () {
+              _press(false);
+              widget.onLongPress!();
+            },
+      child: AnimatedScale(
+        scale: _pressed ? 0.95 : 1,
+        duration: AppDurations.fast,
+        curve: Curves.easeOutCubic,
+        child: widget.child,
+      ),
+    );
+  }
+}

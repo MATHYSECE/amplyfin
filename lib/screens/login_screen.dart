@@ -5,7 +5,7 @@ import '../services/connection_monitor.dart';
 import '../services/session_store.dart';
 import '../theme/app_theme.dart';
 import '../widgets/ui.dart';
-import 'library_screen.dart';
+import 'main_screen.dart';
 
 /// Écran de connexion : adresse du serveur, identifiant, mot de passe.
 class LoginScreen extends StatefulWidget {
@@ -80,7 +80,7 @@ class _LoginScreenState extends State<LoginScreen> {
       if (!mounted) return;
       Navigator.of(context).pushReplacement(
         MaterialPageRoute(
-          builder: (_) => LibraryScreen(api: api, session: session),
+          builder: (_) => MainScreen(api: api, session: session),
         ),
       );
     } on FormatException {

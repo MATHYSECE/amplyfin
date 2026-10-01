@@ -14,6 +14,7 @@ import '../models/resume_entry.dart';
 import '../models/season.dart';
 import '../models/session.dart';
 import '../models/track_choice.dart';
+import '../models/watch_progress.dart';
 import 'device_profile.dart';
 
 /// Erreur lisible renvoyée par [JellyfinApi].
@@ -116,11 +117,16 @@ class JellyfinApi {
   /// GET /Items : une page de films ou de séries de l'utilisateur, triés
   /// par titre. [type] : « Movie » ou « Series ».
   /// [startIndex] = position du premier élément voulu, [limit] = taille de la page.
+  /// [sortBy] : autre tri (ex. « DateCreated » : ajoutés récemment,
+  /// « PremiereDate » : sortis récemment), du plus récent au plus ancien.
+  /// [releasedBefore] : seulement ceux déjà sortis à cette date.
   Future<ItemPage> getItems({
     required String userId,
     required String type,
     int startIndex = 0,
     int limit = 50,
+    String? sortBy,
+    DateTime? releasedBefore,
   }) async {
     final json = await _send(
       'GET',
@@ -129,8 +135,10 @@ class JellyfinApi {
         'userId': userId,
         'includeItemTypes': type,
         'recursive': 'true',
-        'sortBy': 'SortName',
-        'sortOrder': 'Ascending',
+        'sortBy': sortBy == null ? 'SortName' : '$sortBy,SortName',
+        'sortOrder': sortBy == null ? 'Ascending' : 'Descending',
+        if (releasedBefore != null)
+          'maxPremiereDate': releasedBefore.toUtc().toIso8601String(),
         'startIndex': '$startIndex',
         'limit': '$limit',
         // On ne veut que l'affiche, pas les autres images
@@ -248,6 +256,98 @@ class JellyfinApi {
     );
     final items = (json['Items'] as List<dynamic>?) ?? [];
     return [for (final item in items) ResumeEntry.fromJson(item)];
+  }
+
+  /// GET /Shows/NextUp : le prochain épisode à regarder de chaque série en
+  /// cours (pas ceux déjà commencés : ils sont dans [getResumeItems]).
+  /// [seriesId] : seulement cette série. Les séries regardées il y a plus
+  /// d'un an sont laissées de côté.
+  Future<List<Map<String, dynamic>>> getNextUp({
+    required String userId,
+    String? seriesId,
+    int limit = 20,
+  }) async {
+    final cutoff = DateTime.now().subtract(const Duration(days: 365));
+    final json = await _send(
+      'GET',
+      '/Shows/NextUp',
+      query: {
+        'userId': userId,
+        'limit': '$limit',
+        'seriesId': ?seriesId,
+        // Date d'ajout : pour « Nouvel épisode » ; pistes : langues de la série
+        'fields': 'MediaStreams,DateCreated',
+        'enableUserData': 'true',
+        'enableImageTypes': 'Primary',
+        'imageTypeLimit': '1',
+        'enableResumable': 'false',
+        'enableRewatching': 'false',
+        'nextUpDateCutoff': cutoff.toUtc().toIso8601String(),
+        'enableTotalRecordCount': 'false',
+      },
+    );
+    return [
+      for (final item in (json['Items'] as List<dynamic>?) ?? [])
+        item as Map<String, dynamic>,
+    ];
+  }
+
+  /// GET /Items/Latest : les derniers ajouts. [types] : « Movie »,
+  /// « Episode »… Avec [groupItems], les épisodes d'une même série sont
+  /// regroupés (la série est renvoyée, avec leur nombre dans ChildCount).
+  Future<List<Map<String, dynamic>>> getLatest({
+    required String userId,
+    required String types,
+    int limit = 16,
+    bool groupItems = false,
+  }) async {
+    final json = await _send(
+      'GET',
+      '/Items/Latest',
+      query: {
+        'userId': userId,
+        'includeItemTypes': types,
+        'limit': '$limit',
+        'groupItems': '$groupItems',
+        // Résumé et genres : pour « À la une » ; date : « Ajouté hier »
+        'fields': 'Overview,Genres,DateCreated',
+        'enableUserData': 'true',
+        'enableImageTypes': 'Primary,Backdrop',
+        'imageTypeLimit': '1',
+      },
+    );
+    return [
+      for (final item in (json as List<dynamic>?) ?? [])
+        item as Map<String, dynamic>,
+    ];
+  }
+
+  /// GET /Items?ids=… : où en est chaque élément (ex. pour une série : la
+  /// part d'épisodes vus et la dernière lecture), identifiant → progression.
+  Future<Map<String, WatchProgress>> getUserData({
+    required String userId,
+    required List<String> itemIds,
+  }) async {
+    if (itemIds.isEmpty) return {};
+    final json = await _send(
+      'GET',
+      '/Items',
+      query: {
+        'userId': userId,
+        'ids': itemIds.join(','),
+        // Nécessaire pour que le serveur calcule la part vue d'une série
+        'fields': 'RecursiveItemCount',
+        'enableUserData': 'true',
+        'enableImages': 'false',
+      },
+    );
+    return {
+      for (final item in (json['Items'] as List<dynamic>?) ?? [])
+        (item as Map<String, dynamic>)['Id']
+            as String: WatchProgress.fromUserData(
+          item['UserData'] as Map<String, dynamic>?,
+        ),
+    };
   }
 
   /// POST /UserItems/{id}/UserData : change où en est la lecture d'un film
