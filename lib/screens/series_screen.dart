@@ -27,6 +27,7 @@ class SeriesScreen extends StatefulWidget {
     required this.session,
     required this.series,
     this.initialSeasonId,
+    this.heroTag,
   });
 
   final JellyfinApi api;
@@ -35,6 +36,9 @@ class SeriesScreen extends StatefulWidget {
 
   /// Saison à ouvrir (ex. celle de l'épisode en cours). Null : la saison 1.
   final String? initialSeasonId;
+
+  /// Nom de l'animation de l'affiche (celui de la grille par défaut).
+  final String? heroTag;
 
   @override
   State<SeriesScreen> createState() => _SeriesScreenState();
@@ -288,6 +292,7 @@ class _SeriesScreenState extends State<SeriesScreen> {
           ?details?.officialRating,
         ],
         rating: details?.ratingLabel,
+        heroTag: widget.heroTag,
       ),
       children: [
         if (details != null)
@@ -354,6 +359,7 @@ class _SeriesScreenState extends State<SeriesScreen> {
     final selected = _selectedSeason;
     final shownId = _shownSeasonId;
     final episodes = shownId == null ? null : _episodes[shownId];
+    final shownSeason = seasons.where((s) => s.id == shownId).firstOrNull;
     // La saison choisie charge encore (l'ancienne liste reste affichée)
     final switching =
         selected != null &&
@@ -380,6 +386,17 @@ class _SeriesScreenState extends State<SeriesScreen> {
           ],
         ),
       ),
+      // Télécharger toute la saison affichée
+      if (episodes != null && episodes.isNotEmpty && shownSeason != null) ...[
+        const SizedBox(height: 12),
+        SeasonDownloadButton(
+          key: ValueKey(shownSeason.id),
+          api: widget.api,
+          userId: _userId,
+          seasonName: shownSeason.name,
+          episodes: episodes,
+        ),
+      ],
       const SizedBox(height: 10),
       // Fine barre de chargement, sans changer la hauteur de la page
       SizedBox(

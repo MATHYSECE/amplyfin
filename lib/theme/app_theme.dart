@@ -86,6 +86,10 @@ abstract final class AppSubtitles {
 abstract final class AppDurations {
   static const fast = Duration(milliseconds: 180);
   static const medium = Duration(milliseconds: 280);
+
+  /// Mouvements marqués (une ligne qui change de place, un écran qui
+  /// s'ouvre en cercle).
+  static const emphasized = Duration(milliseconds: 480);
 }
 
 /// Construit le thème de l'appli.

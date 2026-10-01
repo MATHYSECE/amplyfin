@@ -23,11 +23,15 @@ class MovieScreen extends StatefulWidget {
     required this.api,
     required this.session,
     required this.movie,
+    this.heroTag,
   });
 
   final JellyfinApi api;
   final Session session;
   final MediaItem movie;
+
+  /// Nom de l'animation de l'affiche (celui de la grille par défaut).
+  final String? heroTag;
 
   @override
   State<MovieScreen> createState() => _MovieScreenState();
@@ -193,6 +197,7 @@ class _MovieScreenState extends State<MovieScreen> {
       ],
       const SizedBox(height: 14),
       _buildSecondaryButtons(details, resume: resume),
+      OfflineNote(itemId: widget.movie.id),
     ];
   }
 
@@ -289,6 +294,7 @@ class _MovieScreenState extends State<MovieScreen> {
           ?details?.officialRating,
         ],
         rating: details?.ratingLabel,
+        heroTag: widget.heroTag,
         // Qualité du fichier : 4K, HEVC, HDR10, E-AC3 5.1…
         chips: details?.quality?.labels ?? const [],
       ),

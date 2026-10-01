@@ -211,8 +211,9 @@ class JellyfinApi {
       query: {
         'userId': userId,
         'seasonId': seasonId,
-        // Résumé et pistes (pour la qualité) ne sont pas envoyés par défaut
-        'fields': 'Overview,MediaStreams',
+        // Résumé, pistes (pour la qualité) et fichiers (pour la taille) ne
+        // sont pas envoyés par défaut
+        'fields': 'Overview,MediaStreams,MediaSources',
         'enableImageTypes': 'Primary',
         'imageTypeLimit': '1',
         // Pour savoir si l'épisode a déjà été vu
@@ -281,6 +282,15 @@ class JellyfinApi {
   /// Null si l'épisode n'a pas de vignette.
   String? episodeImageUrl(Episode episode, {required int width}) =>
       _imageUrl(episode.id, 'Primary', episode.imageTag, width);
+
+  /// Adresse d'une image quelconque d'un élément ([type] : « Primary »,
+  /// « Backdrop »…), [width] pixels de large. Null si [tag] est null.
+  String? imageUrl({
+    required String itemId,
+    required String type,
+    required String? tag,
+    required int width,
+  }) => _imageUrl(itemId, type, tag, width);
 
   /// GET /Items/{id}/Images/{type} : image redimensionnée par le serveur.
   /// Cet appel ne demande pas de jeton. Le [tag] (empreinte de l'image)

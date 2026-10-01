@@ -20,6 +20,10 @@ class PosterImage extends StatelessWidget {
   /// Nom commun de l'animation « l'affiche glisse de la grille vers la fiche ».
   static String heroTag(MediaItem item) => 'poster-${item.id}';
 
+  /// Même chose depuis l'écran des téléchargements (nom à part : sinon
+  /// l'affiche de la bibliothèque volerait aussi vers cet écran).
+  static String downloadHeroTag(MediaItem item) => 'download-poster-${item.id}';
+
   @override
   Widget build(BuildContext context) {
     final url = api.posterUrl(item, width: pixelWidth);

@@ -12,8 +12,11 @@ import '../services/session_store.dart';
 import '../services/track_preferences.dart';
 import '../theme/app_theme.dart';
 import '../widgets/continue_watching.dart';
+import '../widgets/download_controls.dart';
 import '../widgets/library_grid.dart';
+import '../widgets/transitions.dart';
 import '../widgets/ui.dart';
+import 'downloads_screen.dart';
 import 'login_screen.dart';
 import 'movie_screen.dart';
 import 'series_screen.dart';
@@ -112,6 +115,9 @@ class _LibraryScreenState extends State<LibraryScreen>
     messenger.showSnackBar(
       SnackBar(
         content: const Text('Retiré de Continuer à regarder'),
+        // Disparaît tout seul, même avec un bouton
+        persist: false,
+        duration: const Duration(seconds: 5),
         action: SnackBarAction(
           label: 'Annuler',
           textColor: AppColors.white,
@@ -184,6 +190,19 @@ class _LibraryScreenState extends State<LibraryScreen>
                 session: widget.session,
                 movie: item,
               ),
+      ),
+    );
+    await _loadResume();
+  }
+
+  /// Écran des téléchargements, ouvert en cercle depuis le bouton.
+  /// Au retour, la rangée « Continuer à regarder » est mise à jour.
+  Future<void> _openDownloads(Offset center) async {
+    await Navigator.of(context).push(
+      CircleRevealRoute<void>(
+        center: center,
+        builder: (_) =>
+            DownloadsScreen(api: widget.api, session: widget.session),
       ),
     );
     await _loadResume();
@@ -286,6 +305,8 @@ class _LibraryScreenState extends State<LibraryScreen>
                                     .headlineMedium,
                               ),
                             ),
+                            DownloadsButton(onPressed: _openDownloads),
+                            const SizedBox(width: 10),
                             GlassCircleButton(
                               icon: Icons.logout_rounded,
                               tooltip: 'Se déconnecter',

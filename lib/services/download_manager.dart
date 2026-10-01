@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:collection';
 import 'dart:convert';
 import 'dart:io';
 
@@ -20,6 +21,7 @@ class DownloadState {
     this.expectedSize,
     this.info,
     this.error,
+    this.createdAt,
   });
 
   final DownloadPhase phase;
@@ -35,6 +37,9 @@ class DownloadState {
 
   /// Message à afficher si le téléchargement a échoué.
   final String? error;
+
+  /// Moment où le téléchargement a été demandé (pour l'ordre des listes).
+  final DateTime? createdAt;
 
   bool get isActive =>
       phase == DownloadPhase.waiting ||
@@ -61,6 +66,7 @@ class DownloadState {
     expectedSize: expectedSize ?? this.expectedSize,
     info: info ?? this.info,
     error: error,
+    createdAt: createdAt,
   );
 }
 
@@ -75,9 +81,13 @@ class DownloadManager extends ChangeNotifier {
   static final instance = DownloadManager._();
 
   /// Groupe des vidéos, et groupe des petits fichiers qui les accompagnent
-  /// (affiche, sous-titres séparés).
+  /// (affiche, fond, vignette, sous-titres séparés).
   static const _mediaGroup = 'media';
   static const _extrasGroup = 'extras';
+
+  /// Vidéos téléchargées en même temps : les autres attendent leur tour
+  /// (une saison entière ne se partage pas le Wi-Fi en 22 morceaux).
+  static const _maxParallel = 2;
 
   /// Dossier des téléchargements (non sauvegardé dans iCloud).
   static const _directory = 'downloads';
@@ -86,12 +96,41 @@ class DownloadManager extends ChangeNotifier {
   final Map<String, DownloadState> _states = {};
   Future<void>? _ready;
 
+  /// Chemin complet du dossier des téléchargements (connu après [init]).
+  String? _directoryPath;
+
   /// État du téléchargement de cet élément (rien si jamais téléchargé).
   DownloadState stateOf(String itemId) =>
       _states[itemId] ?? const DownloadState();
 
+  /// Tous les téléchargements connus (identifiant → état).
+  Map<String, DownloadState> get states => UnmodifiableMapView(_states);
+
   /// Nombre de téléchargements pas encore terminés.
   int get activeCount => _states.values.where((s) => s.isActive).length;
+
+  /// Avancée de l'ensemble des téléchargements en cours, de 0 à 1
+  /// (null s'il n'y en a pas, ou si les tailles sont inconnues).
+  double? get activeProgress {
+    var total = 0;
+    var received = 0;
+    for (final state in _states.values.where((s) => s.isActive)) {
+      total += state.size ?? 0;
+      received += state.receivedBytes ?? 0;
+    }
+    return total == 0 ? null : received / total;
+  }
+
+  /// Place prise sur le téléphone par les vidéos (terminées, et la partie
+  /// déjà reçue de celles en cours), en octets.
+  int get usedBytes => _states.values.fold(
+    0,
+    (sum, s) =>
+        sum +
+        (s.phase == DownloadPhase.complete
+            ? (s.size ?? 0)
+            : (s.isActive ? (s.receivedBytes ?? 0) : 0)),
+  );
 
   /// Prépare le téléchargeur au démarrage de l'appli : réglages,
   /// notifications, et reprise des téléchargements déjà connus.
@@ -105,6 +144,8 @@ class DownloadManager extends ChangeNotifier {
         (Config.excludeFromCloudBackup, Config.always),
         // iPhone : temps laissé pour finir un gros fichier (4 h par défaut)
         (Config.resourceTimeout, const Duration(hours: 48)),
+        // Deux vidéos à la fois au plus (par groupe)
+        (Config.holdingQueue, (null, null, _maxParallel)),
       ],
       // Android : service de premier plan (notification) pour les longs
       // téléchargements, sinon Android les coupe au bout de 9 minutes
@@ -126,6 +167,7 @@ class DownloadManager extends ChangeNotifier {
     );
     downloader.updates.listen(_onUpdate);
     await downloader.start();
+    _directoryPath = File(await _filePath('_')).parent.path;
 
     // Téléchargements déjà connus (terminés, ou en cours avant la fermeture)
     for (final record in await downloader.database.allRecords(
@@ -139,6 +181,7 @@ class DownloadManager extends ChangeNotifier {
         expectedSize: record.expectedFileSize,
         info: _infoOf(record.task),
         error: _errorOf(record.status, record.exception),
+        createdAt: record.task.creationTime,
       );
     }
     notifyListeners();
@@ -149,25 +192,62 @@ class DownloadManager extends ChangeNotifier {
     required JellyfinApi api,
     required String userId,
     required String itemId,
+  }) => startAll(api: api, userId: userId, itemIds: [itemId]);
+
+  /// Lance le téléchargement de plusieurs éléments (ex. une saison) :
+  /// tous passent tout de suite « en attente », puis sont mis en file un
+  /// par un. Ceux déjà téléchargés ou en cours sont laissés tels quels.
+  Future<void> startAll({
+    required JellyfinApi api,
+    required String userId,
+    required List<String> itemIds,
   }) async {
     await init();
-    final current = stateOf(itemId);
-    if (current.isActive || current.phase == DownloadPhase.complete) return;
-    _update(itemId, const DownloadState(phase: DownloadPhase.waiting));
+    final todo = [
+      for (final id in itemIds)
+        if (!stateOf(id).isActive &&
+            stateOf(id).phase != DownloadPhase.complete)
+          id,
+    ];
+    if (todo.isEmpty) return;
+    final now = DateTime.now();
+    for (final (i, id) in todo.indexed) {
+      _states[id] = DownloadState(
+        phase: DownloadPhase.waiting,
+        createdAt: now.add(Duration(milliseconds: i)),
+      );
+    }
+    notifyListeners();
     await _askNotificationPermission();
+    for (final id in todo) {
+      // Annulé entre-temps : on passe au suivant
+      if (_states[id]?.phase != DownloadPhase.waiting) continue;
+      await _enqueue(api, userId, id);
+    }
+  }
 
+  /// Récupère la fiche de l'élément, puis le met dans la file.
+  Future<void> _enqueue(JellyfinApi api, String userId, String itemId) async {
+    final createdAt = _states[itemId]?.createdAt;
     final DownloadInfo info;
     try {
       info = DownloadInfo.fromItemJson(
         await api.getItemJson(userId: userId, itemId: itemId),
       );
     } on JellyfinException catch (e) {
+      if (!_states.containsKey(itemId)) return;
       _update(
         itemId,
-        DownloadState(phase: DownloadPhase.failed, error: e.message),
+        DownloadState(
+          phase: DownloadPhase.failed,
+          error: e.message,
+          createdAt: createdAt,
+        ),
       );
       return;
     }
+    // Annulé pendant qu'on attendait le serveur
+    if (!_states.containsKey(itemId)) return;
 
     // Un ancien essai raté ne doit pas gêner le nouveau
     await FileDownloader().database.deleteRecordWithId(itemId);
@@ -185,8 +265,16 @@ class DownloadManager extends ChangeNotifier {
       retries: 5,
       displayName: info.displayName,
       metaData: jsonEncode(info.toJson()),
+      creationTime: createdAt,
     );
-    _update(itemId, DownloadState(phase: DownloadPhase.waiting, info: info));
+    _update(
+      itemId,
+      DownloadState(
+        phase: DownloadPhase.waiting,
+        info: info,
+        createdAt: createdAt,
+      ),
+    );
     if (!await FileDownloader().enqueue(task)) {
       _update(
         itemId,
@@ -194,6 +282,7 @@ class DownloadManager extends ChangeNotifier {
           phase: DownloadPhase.failed,
           info: info,
           error: 'Le téléchargement n\'a pas pu démarrer.',
+          createdAt: createdAt,
         ),
       );
       return;
@@ -201,11 +290,28 @@ class DownloadManager extends ChangeNotifier {
     _downloadExtras(api, info);
   }
 
-  /// Affiche et sous-titres séparés : petits fichiers, sans notification.
+  /// Affiche, image de fond, vignette et sous-titres séparés : petits
+  /// fichiers, sans notification.
   void _downloadExtras(JellyfinApi api, DownloadInfo info) {
     final posterUrl = api.posterUrl(info.posterItem, width: 400);
+    final backdropUrl = info.backdropItemId == null
+        ? null
+        : api.imageUrl(
+            itemId: info.backdropItemId!,
+            type: 'Backdrop',
+            tag: info.backdropTag,
+            width: 1280,
+          );
+    final thumbUrl = api.imageUrl(
+      itemId: info.itemId,
+      type: 'Primary',
+      tag: info.imageTag,
+      width: 480,
+    );
     final extras = [
       if (posterUrl != null) (posterUrl, _posterFile(info.itemId)),
+      if (backdropUrl != null) (backdropUrl, _backdropFile(info.itemId)),
+      if (thumbUrl != null) (thumbUrl, _thumbFile(info.itemId)),
       for (final track in info.externalSubtitles)
         (
           api.subtitleFileUrl(
@@ -234,27 +340,55 @@ class DownloadManager extends ChangeNotifier {
     }
   }
 
+  /// Met en pause un téléchargement en cours.
+  Future<void> pause(String itemId) async {
+    final task = await _taskOf(itemId);
+    if (task != null) await FileDownloader().pause(task);
+  }
+
+  /// Reprend un téléchargement en pause là où il s'était arrêté
+  /// (ou depuis le début si le serveur ne le permet pas).
+  Future<void> resume(String itemId) async {
+    final task = await _taskOf(itemId);
+    if (task == null) return;
+    if (!await FileDownloader().resume(task)) {
+      await FileDownloader().enqueue(task);
+    }
+  }
+
+  /// Tâche enregistrée pour cet élément (null si inconnue).
+  Future<DownloadTask?> _taskOf(String itemId) async {
+    final task = (await FileDownloader().database.recordForId(itemId))?.task;
+    return task is DownloadTask ? task : null;
+  }
+
   /// Annule un téléchargement en cours, ou supprime un téléchargement
   /// terminé : fichiers effacés du téléphone.
-  Future<void> remove(String itemId) async {
+  Future<void> remove(String itemId) => removeAll([itemId]);
+
+  /// Comme [remove], pour plusieurs éléments à la fois (ex. une saison).
+  Future<void> removeAll(Iterable<String> itemIds) async {
     await init();
-    final info = stateOf(itemId).info;
-    _states.remove(itemId);
+    final removed = {for (final id in itemIds) id: _states.remove(id)?.info};
     notifyListeners();
 
     final downloader = FileDownloader();
-    await downloader.cancelTaskWithId(itemId);
-    await downloader.database.deleteRecordWithId(itemId);
-    final names = [
-      if (info != null) info.fileName,
-      _posterFile(itemId),
-      for (final track in info?.externalSubtitles ?? const []) ...[
-        _subtitleFile(itemId, track.index),
-      ],
-    ];
-    for (final name in names) {
-      await downloader.cancelTaskWithId(name);
-      await _deleteFile(name);
+    for (final MapEntry(key: itemId, value: info) in removed.entries) {
+      await downloader.cancelTaskWithId(itemId);
+      await downloader.database.deleteRecordWithId(itemId);
+      final names = [
+        if (info != null) info.fileName,
+        _posterFile(itemId),
+        _backdropFile(itemId),
+        _thumbFile(itemId),
+        for (final track in info?.externalSubtitles ?? const []) ...[
+          _subtitleFile(itemId, track.index),
+        ],
+      ];
+      for (final name in names) {
+        await downloader.cancelTaskWithId(name);
+        await _deleteFile(name);
+      }
     }
   }
 
@@ -273,6 +407,20 @@ class DownloadManager extends ChangeNotifier {
       if (File(path).existsSync()) subtitles[track.index] = path;
     }
     return info.localPlaybackInfo(video, subtitleFiles: subtitles);
+  }
+
+  /// Fichiers d'images gardés sur le téléphone (null avant [init]). Le
+  /// fichier peut manquer (image absente sur le serveur, ancien
+  /// téléchargement) : prévoir une image de secours.
+  File? posterFile(String itemId) => _localFile(_posterFile(itemId));
+  File? backdropFile(String itemId) => _localFile(_backdropFile(itemId));
+  File? thumbFile(String itemId) => _localFile(_thumbFile(itemId));
+
+  File? _localFile(String name) {
+    final directory = _directoryPath;
+    return directory == null
+        ? null
+        : File('$directory${Platform.pathSeparator}$name');
   }
 
   // ---------- Suivi des téléchargements ----------
@@ -353,6 +501,10 @@ class DownloadManager extends ChangeNotifier {
   // ---------- Fichiers ----------
 
   static String _posterFile(String itemId) => '$itemId.poster.jpg';
+
+  static String _backdropFile(String itemId) => '$itemId.backdrop.jpg';
+
+  static String _thumbFile(String itemId) => '$itemId.thumb.jpg';
 
   static String _subtitleFile(String itemId, int index) =>
       '$itemId.sub$index.srt';

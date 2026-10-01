@@ -279,6 +279,7 @@ class DetailsHeader extends StatelessWidget {
     this.infos = const [],
     this.rating,
     this.chips = const [],
+    this.heroTag,
   });
 
   final JellyfinApi api;
@@ -286,6 +287,9 @@ class DetailsHeader extends StatelessWidget {
   final List<String> infos;
   final String? rating;
   final List<String> chips;
+
+  /// Nom de l'animation de l'affiche (celui de la grille par défaut).
+  final String? heroTag;
 
   @override
   Widget build(BuildContext context) {
@@ -308,7 +312,7 @@ class DetailsHeader extends StatelessWidget {
             ],
           ),
           child: Hero(
-            tag: PosterImage.heroTag(item),
+            tag: heroTag ?? PosterImage.heroTag(item),
             child: PosterImage(api: api, item: item),
           ),
         ),

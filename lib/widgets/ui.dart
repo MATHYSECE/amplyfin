@@ -97,16 +97,19 @@ class ProgressLine extends StatelessWidget {
 }
 
 /// Bouton rond « en verre » (retour, déconnexion, infos…).
+/// [child] remplace l'icône (ex. icône animée).
 class GlassCircleButton extends StatelessWidget {
   const GlassCircleButton({
     super.key,
-    required this.icon,
+    this.icon,
+    this.child,
     required this.tooltip,
     required this.onPressed,
     this.size = 44,
-  });
+  }) : assert(icon != null || child != null);
 
-  final IconData icon;
+  final IconData? icon;
+  final Widget? child;
   final String tooltip;
   final VoidCallback? onPressed;
   final double size;
@@ -126,7 +129,10 @@ class GlassCircleButton extends StatelessWidget {
           child: SizedBox(
             width: size,
             height: size,
-            child: Icon(icon, size: size * 0.45, color: AppColors.white),
+            child: IconTheme.merge(
+              data: IconThemeData(size: size * 0.45, color: AppColors.white),
+              child: Center(child: child ?? Icon(icon)),
+            ),
           ),
         ),
       ),
@@ -315,6 +321,109 @@ class _SkeletonBoxState extends State<SkeletonBox>
           ),
         );
       },
+    );
+  }
+}
+
+/// Demande confirmation avant une action (supprimer, annuler…) : la
+/// fenêtre apparaît en fondu avec un léger rebond. Vrai si confirmé.
+Future<bool> showConfirmDialog(
+  BuildContext context, {
+  required String title,
+  required String message,
+  required String action,
+  String cancel = 'Garder',
+}) async {
+  final confirmed = await showGeneralDialog<bool>(
+    context: context,
+    barrierDismissible: true,
+    barrierLabel: cancel,
+    barrierColor: AppColors.scrim55,
+    transitionDuration: AppDurations.medium,
+    pageBuilder: (context, _, _) => AlertDialog(
+      title: Text(title),
+      content: Text(message),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(false),
+          child: Text(cancel),
+        ),
+        FilledButton(
+          onPressed: () => Navigator.of(context).pop(true),
+          child: Text(action),
+        ),
+      ],
+    ),
+    transitionBuilder: (context, animation, _, child) => FadeTransition(
+      opacity: CurvedAnimation(parent: animation, curve: Curves.easeOut),
+      child: ScaleTransition(
+        scale: Tween(begin: 0.9, end: 1.0).animate(
+          CurvedAnimation(
+            parent: animation,
+            curve: Curves.easeOutBack,
+            reverseCurve: Curves.easeInCubic,
+          ),
+        ),
+        child: child,
+      ),
+    ),
+  );
+  return confirmed == true;
+}
+
+/// Fait apparaître [child] en fondu, en remontant un peu, après [delay] :
+/// les blocs d'un écran qui s'ouvre arrivent les uns après les autres.
+class EntranceAnimation extends StatefulWidget {
+  const EntranceAnimation({
+    super.key,
+    this.delay = Duration.zero,
+    required this.child,
+  });
+
+  final Duration delay;
+  final Widget child;
+
+  @override
+  State<EntranceAnimation> createState() => _EntranceAnimationState();
+}
+
+class _EntranceAnimationState extends State<EntranceAnimation>
+    with SingleTickerProviderStateMixin {
+  late final _controller = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 420),
+  );
+  late final _curve = CurvedAnimation(
+    parent: _controller,
+    curve: Curves.easeOutCubic,
+  );
+
+  @override
+  void initState() {
+    super.initState();
+    Future.delayed(widget.delay, () {
+      if (mounted) _controller.forward();
+    });
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return FadeTransition(
+      opacity: _curve,
+      child: AnimatedBuilder(
+        animation: _curve,
+        builder: (context, child) => Transform.translate(
+          offset: Offset(0, 16 * (1 - _curve.value)),
+          child: child,
+        ),
+        child: widget.child,
+      ),
     );
   }
 }

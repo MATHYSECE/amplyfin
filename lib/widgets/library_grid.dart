@@ -4,6 +4,7 @@ import '../api/jellyfin_api.dart';
 import '../models/media_item.dart';
 import '../models/session.dart';
 import '../theme/app_theme.dart';
+import 'download_controls.dart';
 import 'poster_image.dart';
 import 'ui.dart';
 
@@ -286,9 +287,21 @@ class _PosterTile extends StatelessWidget {
                   ),
                 ],
               ),
-              child: Hero(
-                tag: PosterImage.heroTag(item),
-                child: PosterImage(api: api, item: item),
+              child: Stack(
+                fit: StackFit.expand,
+                children: [
+                  Hero(
+                    tag: PosterImage.heroTag(item),
+                    child: PosterImage(api: api, item: item),
+                  ),
+                  // Film téléchargé : petite coche en haut à droite
+                  if (!item.isSeries)
+                    Positioned(
+                      top: 6,
+                      right: 6,
+                      child: DownloadedMark(itemId: item.id),
+                    ),
+                ],
               ),
             ),
           ),

@@ -23,6 +23,11 @@ class DownloadInfo {
     this.streams = const [],
     this.defaultAudioIndex,
     this.defaultSubtitleIndex,
+    this.overview,
+    this.seasonId,
+    this.imageTag,
+    this.backdropItemId,
+    this.backdropTag,
   });
 
   /// Lit la fiche complète renvoyée par GET /Items/{id} au moment du
@@ -34,6 +39,10 @@ class DownloadInfo {
         : sources.first as Map<String, dynamic>;
     final isEpisode = json['Type'] == 'Episode';
     final imageTags = json['ImageTags'] as Map<String, dynamic>?;
+    // Image de fond : la sienne, sinon celle de la série (épisode)
+    final ownBackdrops = (json['BackdropImageTags'] as List<dynamic>?) ?? [];
+    final parentBackdrops =
+        (json['ParentBackdropImageTags'] as List<dynamic>?) ?? [];
     return DownloadInfo(
       itemId: json['Id'] as String,
       name: (json['Name'] as String?) ?? 'Sans titre',
@@ -56,6 +65,18 @@ class DownloadInfo {
               as List<dynamic>,
       defaultAudioIndex: source['DefaultAudioStreamIndex'] as int?,
       defaultSubtitleIndex: source['DefaultSubtitleStreamIndex'] as int?,
+      overview: json['Overview'] as String?,
+      seasonId: json['SeasonId'] as String?,
+      // Vignette propre à l'épisode (l'affiche est celle de la série)
+      imageTag: isEpisode ? (imageTags?['Primary'] as String?) : null,
+      backdropItemId: ownBackdrops.isNotEmpty
+          ? json['Id'] as String
+          : json['ParentBackdropItemId'] as String?,
+      backdropTag: ownBackdrops.isNotEmpty
+          ? ownBackdrops.first as String?
+          : (parentBackdrops.isNotEmpty
+                ? parentBackdrops.first as String?
+                : null),
     );
   }
 
@@ -77,6 +98,11 @@ class DownloadInfo {
     streams: (json['streams'] as List<dynamic>?) ?? const [],
     defaultAudioIndex: json['defaultAudioIndex'] as int?,
     defaultSubtitleIndex: json['defaultSubtitleIndex'] as int?,
+    overview: json['overview'] as String?,
+    seasonId: json['seasonId'] as String?,
+    imageTag: json['imageTag'] as String?,
+    backdropItemId: json['backdropItemId'] as String?,
+    backdropTag: json['backdropTag'] as String?,
   );
 
   Map<String, dynamic> toJson() => {
@@ -96,6 +122,11 @@ class DownloadInfo {
     'streams': streams,
     'defaultAudioIndex': defaultAudioIndex,
     'defaultSubtitleIndex': defaultSubtitleIndex,
+    'overview': overview,
+    'seasonId': seasonId,
+    'imageTag': imageTag,
+    'backdropItemId': backdropItemId,
+    'backdropTag': backdropTag,
   };
 
   final String itemId;
@@ -128,6 +159,21 @@ class DownloadInfo {
 
   final int? defaultAudioIndex;
   final int? defaultSubtitleIndex;
+
+  /// Résumé (du film, ou de l'épisode).
+  final String? overview;
+
+  /// Saison de l'épisode sur le serveur (pour ouvrir la fiche de la série
+  /// sur la bonne saison).
+  final String? seasonId;
+
+  /// Empreinte de la vignette de l'épisode (null pour un film).
+  final String? imageTag;
+
+  /// Élément dont vient l'image de fond (le film, ou la série de
+  /// l'épisode), et son empreinte (null s'il n'y en a pas).
+  final String? backdropItemId;
+  final String? backdropTag;
 
   List<MediaTrack> get tracks => tracksFromStreams(streams);
 
@@ -165,16 +211,24 @@ class DownloadInfo {
     return [seriesName ?? name, ?code].join(' · ');
   }
 
+  /// Code court de l'épisode : « S5 · É1 » (null pour un film).
+  String? get episodeCode => (seasonNumber != null && episodeNumber != null)
+      ? 'S$seasonNumber · É$episodeNumber'
+      : null;
+
+  /// Titre dans une liste d'épisodes : « 1. Las Vegas ».
+  String get episodeTitle =>
+      episodeNumber == null ? name : '$episodeNumber. $name';
+
+  String? get runtimeLabel => formatRuntime(runtime);
+
   /// Titre en gras dans le lecteur : la série (ou le film).
   String get playerTitle => isEpisode ? (seriesName ?? name) : name;
 
   /// Petite ligne sous le titre du lecteur : « S5 · É1 · Las Vegas ».
   String? get playerSubtitle {
     if (!isEpisode) return null;
-    final code = (seasonNumber != null && episodeNumber != null)
-        ? 'S$seasonNumber · É$episodeNumber'
-        : null;
-    return [?code, name].join(' · ');
+    return [?episodeCode, name].join(' · ');
   }
 
   /// Comment lire le fichier téléchargé : lecture directe du fichier

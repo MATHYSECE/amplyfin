@@ -17,10 +17,15 @@ class Episode {
     this.progress = const WatchProgress(),
     this.quality,
     this.tracks = const [],
+    this.fileSize,
   });
 
   factory Episode.fromJson(Map<String, dynamic> json) {
     final imageTags = json['ImageTags'] as Map<String, dynamic>?;
+    final sources = json['MediaSources'] as List<dynamic>?;
+    final source = (sources != null && sources.isNotEmpty)
+        ? sources.first as Map<String, dynamic>
+        : null;
     return Episode(
       id: json['Id'] as String,
       name: (json['Name'] as String?) ?? 'Sans titre',
@@ -35,6 +40,7 @@ class Episode {
       ),
       quality: MediaQuality.fromItemJson(json),
       tracks: tracksFromStreams(json['MediaStreams'] as List<dynamic>?),
+      fileSize: source?['Size'] as int?,
     );
   }
 
@@ -69,6 +75,10 @@ class Episode {
 
   /// Pistes audio et sous-titres (pour appliquer le choix de langue).
   final List<MediaTrack> tracks;
+
+  /// Taille du fichier vidéo en octets (si connue), pour « Télécharger la
+  /// saison · 13,6 Go ».
+  final int? fileSize;
 
   /// Titre dans la liste : « 3. Titre de l'épisode ».
   String get listTitle => number == null ? name : '$number. $name';
