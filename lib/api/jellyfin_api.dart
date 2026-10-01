@@ -352,6 +352,56 @@ class JellyfinApi {
     return [for (final item in items) Episode.fromJson(item)];
   }
 
+  /// GET /Shows/{id}/Episodes : l'épisode qui suit [itemId] dans la série
+  /// (saison suivante comprise), null si c'est le dernier. Les épisodes
+  /// manquants (sans fichier) sont ignorés.
+  Future<Map<String, dynamic>?> getNextEpisode({
+    required String userId,
+    required String seriesId,
+    required String itemId,
+  }) async {
+    final json = await _send(
+      'GET',
+      '/Shows/$seriesId/Episodes',
+      query: {
+        'userId': userId,
+        // La liste commence à l'épisode actuel : le suivant est le 2e
+        'startItemId': itemId,
+        'limit': '2',
+        'isMissing': 'false',
+        // Pistes : pour appliquer les langues choisies pour la série
+        'fields': 'MediaStreams',
+        'enableImageTypes': 'Primary',
+        'imageTypeLimit': '1',
+        'enableUserData': 'true',
+      },
+    );
+    final items = (json['Items'] as List<dynamic>?) ?? [];
+    if (items.length < 2) return null;
+    final first = items.first as Map<String, dynamic>;
+    // Par prudence : la liste doit bien commencer par l'épisode actuel
+    if (first['Id'] != itemId) return null;
+    return items[1] as Map<String, dynamic>;
+  }
+
+  /// GET /MediaSegments/{id} : début du générique de fin, s'il est connu
+  /// (le serveur ne le détecte qu'avec une extension, ex. Intro Skipper).
+  Future<Duration?> getOutroStart(String itemId) async {
+    final json = await _send(
+      'GET',
+      '/MediaSegments/$itemId',
+      query: {'includeSegmentTypes': 'Outro'},
+    );
+    final items = (json['Items'] as List<dynamic>?) ?? [];
+    final starts = [
+      for (final item in items.cast<Map<String, dynamic>>())
+        if (item['Type'] == 'Outro')
+          ?ticksToDuration(item['StartTicks'] as int?),
+    ];
+    if (starts.isEmpty) return null;
+    return starts.reduce((a, b) => a < b ? a : b);
+  }
+
   /// GET /UserItems/Resume : films et épisodes commencés, du plus récent
   /// au plus ancien (rangée « Continuer à regarder »).
   Future<List<ResumeEntry>> getResumeItems({

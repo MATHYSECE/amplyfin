@@ -18,8 +18,10 @@ import 'track_preferences.dart';
 /// d'abord au serveur si la lecture directe est possible ; si non, explique
 /// pourquoi et demande à l'utilisateur s'il veut convertir.
 /// [start] : position de départ (reprise de lecture), le début par défaut.
-/// Se termine quand on revient du lecteur (ou si on annule).
-Future<void> launchPlayback(
+/// Se termine quand on revient du lecteur (ou si on annule) et renvoie
+/// l'élément lu en dernier (l'épisode suivant s'il a été enchaîné), null si
+/// la lecture n'a pas démarré.
+Future<String?> launchPlayback(
   BuildContext context, {
   required JellyfinApi api,
   required Session session,
@@ -50,21 +52,21 @@ Future<void> launchPlayback(
         ScaffoldMessenger.of(context)
             .showSnackBar(SnackBar(content: Text(e.message)));
       }
-      return;
+      return null;
     }
   }
-  if (!context.mounted) return;
+  if (!context.mounted) return null;
 
   if (!info.directPlay) {
     final convert = await showTranscodeDialog(
       context,
       reasonCodes: info.transcodeReasons,
     );
-    if (!convert || !context.mounted) return;
+    if (!convert || !context.mounted) return null;
   }
 
-  await Navigator.of(context).push(
-    MaterialPageRoute(
+  return Navigator.of(context).push(
+    MaterialPageRoute<String>(
       builder: (_) => PlayerScreen(
         api: api,
         session: session,

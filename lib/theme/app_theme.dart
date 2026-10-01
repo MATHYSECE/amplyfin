@@ -44,6 +44,7 @@ abstract final class AppColors {
   static const scrim35 = Color(0x59000000);
   static const scrim55 = Color(0x8C000000);
   static const scrim70 = Color(0xB3000000);
+  static const scrim85 = Color(0xD9000000);
 
   /// Erreurs (seule couleur, pour qu'une erreur reste bien visible).
   static const error = Color(0xFFFF7A7A);

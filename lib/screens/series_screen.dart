@@ -345,7 +345,7 @@ class _SeriesScreenState extends State<SeriesScreen> {
   /// reprend là où il s'était arrêté, sauf [start] précisé.
   Future<void> _play(Episode episode, {Duration? start}) async {
     final progress = episode.progress;
-    await launchPlayback(
+    final lastId = await launchPlayback(
       context,
       api: widget.api,
       session: widget.session,
@@ -356,13 +356,30 @@ class _SeriesScreenState extends State<SeriesScreen> {
       tracks: _languages.resolve(episode.tracks),
       start: start ?? (progress.canResume ? progress.position : Duration.zero),
     );
+    if (!mounted) return;
+    // Épisodes enchaînés jusqu'à une autre saison : on y va
+    final lastSeason = lastId == null || lastId == episode.id
+        ? null
+        : _seasonOf(lastId);
     // Au retour : met à jour les coches « déjà vu » et les progressions
     if (_offline) {
+      if (lastSeason != null) _selectedSeason = lastSeason;
       _showOffline();
       return;
     }
-    final season = _selectedSeason;
-    if (season != null && mounted) _loadEpisodes(season);
+    final season = lastSeason ?? _selectedSeason;
+    if (season == null) return;
+    if (season.id != _selectedSeason?.id) await _selectSeason(season);
+    if (mounted) _loadEpisodes(season);
+  }
+
+  /// Saison (déjà chargée) qui contient l'épisode [episodeId].
+  Season? _seasonOf(String episodeId) {
+    final seasonId = _episodes.entries
+        .where((entry) => entry.value.any((e) => e.id == episodeId))
+        .firstOrNull
+        ?.key;
+    return _seasons?.where((s) => s.id == seasonId).firstOrNull;
   }
 
   @override

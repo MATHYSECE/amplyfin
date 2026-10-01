@@ -8,15 +8,20 @@ import 'package:media_kit_video/media_kit_video.dart';
 
 import '../api/jellyfin_api.dart';
 import '../models/media_track.dart';
+import '../models/next_episode.dart';
 import '../models/playback_info.dart';
 import '../models/playback_quality.dart';
 import '../models/session.dart';
 import '../models/subtitle_size.dart';
 import '../models/track_choice.dart';
 import '../services/device_capabilities.dart';
+import '../services/download_manager.dart';
+import '../services/next_episode_finder.dart';
 import '../services/offline_progress.dart';
 import '../services/player_preferences.dart';
+import '../services/track_preferences.dart';
 import '../theme/app_theme.dart';
+import '../widgets/next_episode_card.dart';
 import '../widgets/player_controls.dart';
 import '../widgets/subtitle_overlay.dart';
 import '../widgets/track_picker.dart';
@@ -27,6 +32,8 @@ import '../widgets/ui.dart';
 /// Par défaut le fichier original est lu tel quel (lecture directe) ;
 /// le menu « Qualité » permet de demander un flux converti plus léger.
 /// Les menus « Audio » et « Sous-titres » changent de piste en cours de route.
+/// Pour un épisode, la carte « Épisode suivant » enchaîne sur le suivant
+/// dans le même lecteur. En sortant, renvoie l'id du dernier élément lu.
 class PlayerScreen extends StatefulWidget {
   const PlayerScreen({
     super.key,
@@ -129,6 +136,42 @@ class _PlayerScreenState extends State<PlayerScreen> {
   bool _opening = false;
   String? _error;
 
+  // ---------- Épisode suivant ----------
+
+  /// Élément lu en ce moment (change quand on enchaîne sur l'épisode suivant).
+  late String _itemId = widget.itemId;
+  late String _title = widget.title;
+  late String? _subtitle = widget.subtitle;
+
+  /// Épisode qui suit (null pour un film, le dernier épisode, ou tant
+  /// qu'il n'est pas connu).
+  NextEpisode? _next;
+
+  /// Début du générique de fin, s'il est connu du serveur.
+  Duration? _outroStart;
+
+  /// Vrai quand la carte « Épisode suivant » est affichée.
+  bool _nextShown = false;
+
+  /// « Regarder le générique » : carte cachée jusqu'à la fin (ou jusqu'à un
+  /// retour en arrière avant le générique).
+  bool _nextDismissed = false;
+
+  /// Épisodes enchaînés tout seuls depuis le dernier appui sur l'écran.
+  int _autoPlays = 0;
+
+  /// Vrai pendant « Tu regardes toujours ? ».
+  bool _askingStillWatching = false;
+
+  /// Vrai pendant le passage à l'épisode suivant (fondu au noir).
+  bool _switching = false;
+
+  /// Vrai quand la vidéo avance (le compte à rebours de la carte aussi).
+  final _playing = ValueNotifier<bool>(false);
+
+  /// Évite de fermer deux fois le lecteur.
+  bool _closing = false;
+
   @override
   void initState() {
     super.initState();
@@ -143,9 +186,18 @@ class _PlayerScreenState extends State<PlayerScreen> {
       ..add(_player.stream.error.listen(_onPlayerError))
       ..add(
         _player.stream.completed.listen((done) {
-          // Film terminé : on revient à la fiche
-          if (done && mounted) Navigator.of(context).maybePop();
+          if (!done || !mounted || _switching || _askingStillWatching) return;
+          // Épisode terminé : le suivant, sinon retour à la fiche
+          if (_next != null) {
+            _autoAdvance();
+          } else {
+            _close();
+          }
         }),
+      )
+      ..add(_player.stream.position.listen(_onPosition))
+      ..add(
+        _player.stream.playing.listen((playing) => _playing.value = playing),
       );
     _subscriptions.add(
       _player.stream.log.listen((log) {
@@ -183,6 +235,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
       start: widget.start,
       prefetched: widget.initialInfo,
     );
+    _prepareNext();
   }
 
   /// Réglage de l'affichage vidéo. Sur Android, la puce vidéo décode l'image
@@ -214,13 +267,14 @@ class _PlayerScreenState extends State<PlayerScreen> {
       if (info.isLocal) {
         // Fichier téléchargé : position gardée sur le téléphone, puis
         // envoyée au serveur s'il répond (après la fermeture de l'écran)
+        final itemId = _itemId;
         final runtime = _player.state.duration;
         final api = widget.api;
         final userId = widget.session.userId;
         unawaited(
           Future(() async {
             await OfflineProgress.instance.record(
-              widget.itemId,
+              itemId,
               position: position,
               runtime: runtime > Duration.zero ? runtime : null,
             );
@@ -233,6 +287,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
     _info.dispose();
     _sourceLabel.dispose();
     _controlsVisible.dispose();
+    _playing.dispose();
 
     // Retour à l'affichage normal
     SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
@@ -270,7 +325,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
           prefetched ??
           await widget.api.getPlaybackInfo(
             userId: widget.session.userId,
-            itemId: widget.itemId,
+            itemId: _itemId,
             quality: quality,
             start: start,
             // Le décodeur vidéo de l'émulateur ne sait pas lire le 10 bits :
@@ -350,7 +405,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
       _forceTranscode = true;
       await _open(_quality, start: position);
     } else {
-      Navigator.of(context).maybePop();
+      _close();
     }
   }
 
@@ -418,7 +473,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
     // l'appli est fermée en pleine lecture, on reprend quand même)
     if (info.isLocal) {
       OfflineProgress.instance.record(
-        widget.itemId,
+        _itemId,
         position: state.position,
         runtime: state.duration > Duration.zero ? state.duration : null,
       );
@@ -439,6 +494,205 @@ class _PlayerScreenState extends State<PlayerScreen> {
     } on JellyfinException {
       // Pas grave : le film continue de se lire
     }
+  }
+
+  // ---------- Épisode suivant ----------
+
+  /// Cherche l'épisode qui suit (et le début du générique de fin) pendant
+  /// la lecture de l'épisode actuel.
+  Future<void> _prepareNext() async {
+    final itemId = _itemId;
+    final next = await findNextEpisode(
+      widget.api,
+      userId: widget.session.userId,
+      itemId: itemId,
+    );
+    if (next == null || !mounted || itemId != _itemId) return;
+    final outroStart = await findOutroStart(widget.api, itemId);
+    if (!mounted || itemId != _itemId) return;
+    setState(() {
+      _next = next;
+      _outroStart = outroStart;
+    });
+    _onPosition(_player.state.position);
+  }
+
+  /// Affiche la carte « Épisode suivant » pendant le générique de fin.
+  void _onPosition(Duration position) {
+    final trigger = _next == null
+        ? null
+        : nextEpisodeTrigger(_player.state.duration, outroStart: _outroStart);
+    final inCredits = trigger != null && position >= trigger;
+    // Retour en arrière avant le générique : la carte pourra revenir
+    if (!inCredits) _nextDismissed = false;
+    final show =
+        inCredits &&
+        !_nextDismissed &&
+        !_switching &&
+        !_askingStillWatching &&
+        _error == null;
+    if (show != _nextShown && mounted) setState(() => _nextShown = show);
+  }
+
+  /// Fin du compte à rebours (ou de l'épisode) : le suivant, sauf après
+  /// plusieurs épisodes enchaînés sans toucher l'écran.
+  void _autoAdvance() {
+    if (_switching || _askingStillWatching || _next == null) return;
+    if (_autoPlays >= stillWatchingAfter) {
+      _player.pause();
+      setState(() {
+        _askingStillWatching = true;
+        _nextShown = false;
+      });
+      return;
+    }
+    _autoPlays++;
+    _playNext();
+  }
+
+  /// Enchaîne sur l'épisode suivant dans le même lecteur : fondu au noir,
+  /// épisode actuel compté comme vu, puis le suivant avec les mêmes langues.
+  Future<void> _playNext() async {
+    final next = _next;
+    if (next == null || _switching) return;
+    final current = _info.value;
+    final duration = _player.state.duration;
+    setState(() {
+      _switching = true;
+      _nextShown = false;
+      _askingStillWatching = false;
+    });
+    await _player.pause();
+    final languages = await _languagesFor(next, current);
+    await Future<void>.delayed(AppDurations.emphasized);
+    if (!mounted) return;
+
+    // Fin de l'épisode actuel : signalée à la fin du fichier, pour qu'il
+    // compte comme vu (même si le générique n'est pas terminé)
+    if (current != null) {
+      _report(() => widget.api.reportPlaybackStopped(current, duration));
+      if (current.isLocal) {
+        await OfflineProgress.instance.record(
+          _itemId,
+          position: duration,
+          runtime: duration > Duration.zero ? duration : null,
+        );
+      }
+    }
+    final tracks = languages.resolve(next.tracks);
+    setState(() {
+      _itemId = next.itemId;
+      _title = next.title;
+      _subtitle = next.subtitle;
+      _tracks = tracks;
+      _next = null;
+      _outroStart = null;
+      _nextDismissed = false;
+      _decodeProblemShown = false;
+    });
+    // Ancienne séance déjà signalée terminée : _open ne la signale pas
+    _info.value = null;
+    _sourceLabel.value = null;
+    await _player.stop();
+
+    // Téléchargé : lu depuis le téléphone. Sinon, le serveur dit comment
+    // le lire (même qualité qu'avant)
+    var info = await DownloadManager.instance.localPlayback(next.itemId);
+    if (info == null) {
+      try {
+        info = await widget.api.getPlaybackInfo(
+          userId: widget.session.userId,
+          itemId: next.itemId,
+          quality: _quality,
+          start: next.start,
+          supports10Bit: !_onEmulator,
+          tracks: tracks,
+          allowDirectPlay: !_forceTranscode,
+        );
+      } on JellyfinException catch (e) {
+        if (mounted) {
+          setState(() {
+            _error = e.message;
+            _switching = false;
+          });
+        }
+        return;
+      }
+    }
+    if (!mounted) return;
+    // Lecture directe impossible : on demande, comme avant le 1er épisode,
+    // sauf si la conversion était déjà acceptée pour l'épisode précédent
+    final alreadyConverted = current != null && !current.directPlay;
+    if (!info.directPlay &&
+        _quality.isOriginal &&
+        !_forceTranscode &&
+        !alreadyConverted) {
+      final convert = await showTranscodeDialog(
+        context,
+        reasonCodes: info.transcodeReasons,
+      );
+      if (!mounted) return;
+      if (!convert) {
+        _close();
+        return;
+      }
+    }
+    await _open(_quality, start: next.start, prefetched: info);
+    if (_error == null) await _waitForVideo(next.start);
+    if (!mounted) return;
+    setState(() => _switching = false);
+    _prepareNext();
+  }
+
+  /// Langues à garder pour l'épisode suivant : celles écoutées en ce moment,
+  /// sinon celles choisies pour la série.
+  Future<LanguagePreference> _languagesFor(
+    NextEpisode next,
+    PlaybackInfo? current,
+  ) async {
+    final seriesId = next.seriesId;
+    final saved = seriesId == null
+        ? const LanguagePreference()
+        : await TrackPreferences().load(seriesId);
+    if (current == null) return saved;
+    final subtitleIndex = _tracks.subtitleIndex;
+    return LanguagePreference(
+      audioLanguage:
+          current.track(_tracks.audioIndex)?.language ?? saved.audioLanguage,
+      subtitleLanguage: subtitleIndex == TrackSelection.noSubtitles
+          ? LanguagePreference.noSubtitles
+          : current.track(subtitleIndex)?.language ?? saved.subtitleLanguage,
+    );
+  }
+
+  /// Attend que la nouvelle vidéo démarre vraiment (30 s au plus : une
+  /// conversion peut être longue à démarrer), pour lever le fondu au noir
+  /// sur l'image et pas sur un écran vide.
+  Future<void> _waitForVideo(Duration start) async {
+    bool started(Duration position) =>
+        position > start + const Duration(milliseconds: 300);
+    if (started(_player.state.position)) return;
+    try {
+      await _player.stream.position
+          .firstWhere(started)
+          .timeout(const Duration(seconds: 30));
+    } on TimeoutException {
+      // Tant pis : le fondu se lève quand même
+    }
+  }
+
+  /// « Tu regardes toujours ? » → Continuer.
+  void _continueWatching() {
+    _autoPlays = 0;
+    _playNext();
+  }
+
+  /// Ferme le lecteur en renvoyant l'élément lu en dernier (la fiche série
+  /// s'ouvre alors sur sa saison).
+  void _close() {
+    if (_closing || !mounted) return;
+    _closing = true;
+    Navigator.of(context).pop(_itemId);
   }
 
   // ---------- Pistes audio et sous-titres ----------
@@ -625,49 +879,125 @@ class _PlayerScreenState extends State<PlayerScreen> {
   @override
   Widget build(BuildContext context) {
     final controller = _controller;
+    final next = _next;
+    final insets = MediaQuery.paddingOf(context);
 
-    return Scaffold(
-      backgroundColor: AppColors.black,
-      body: Stack(
-        fit: StackFit.expand,
-        children: [
-          if (controller != null) ...[
-            // La vidéo seule (commandes et sous-titres de media_kit désactivés)
-            Video(
-              controller: controller,
-              controls: NoVideoControls,
-              subtitleViewConfiguration: const SubtitleViewConfiguration(
-                visible: false,
+    return PopScope(
+      // Retour du téléphone : on passe par _close (renvoie l'élément lu)
+      canPop: false,
+      onPopInvokedWithResult: (didPop, _) {
+        if (!didPop) _close();
+      },
+      child: Scaffold(
+        backgroundColor: AppColors.black,
+        body: Listener(
+          // Un appui sur l'écran : on regarde bien (« Tu regardes toujours ? »)
+          onPointerDown: (_) => _autoPlays = 0,
+          child: Stack(
+            fit: StackFit.expand,
+            children: [
+              if (controller != null) ...[
+                // La vidéo seule (commandes et sous-titres de media_kit
+                // désactivés)
+                Video(
+                  controller: controller,
+                  controls: NoVideoControls,
+                  subtitleViewConfiguration: const SubtitleViewConfiguration(
+                    visible: false,
+                  ),
+                ),
+                // Nos sous-titres, sous les commandes
+                SubtitleOverlay(
+                  player: _player,
+                  size: _subtitleSize,
+                  raised: _controlsVisible,
+                ),
+                // Nos commandes, dessinées comme sur la maquette
+                PlayerControls(
+                  player: _player,
+                  title: _title,
+                  subtitle: _subtitle,
+                  sourceLabel: _sourceLabel,
+                  onBack: _close,
+                  onAudio: _chooseAudio,
+                  onSubtitles: _chooseSubtitles,
+                  onQuality: _chooseQuality,
+                  onVisibleChanged: (visible) =>
+                      _controlsVisible.value = visible,
+                ),
+              ],
+              // Fondu au noir pendant le passage à l'épisode suivant
+              IgnorePointer(
+                child: AnimatedOpacity(
+                  opacity: _switching ? 1 : 0,
+                  duration: AppDurations.emphasized,
+                  curve: Curves.easeInOut,
+                  child: const ColoredBox(color: AppColors.black),
+                ),
               ),
-            ),
-            // Nos sous-titres, sous les commandes
-            SubtitleOverlay(
-              player: _player,
-              size: _subtitleSize,
-              raised: _controlsVisible,
-            ),
-            // Nos commandes, dessinées comme sur la maquette
-            PlayerControls(
-              player: _player,
-              title: widget.title,
-              subtitle: widget.subtitle,
-              sourceLabel: _sourceLabel,
-              onBack: () => Navigator.of(context).maybePop(),
-              onAudio: _chooseAudio,
-              onSubtitles: _chooseSubtitles,
-              onQuality: _chooseQuality,
-              onVisibleChanged: (visible) => _controlsVisible.value = visible,
-            ),
-          ],
-          if (_opening && _info.value == null)
-            const Center(child: CircularProgressIndicator()),
-          if (_error != null)
-            _ErrorOverlay(
-              message: _error!,
-              onRetry: () => _open(_quality, start: _player.state.position),
-              onBack: () => Navigator.of(context).maybePop(),
-            ),
-        ],
+              if (_switching || (_opening && _info.value == null))
+                const Center(child: CircularProgressIndicator()),
+              // Carte « Épisode suivant », au-dessus de la barre de
+              // lecture quand les commandes sont affichées
+              Positioned(
+                right: insets.right + 24,
+                bottom: 0,
+                child: ValueListenableBuilder(
+                  valueListenable: _controlsVisible,
+                  builder: (context, raised, child) => AnimatedPadding(
+                    padding: EdgeInsets.only(bottom: raised ? 108 : 24),
+                    duration: AppDurations.medium,
+                    curve: Curves.easeOutCubic,
+                    child: child,
+                  ),
+                  child: AnimatedSwitcher(
+                    duration: AppDurations.emphasized,
+                    switchInCurve: Curves.easeOutCubic,
+                    switchOutCurve: Curves.easeInCubic,
+                    transitionBuilder: (child, animation) => FadeTransition(
+                      opacity: animation,
+                      child: SlideTransition(
+                        position: Tween(
+                          begin: const Offset(0.15, 0),
+                          end: Offset.zero,
+                        ).animate(animation),
+                        child: child,
+                      ),
+                    ),
+                    child: _nextShown && next != null
+                        ? SizedBox(
+                            key: ValueKey(next.itemId),
+                            width: 460,
+                            child: NextEpisodeCard(
+                              episode: next,
+                              running: _playing,
+                              onPlayNow: _playNext,
+                              onTimeout: _autoAdvance,
+                              onDismiss: () => setState(() {
+                                _nextDismissed = true;
+                                _nextShown = false;
+                              }),
+                            ),
+                          )
+                        : const SizedBox.shrink(),
+                  ),
+                ),
+              ),
+              if (_askingStillWatching && next != null)
+                StillWatchingOverlay(
+                  episode: next,
+                  onContinue: _continueWatching,
+                  onStop: _close,
+                ),
+              if (_error != null)
+                _ErrorOverlay(
+                  message: _error!,
+                  onRetry: () => _open(_quality, start: _player.state.position),
+                  onBack: _close,
+                ),
+            ],
+          ),
+        ),
       ),
     );
   }
