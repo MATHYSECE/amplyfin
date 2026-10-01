@@ -8,7 +8,6 @@ import '../services/download_manager.dart';
 import '../services/session_store.dart';
 import '../theme/app_theme.dart';
 import '../widgets/splash_view.dart';
-import 'downloads_screen.dart';
 import 'login_screen.dart';
 import 'main_screen.dart';
 
@@ -62,17 +61,19 @@ class _StartScreenState extends State<StartScreen> {
         ConnectionMonitor.instance.start(api, session.userId, online: true);
         return MainScreen(api: api, session: session);
       case ServerStatus.unreachable:
-        // Hors ligne : on garde la session, et on ouvre les téléchargements
-        // s'il y en a
+        // Hors ligne : on garde la session, et les téléchargements (s'il y
+        // en a) s'ouvrent par-dessus l'écran principal
         ConnectionMonitor.instance.start(api, session.userId, online: false);
         final downloads = DownloadManager.instance;
         await downloads.init();
         final hasDownloads = downloads.states.values.any(
           (s) => s.phase == DownloadPhase.complete,
         );
-        return hasDownloads
-            ? DownloadsScreen(api: api, session: session, isRoot: true)
-            : MainScreen(api: api, session: session);
+        return MainScreen(
+          api: api,
+          session: session,
+          openDownloads: hasDownloads,
+        );
     }
   }
 

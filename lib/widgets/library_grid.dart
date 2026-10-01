@@ -25,6 +25,7 @@ class LibraryGrid extends StatefulWidget {
     this.bottomPadding = 0,
     this.sortBy,
     this.releasedBefore,
+    this.personId,
   });
 
   final JellyfinApi api;
@@ -55,6 +56,9 @@ class LibraryGrid extends StatefulWidget {
   /// et seulement les éléments déjà sortis à [releasedBefore].
   final String? sortBy;
   final DateTime? releasedBefore;
+
+  /// Seulement les films et séries de cette personne (acteur, réalisateur).
+  final String? personId;
 
   @override
   State<LibraryGrid> createState() => _LibraryGridState();
@@ -122,6 +126,7 @@ class _LibraryGridState extends State<LibraryGrid>
         limit: _pageSize,
         sortBy: widget.sortBy,
         releasedBefore: widget.releasedBefore,
+        personId: widget.personId,
       );
       if (!mounted) return;
       setState(() {

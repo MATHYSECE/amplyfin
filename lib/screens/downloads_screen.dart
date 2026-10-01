@@ -19,7 +19,6 @@ import '../widgets/poster_image.dart';
 import '../widgets/transitions.dart';
 import '../widgets/ui.dart';
 import 'downloaded_series_screen.dart';
-import 'main_screen.dart';
 import 'movie_screen.dart';
 import 'series_screen.dart';
 
@@ -34,15 +33,15 @@ class DownloadsScreen extends StatefulWidget {
     super.key,
     required this.api,
     required this.session,
-    this.isRoot = false,
+    this.offlineStart = false,
   });
 
   final JellyfinApi api;
   final Session session;
 
-  /// Premier écran de l'appli (démarrage sans serveur) : pas de retour,
-  /// mais « Ouvrir la bibliothèque » quand la connexion revient.
-  final bool isRoot;
+  /// Ouvert au démarrage sans serveur, par-dessus l'écran principal :
+  /// quand la connexion revient, le bandeau propose « Ouvrir l'accueil ».
+  final bool offlineStart;
 
   @override
   State<DownloadsScreen> createState() => _DownloadsScreenState();
@@ -133,19 +132,8 @@ class _DownloadsScreenState extends State<DownloadsScreen> with UndoDelete {
     }
   }
 
-  /// Démarrage hors ligne, connexion revenue : la bibliothèque remplace
-  /// cet écran.
-  void _openLibrary() {
-    Navigator.of(context).pushReplacement(
-      PageRouteBuilder<void>(
-        transitionDuration: AppDurations.medium,
-        pageBuilder: (_, _, _) =>
-            MainScreen(api: widget.api, session: widget.session),
-        transitionsBuilder: (_, animation, _, child) =>
-            FadeTransition(opacity: animation, child: child),
-      ),
-    );
-  }
+  /// Retour à l'écran principal (accueil, onglets, recherche).
+  void _openHome() => Navigator.of(context).maybePop();
 
   void _delete(DownloadEntry entry) =>
       deleteWithUndo([entry.id], '« ${entry.info.name} » supprimé');
@@ -200,14 +188,12 @@ class _DownloadsScreenState extends State<DownloadsScreen> with UndoDelete {
                   children: [
                     Row(
                       children: [
-                        if (!widget.isRoot) ...[
-                          GlassCircleButton(
-                            icon: Icons.chevron_left_rounded,
-                            tooltip: 'Retour',
-                            onPressed: () => Navigator.of(context).maybePop(),
-                          ),
-                          const SizedBox(width: 14),
-                        ],
+                        GlassCircleButton(
+                          icon: Icons.chevron_left_rounded,
+                          tooltip: 'Retour',
+                          onPressed: _openHome,
+                        ),
+                        const SizedBox(width: 14),
                         Expanded(
                           child: Text(
                             'Téléchargements',
@@ -220,7 +206,7 @@ class _DownloadsScreenState extends State<DownloadsScreen> with UndoDelete {
                     ),
                     // Hors ligne, ou connexion revenue (démarrage hors ligne)
                     ConnectionBanner(
-                      onOpenLibrary: widget.isRoot ? _openLibrary : null,
+                      onOpenHome: widget.offlineStart ? _openHome : null,
                     ),
                     const SizedBox(height: 18),
                     // Les blocs arrivent l'un après l'autre à l'ouverture
@@ -236,11 +222,7 @@ class _DownloadsScreenState extends State<DownloadsScreen> with UndoDelete {
                       child: AnimatedSwitcher(
                         duration: AppDurations.medium,
                         child: groups.isEmpty
-                            ? _EmptyDownloads(
-                                onBrowse: widget.isRoot
-                                    ? _openLibrary
-                                    : () => Navigator.of(context).maybePop(),
-                              )
+                            ? _EmptyDownloads(onBrowse: _openHome)
                             : MoveScope(
                                 child: Column(
                                   crossAxisAlignment:

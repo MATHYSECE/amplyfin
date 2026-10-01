@@ -604,12 +604,12 @@ mixin UndoDelete<T extends StatefulWidget> on State<T> {
 }
 
 /// Bandeau de connexion en haut des téléchargements : « Hors ligne » (avec
-/// « Réessayer »), puis « Connexion retrouvée » si [onOpenLibrary] est
-/// donné (démarrage hors ligne). Rien quand tout va bien.
+/// « Réessayer »), puis « Connexion retrouvée » si [onOpenHome] est donné
+/// (démarrage hors ligne). Rien quand tout va bien.
 class ConnectionBanner extends StatelessWidget {
-  const ConnectionBanner({super.key, this.onOpenLibrary});
+  const ConnectionBanner({super.key, this.onOpenHome});
 
-  final VoidCallback? onOpenLibrary;
+  final VoidCallback? onOpenHome;
 
   @override
   Widget build(BuildContext context) {
@@ -638,7 +638,7 @@ class ConnectionBanner extends StatelessWidget {
                     child: const Text('Réessayer'),
                   ),
           );
-        } else if (connection.recovered && onOpenLibrary != null) {
+        } else if (connection.recovered && onOpenHome != null) {
           banner = _banner(
             context,
             key: 'recovered',
@@ -646,8 +646,8 @@ class ConnectionBanner extends StatelessWidget {
             title: 'Connexion retrouvée',
             message: 'Le serveur répond de nouveau.',
             action: TextButton(
-              onPressed: onOpenLibrary,
-              child: const Text('Ouvrir la bibliothèque'),
+              onPressed: onOpenHome,
+              child: const Text("Ouvrir l'accueil"),
             ),
           );
         } else {

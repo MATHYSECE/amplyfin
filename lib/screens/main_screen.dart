@@ -15,6 +15,7 @@ import 'downloads_screen.dart';
 import 'home_tab.dart';
 import 'login_screen.dart';
 import 'movie_screen.dart';
+import 'search_tab.dart';
 import 'series_screen.dart';
 
 /// Écran principal après la connexion : en-tête (titre, téléchargements,
@@ -22,10 +23,19 @@ import 'series_screen.dart';
 /// barre de navigation en bas. Chaque onglet garde sa position ; un second
 /// appui sur l'onglet affiché remonte en haut.
 class MainScreen extends StatefulWidget {
-  const MainScreen({super.key, required this.api, required this.session});
+  const MainScreen({
+    super.key,
+    required this.api,
+    required this.session,
+    this.openDownloads = false,
+  });
 
   final JellyfinApi api;
   final Session session;
+
+  /// Démarrage hors ligne : l'écran des téléchargements s'ouvre tout de
+  /// suite par-dessus (le retour mène à l'accueil et à la recherche).
+  final bool openDownloads;
 
   @override
   State<MainScreen> createState() => _MainScreenState();
@@ -39,8 +49,8 @@ class _MainScreenState extends State<MainScreen> {
   /// Onglets déjà ouverts (les autres ne sont construits qu'à la demande).
   final Set<int> _visited = {0};
 
-  /// Défilement de l'accueil et des deux grilles.
-  final _scrolls = List.generate(3, (_) => ScrollController());
+  /// Défilement de chaque onglet.
+  final _scrolls = List.generate(4, (_) => ScrollController());
   final _homeKey = GlobalKey<HomeTabState>();
 
   /// Vrai quand le contenu passe sous l'en-tête : il devient en verre dépoli.
@@ -52,6 +62,32 @@ class _MainScreenState extends State<MainScreen> {
     for (final scroll in _scrolls) {
       scroll.addListener(_updateHeader);
     }
+    if (widget.openDownloads) {
+      WidgetsBinding.instance.addPostFrameCallback((_) => _showDownloads());
+    }
+  }
+
+  /// Téléchargements affichés d'emblée (sans animation à l'ouverture,
+  /// glissement au retour).
+  void _showDownloads() {
+    if (!mounted) return;
+    Navigator.of(context).push(
+      PageRouteBuilder<void>(
+        transitionDuration: Duration.zero,
+        reverseTransitionDuration: AppDurations.medium,
+        pageBuilder: (_, _, _) => DownloadsScreen(
+          api: widget.api,
+          session: widget.session,
+          offlineStart: true,
+        ),
+        transitionsBuilder: (_, animation, _, child) => SlideTransition(
+          position: Tween(begin: const Offset(1, 0), end: Offset.zero).animate(
+            CurvedAnimation(parent: animation, curve: Curves.easeOutCubic),
+          ),
+          child: child,
+        ),
+      ),
+    );
   }
 
   @override
@@ -208,7 +244,14 @@ class _MainScreenState extends State<MainScreen> {
       ),
       1 => grid('Movie', 'Aucun film trouvé sur ce serveur.'),
       2 => grid('Series', 'Aucune série trouvée sur ce serveur.'),
-      _ => _SearchSoon(topPadding: headerHeight),
+      _ => SearchTab(
+        api: widget.api,
+        session: widget.session,
+        controller: _scrolls[3],
+        headerHeight: headerHeight,
+        bottomPadding: barSpace,
+        active: _tab == 3,
+      ),
     };
   }
 }
@@ -489,49 +532,6 @@ class _BarItem extends StatelessWidget {
                   text,
                 ],
               ),
-      ),
-    );
-  }
-}
-
-/// Onglet Recherche : il arrive à l'étape suivante.
-class _SearchSoon extends StatelessWidget {
-  const _SearchSoon({required this.topPadding});
-
-  final double topPadding;
-
-  @override
-  Widget build(BuildContext context) {
-    final textTheme = Theme.of(context).textTheme;
-    return Padding(
-      padding: EdgeInsets.fromLTRB(20, topPadding + 16, 20, 0),
-      child: Column(
-        children: [
-          Container(
-            height: 48,
-            padding: const EdgeInsets.symmetric(horizontal: 18),
-            decoration: ShapeDecoration(
-              color: AppColors.glassStrong,
-              shape: const StadiumBorder(),
-            ),
-            child: Row(
-              children: [
-                const Icon(Icons.search_rounded, color: AppColors.grey),
-                const SizedBox(width: 10),
-                Text(
-                  'Films, séries, épisodes…',
-                  style: textTheme.bodyLarge?.copyWith(color: AppColors.grey),
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(height: 80),
-          Text(
-            'La recherche arrive à la prochaine étape.',
-            textAlign: TextAlign.center,
-            style: textTheme.bodyLarge?.copyWith(color: AppColors.textSoft),
-          ),
-        ],
       ),
     );
   }

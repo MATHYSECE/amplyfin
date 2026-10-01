@@ -120,6 +120,7 @@ class JellyfinApi {
   /// [sortBy] : autre tri (ex. « DateCreated » : ajoutés récemment,
   /// « PremiereDate » : sortis récemment), du plus récent au plus ancien.
   /// [releasedBefore] : seulement ceux déjà sortis à cette date.
+  /// [personId] : seulement ceux où joue (ou qu'a réalisés) cette personne.
   Future<ItemPage> getItems({
     required String userId,
     required String type,
@@ -127,6 +128,7 @@ class JellyfinApi {
     int limit = 50,
     String? sortBy,
     DateTime? releasedBefore,
+    String? personId,
   }) async {
     final json = await _send(
       'GET',
@@ -139,6 +141,7 @@ class JellyfinApi {
         'sortOrder': sortBy == null ? 'Ascending' : 'Descending',
         if (releasedBefore != null)
           'maxPremiereDate': releasedBefore.toUtc().toIso8601String(),
+        'personIds': ?personId,
         'startIndex': '$startIndex',
         'limit': '$limit',
         // On ne veut que l'affiche, pas les autres images
@@ -192,6 +195,60 @@ class JellyfinApi {
     required String mediaSourceId,
     required int index,
   }) => '$serverUrl/Videos/$itemId/$mediaSourceId/Subtitles/$index/Stream.srt';
+
+  /// GET /Items?searchTerm=… : les éléments d'un type ([type] : « Movie »,
+  /// « Series » ou « Episode ») dont le titre contient [term].
+  Future<List<Map<String, dynamic>>> searchItems({
+    required String userId,
+    required String term,
+    required String type,
+    int limit = 20,
+  }) async {
+    final json = await _send(
+      'GET',
+      '/Items',
+      query: {
+        'userId': userId,
+        'searchTerm': term,
+        'includeItemTypes': type,
+        'recursive': 'true',
+        'limit': '$limit',
+        'enableImageTypes': 'Primary',
+        'imageTypeLimit': '1',
+        'enableUserData': 'false',
+        'enableTotalRecordCount': 'false',
+      },
+    );
+    return [
+      for (final item in (json['Items'] as List<dynamic>?) ?? [])
+        item as Map<String, dynamic>,
+    ];
+  }
+
+  /// GET /Persons?searchTerm=… : acteurs, réalisateurs… dont le nom
+  /// contient [term].
+  Future<List<Map<String, dynamic>>> searchPersons({
+    required String userId,
+    required String term,
+    int limit = 20,
+  }) async {
+    final json = await _send(
+      'GET',
+      '/Persons',
+      query: {
+        'userId': userId,
+        'searchTerm': term,
+        'limit': '$limit',
+        'enableImageTypes': 'Primary',
+        'imageTypeLimit': '1',
+        'enableUserData': 'false',
+      },
+    );
+    return [
+      for (final item in (json['Items'] as List<dynamic>?) ?? [])
+        item as Map<String, dynamic>,
+    ];
+  }
 
   /// GET /Shows/{id}/Seasons : les saisons d'une série.
   Future<List<Season>> getSeasons({
