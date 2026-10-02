@@ -45,6 +45,19 @@ const _messages = {
   'DirectPlayError': 'La lecture directe a échoué.',
 };
 
+/// Raisons qui ne concernent que le son : l'image peut rester d'origine.
+const audioTranscodeReasons = {
+  'AudioCodecNotSupported',
+  'AudioProfileNotSupported',
+  'AudioChannelsNotSupported',
+  'AudioSampleRateNotSupported',
+  'AudioBitDepthNotSupported',
+  'AudioBitrateNotSupported',
+  'AudioIsExternal',
+  'SecondaryAudioNotSupported',
+  'UnknownAudioStreamInfo',
+};
+
 /// Phrases expliquant les raisons (sans doublon, dans l'ordre reçu).
 /// Code inconnu : phrase générale.
 List<String> describeTranscodeReasons(Iterable<String> codes) {

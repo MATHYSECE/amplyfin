@@ -2,26 +2,31 @@ import 'package:flutter/material.dart';
 
 import '../models/transcode_reasons.dart';
 import '../theme/app_theme.dart';
+import 'error_details.dart';
 
 /// Fenêtre « Lecture directe impossible » : explique pourquoi, liste ce que
 /// la conversion change, et demande à l'utilisateur s'il veut convertir.
+/// [detail] : message technique du lecteur, montré à la demande.
 /// Renvoie true pour « Convertir et lire », false sinon.
 Future<bool> showTranscodeDialog(
   BuildContext context, {
   required List<String> reasonCodes,
+  String? detail,
 }) async {
   final accepted = await showDialog<bool>(
     context: context,
     barrierColor: AppColors.scrim70,
-    builder: (context) => _TranscodeDialog(reasonCodes: reasonCodes),
+    builder: (context) =>
+        _TranscodeDialog(reasonCodes: reasonCodes, detail: detail),
   );
   return accepted ?? false;
 }
 
 class _TranscodeDialog extends StatelessWidget {
-  const _TranscodeDialog({required this.reasonCodes});
+  const _TranscodeDialog({required this.reasonCodes, this.detail});
 
   final List<String> reasonCodes;
+  final String? detail;
 
   /// Ce que la conversion change pour l'utilisateur.
   static const _consequences = [
@@ -128,6 +133,7 @@ class _TranscodeDialog extends StatelessWidget {
                   onPressed: () => Navigator.of(context).pop(false),
                   child: const Text('Annuler'),
                 ),
+                if (detail != null) ErrorDetails(detail!),
               ],
             ),
           ),

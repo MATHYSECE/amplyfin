@@ -6,10 +6,12 @@ import 'package:flutter/services.dart';
 import 'package:media_kit/media_kit.dart';
 import 'package:media_kit_video/media_kit_video.dart';
 
+import '../api/device_profile.dart';
 import '../api/jellyfin_api.dart';
 import '../models/device_decoders.dart';
 import '../models/media_track.dart';
 import '../models/next_episode.dart';
+import '../models/player_message.dart';
 import '../models/playback_info.dart';
 import '../models/playback_quality.dart';
 import '../models/session.dart';
@@ -22,6 +24,7 @@ import '../services/offline_progress.dart';
 import '../services/player_preferences.dart';
 import '../services/track_preferences.dart';
 import '../theme/app_theme.dart';
+import '../widgets/error_details.dart';
 import '../widgets/next_episode_card.dart';
 import '../widgets/player_controls.dart';
 import '../widgets/subtitle_overlay.dart';
@@ -86,6 +89,12 @@ class _PlayerScreenState extends State<PlayerScreen> {
   static const _subtitleRetries = 3;
   static const _subtitleRetryDelay = Duration(seconds: 3);
 
+  /// Erreur du moteur avant le démarrage : temps laissé à la vidéo pour
+  /// démarrer quand même (le moteur essaie souvent une autre méthode). Un
+  /// flux converti met plus longtemps à démarrer.
+  static const _startupGrace = Duration(seconds: 6);
+  static const _convertedStartupGrace = Duration(seconds: 20);
+
   final _player = Player(
     configuration: const PlayerConfiguration(
       bufferSize: _bufferSize,
@@ -136,6 +145,12 @@ class _PlayerScreenState extends State<PlayerScreen> {
   final _controlsVisible = ValueNotifier<bool>(true);
   bool _opening = false;
   String? _error;
+
+  /// Dernier message d'erreur du moteur, nettoyé (« Voir le détail »).
+  String? _errorDetail;
+
+  /// Attente lancée par une erreur du moteur avant le démarrage.
+  Timer? _startupErrorTimer;
 
   // ---------- Épisode suivant ----------
 
@@ -257,6 +272,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
   @override
   void dispose() {
     _progressTimer?.cancel();
+    _startupErrorTimer?.cancel();
     for (final subscription in _subscriptions) {
       subscription.cancel();
     }
@@ -311,9 +327,12 @@ class _PlayerScreenState extends State<PlayerScreen> {
     Duration start = Duration.zero,
     PlaybackInfo? prefetched,
   }) async {
+    _startupErrorTimer?.cancel();
+    _startupErrorTimer = null;
     setState(() {
       _opening = true;
       _error = null;
+      _errorDetail = null;
     });
     // Pendant le chargement, plus d'ancienne mention qui serait fausse
     final converting =
@@ -362,6 +381,8 @@ class _PlayerScreenState extends State<PlayerScreen> {
           ? 'TÉLÉCHARGÉ'
           : info.directPlay
           ? 'ORIGINAL'
+          : _convertsOnlyAudio(info)
+          ? 'SON CONVERTI'
           : 'CONVERTI';
       setState(() => _quality = quality);
       _report(() => widget.api.reportPlaybackStart(info, start));
@@ -372,6 +393,10 @@ class _PlayerScreenState extends State<PlayerScreen> {
       if (mounted) setState(() => _opening = false);
     }
   }
+
+  /// Vrai si le serveur ne convertit que le son (image d'origine).
+  bool _convertsOnlyAudio(PlaybackInfo info) =>
+      info.convertsOnlyAudio(transcodeVideoCodecs(_decoders));
 
   /// Surveille les messages du moteur : en lecture directe, s'il n'arrive
   /// pas à afficher l'image (décodeur ou affichage impossible), on propose
@@ -390,14 +415,19 @@ class _PlayerScreenState extends State<PlayerScreen> {
   }
 
   /// Fenêtre « lecture directe impossible » pendant la lecture.
-  Future<void> _offerTranscode() async {
+  /// [detail] : message du moteur, montré à la demande.
+  Future<void> _offerTranscode({
+    List<String> reasons = const ['VideoCodecNotSupported'],
+    String? detail,
+  }) async {
     if (!mounted) return;
     final position = _player.state.position;
     await _player.pause();
     if (!mounted) return;
     final convert = await showTranscodeDialog(
       context,
-      reasonCodes: const ['VideoCodecNotSupported'],
+      reasonCodes: reasons,
+      detail: detail,
     );
     if (!mounted) return;
     if (convert) {
@@ -412,7 +442,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
   /// Erreur signalée par le lecteur lui-même (fichier illisible, coupure…).
   /// Le moteur signale aussi des erreurs sans gravité (il essaie une autre
   /// méthode et la lecture continue) : on ne prévient que si la vidéo n'a
-  /// jamais pu démarrer.
+  /// toujours pas démarré quelques secondes plus tard.
   void _onPlayerError(String message) {
     if (!mounted || _error != null) return;
     if (message.contains('/Subtitles/')) {
@@ -426,6 +456,29 @@ class _PlayerScreenState extends State<PlayerScreen> {
     if (_player.state.duration > Duration.zero) return;
     // Jamais le message brut du moteur : il peut contenir l'adresse du
     // serveur et la clé de connexion
+    _errorDetail = cleanPlayerMessage(message);
+    final converted = _info.value?.directPlay == false;
+    _startupErrorTimer ??= Timer(
+      converted ? _convertedStartupGrace : _startupGrace,
+      _onStartupFailed,
+    );
+  }
+
+  /// La vidéo n'a pas démarré après une erreur du moteur : en lecture
+  /// directe depuis le serveur, on propose de convertir ; sinon, message.
+  void _onStartupFailed() {
+    _startupErrorTimer = null;
+    if (!mounted || _error != null || _closing) return;
+    if (_player.state.duration > Duration.zero) return;
+    final info = _info.value;
+    if (info != null &&
+        info.directPlay &&
+        !info.isLocal &&
+        !_decodeProblemShown) {
+      _decodeProblemShown = true;
+      _offerTranscode(reasons: const ['DirectPlayError'], detail: _errorDetail);
+      return;
+    }
     setState(() => _error = 'La vidéo n\'a pas pu être lue.');
   }
 
@@ -579,7 +632,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
         );
       }
     }
-    final tracks = languages.resolve(next.tracks);
+    final tracks = languages.resolve(next.tracks, player: _decoders.player);
     setState(() {
       _itemId = next.itemId;
       _title = next.title;
@@ -598,6 +651,11 @@ class _PlayerScreenState extends State<PlayerScreen> {
     // Téléchargé : lu depuis le téléphone. Sinon, le serveur dit comment
     // le lire (même qualité qu'avant)
     var info = await DownloadManager.instance.localPlayback(next.itemId);
+    // Son du fichier téléchargé illisible (TrueHD…) : flux du serveur
+    final localAudio = info?.track(tracks.audioIndex ?? info.defaultAudioIndex);
+    if (localAudio != null && !_decoders.player.playsAudio(localAudio)) {
+      info = null;
+    }
     if (info == null) {
       try {
         info = await widget.api.getPlaybackInfo(
@@ -622,8 +680,11 @@ class _PlayerScreenState extends State<PlayerScreen> {
     if (!mounted) return;
     // Lecture directe impossible : on demande, comme avant le 1er épisode,
     // sauf si la conversion était déjà acceptée pour l'épisode précédent
-    final alreadyConverted = current != null && !current.directPlay;
+    // (seul le son à convertir : pas de question)
+    final alreadyConverted =
+        current != null && !current.directPlay && !_convertsOnlyAudio(current);
     if (!info.directPlay &&
+        !_convertsOnlyAudio(info) &&
         _quality.isOriginal &&
         !_forceTranscode &&
         !alreadyConverted) {
@@ -700,12 +761,18 @@ class _PlayerScreenState extends State<PlayerScreen> {
   /// Applique les pistes choisies une fois la vidéo ouverte. Sans choix
   /// précis, on prend celles proposées par le serveur (préférences Jellyfin).
   Future<void> _applyTracks(PlaybackInfo info) async {
+    var subtitleIndex =
+        _tracks.subtitleIndex ??
+        info.defaultSubtitleIndex ??
+        TrackSelection.noSubtitles;
+    // Sous-titres que le lecteur ne sait pas afficher (PGS) : aucun
+    final subtitle = info.track(subtitleIndex);
+    if (subtitle != null && !_decoders.player.showsSubtitle(subtitle)) {
+      subtitleIndex = TrackSelection.noSubtitles;
+    }
     _tracks = TrackSelection(
       audioIndex: _tracks.audioIndex ?? info.defaultAudioIndex,
-      subtitleIndex:
-          _tracks.subtitleIndex ??
-          info.defaultSubtitleIndex ??
-          TrackSelection.noSubtitles,
+      subtitleIndex: subtitleIndex,
     );
     await _waitForTracks();
     if (!mounted) return;
@@ -781,7 +848,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
       title: 'Audio',
       options: [
         for (final track in info.audioTracks)
-          PickerOption<int?>(track.index, track.label),
+          audioTrackOption(track, _decoders.player, local: info.isLocal),
       ],
       selected: _tracks.audioIndex,
     );
@@ -792,7 +859,10 @@ class _PlayerScreenState extends State<PlayerScreen> {
       audioIndex: chosen.value,
       subtitleIndex: _tracks.subtitleIndex,
     );
-    if (info.directPlay) {
+    // Son que le lecteur ne lit pas (TrueHD…) : le serveur le convertit
+    final track = info.track(chosen.value);
+    final playable = track == null || _decoders.player.playsAudio(track);
+    if (info.directPlay && playable) {
       // Le lecteur a tout le fichier : changement immédiat
       await _applyAudio(info, chosen.value);
     } else {
@@ -811,7 +881,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
       options: [
         const PickerOption(TrackSelection.noSubtitles, 'Aucun'),
         for (final track in info.subtitleTracks)
-          PickerOption(track.index, track.label),
+          subtitleTrackOption(track, _decoders.player),
       ],
       selected: _tracks.subtitleIndex ?? TrackSelection.noSubtitles,
       extra: PickerExtra(
@@ -853,7 +923,9 @@ class _PlayerScreenState extends State<PlayerScreen> {
   /// Menu « Qualité » : choisir une qualité relance la vidéo au même endroit.
   Future<void> _chooseQuality() async {
     // Qualité « originale » mais fichier converti (lecture directe impossible)
-    final convertedOriginal = _info.value?.directPlay == false;
+    final info = _info.value;
+    final convertedOriginal = info?.directPlay == false;
+    final onlyAudio = info != null && _convertsOnlyAudio(info);
     final chosen = await showPicker(
       context,
       title: 'Qualité',
@@ -864,6 +936,8 @@ class _PlayerScreenState extends State<PlayerScreen> {
             quality.label,
             description: !quality.isOriginal
                 ? 'Converti par le serveur'
+                : onlyAudio
+                ? 'Image d\'origine, son converti par le serveur'
                 : convertedOriginal
                 ? 'Définition d\'origine, mais convertie : '
                       'lecture directe impossible sur cet appareil'
@@ -992,6 +1066,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
               if (_error != null)
                 _ErrorOverlay(
                   message: _error!,
+                  detail: _errorDetail,
                   onRetry: () => _open(_quality, start: _player.state.position),
                   onBack: _close,
                 ),
@@ -1007,11 +1082,15 @@ class _PlayerScreenState extends State<PlayerScreen> {
 class _ErrorOverlay extends StatelessWidget {
   const _ErrorOverlay({
     required this.message,
+    this.detail,
     required this.onRetry,
     required this.onBack,
   });
 
   final String message;
+
+  /// Message technique du moteur, montré à la demande.
+  final String? detail;
   final VoidCallback onRetry;
   final VoidCallback onBack;
 
@@ -1051,6 +1130,10 @@ class _ErrorOverlay extends StatelessWidget {
                   ),
                 ],
               ),
+              if (detail != null) ...[
+                const SizedBox(height: 8),
+                ErrorDetails(detail!),
+              ],
             ],
           ),
         ),

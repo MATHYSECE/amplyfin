@@ -112,6 +112,23 @@ void main() {
       expect(selection.subtitleIndex, 7);
     });
 
+    test('sous-titres PGS ignorés (le lecteur ne sait pas les afficher)', () {
+      final withPgs = tracksFromStreams([
+        {'Type': 'Subtitle', 'Index': 7, 'Language': 'fre', 'Codec': 'PGSSUB'},
+        {'Type': 'Subtitle', 'Index': 8, 'Language': 'fre', 'Codec': 'subrip'},
+      ]);
+      final selection = const LanguagePreference(subtitleLanguage: 'fre')
+          .resolve(withPgs);
+      expect(selection.subtitleIndex, 8);
+      final pgsOnly = withPgs.take(1).toList();
+      expect(
+        const LanguagePreference(subtitleLanguage: 'fre')
+            .resolve(pgsOnly)
+            .subtitleIndex,
+        isNull,
+      );
+    });
+
     test('liste des langues sans doublons', () {
       expect(languagesOf(tracks, TrackType.subtitle), ['fre', 'eng']);
       expect(languagesOf(tracks, TrackType.audio), ['fre', 'eng']);

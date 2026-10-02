@@ -1,10 +1,12 @@
 /// Profil de l'appareil envoyé au serveur avec POST /Items/{id}/PlaybackInfo :
 /// il dit ce que le lecteur sait lire, et donc si le serveur doit convertir.
 ///
-/// Le lecteur (media_kit, basé sur mpv) lit presque tout. Pour les formats
-/// lourds (H.264, HEVC, AV1, VP9), on annonce ce que la puce vidéo du
-/// téléphone décode vraiment (définition, 10 bits) : au-delà, le serveur
-/// convertit dès le départ, au lieu d'un échec en pleine lecture.
+/// Pour les formats vidéo lourds (H.264, HEVC, AV1, VP9), on annonce ce que
+/// la puce vidéo du téléphone décode vraiment (définition, 10 bits) : au-delà,
+/// le serveur convertit dès le départ, au lieu d'un échec en pleine lecture.
+/// Pour le reste (son, sous-titres, vidéos anciennes), ce que le lecteur
+/// décode lui-même : un son illisible (TrueHD) est converti seul par le
+/// serveur, l'image reste d'origine.
 library;
 
 import '../models/device_decoders.dart';
@@ -31,7 +33,8 @@ const _directPlayContainers = [
   '3gp',
 ];
 
-/// Formats légers et anciens : le processeur les décode sans peine.
+/// Formats légers et anciens : le processeur les décode sans peine, si le
+/// lecteur a leur décodeur (il n'a pas celui du VC-1, par exemple).
 const _lightVideoCodecs = [
   'mpeg1video',
   'mpeg2video',
@@ -64,8 +67,9 @@ const _videoRangeTypes = [
   'DOVIWithELHDR10Plus',
 ];
 
-/// Sous-titres intégrés au fichier et affichés par le lecteur lui-même :
-/// le serveur n'a pas besoin de les « incruster » dans l'image.
+/// Sous-titres intégrés au fichier et affichés par le lecteur lui-même
+/// (s'il a leur décodeur) : le serveur n'a pas besoin de les « incruster »
+/// dans l'image.
 const _embeddedSubtitles = [
   'srt',
   'subrip',
@@ -87,7 +91,7 @@ const _externalSubtitles = ['srt', 'ass', 'ssa', 'vtt'];
 
 /// Construit le profil. [maxBitrate] : débit maximum accepté, en bits/s.
 /// [maxWidth] : largeur d'image maximum, pour forcer une définition réduite.
-/// [decoders] : ce que la puce vidéo de l'appareil sait décoder.
+/// [decoders] : ce que la puce vidéo et le lecteur savent décoder.
 Map<String, dynamic> buildDeviceProfile({
   required int maxBitrate,
   int? maxWidth,
@@ -105,8 +109,7 @@ Map<String, dynamic> buildDeviceProfile({
       'IsRequired': false,
     },
   ];
-  // Conversion : en HEVC seulement si la puce le décode
-  final hevcOutput = !known || decoders.codecs!['hevc']!.hardware;
+  final player = decoders.player;
   return {
     'Name': 'Amplyfin',
     'MaxStreamingBitrate': maxBitrate,
@@ -115,9 +118,11 @@ Map<String, dynamic> buildDeviceProfile({
       {
         'Type': 'Video',
         'Container': _directPlayContainers.join(','),
-        // Puce inconnue : codecs vides = tous les codecs acceptés
-        if (known)
-          'VideoCodec': [...heavyVideoCodecs, ..._lightVideoCodecs].join(','),
+        'VideoCodec': [
+          ...heavyVideoCodecs,
+          ..._lightVideoCodecs.where(player.decodes),
+        ].join(','),
+        'AudioCodec': player.audioCodecs.join(','),
       },
     ],
     // Secours, ou qualité réduite choisie : flux HLS converti par le serveur
@@ -127,7 +132,7 @@ Map<String, dynamic> buildDeviceProfile({
         'Container': 'ts',
         'Protocol': 'hls',
         'Context': 'Streaming',
-        'VideoCodec': hevcOutput ? 'h264,hevc' : 'h264',
+        'VideoCodec': transcodeVideoCodecs(decoders).join(','),
         'AudioCodec': 'aac,mp3,ac3,eac3',
         'MinSegments': 1,
       },
@@ -148,12 +153,21 @@ Map<String, dynamic> buildDeviceProfile({
           },
     ],
     'SubtitleProfiles': [
-      for (final format in _embeddedSubtitles)
+      for (final format in _embeddedSubtitles.where(player.decodes))
         {'Format': format, 'Method': 'Embed'},
       for (final format in _externalSubtitles)
         {'Format': format, 'Method': 'External'},
     ],
   };
+}
+
+/// Formats vidéo du flux converti : en HEVC seulement si la puce le décode.
+/// Une image dans l'un de ces formats est recopiée telle quelle quand seul
+/// le son doit être converti.
+List<String> transcodeVideoCodecs(DeviceDecoders decoders) {
+  final codecs = decoders.codecs;
+  final hevc = codecs == null || codecs['hevc']!.hardware;
+  return ['h264', if (hevc) 'hevc'];
 }
 
 /// Condition « [property] ≤ [value] » d'un profil de codec.

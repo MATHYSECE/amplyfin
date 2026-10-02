@@ -1,4 +1,5 @@
 import 'media_track.dart';
+import 'transcode_reasons.dart';
 
 /// Réponse du serveur à POST /Items/{id}/PlaybackInfo :
 /// comment lire ce film (directement, ou via un flux converti).
@@ -13,6 +14,7 @@ class PlaybackInfo {
     this.defaultAudioIndex,
     this.defaultSubtitleIndex,
     this.hasVideo = true,
+    this.videoCodec,
     this.localPath,
   });
 
@@ -31,6 +33,9 @@ class PlaybackInfo {
       throw const FormatException('Aucune vidéo trouvée pour ce film.');
     }
     final source = sources.first as Map<String, dynamic>;
+    final streams = ((source['MediaStreams'] as List<dynamic>?) ?? [])
+        .cast<Map<String, dynamic>>();
+    final video = streams.where((s) => s['Type'] == 'Video').firstOrNull;
     final directPlay = source['SupportsDirectPlay'] == true;
     final transcodingUrl = source['TranscodingUrl'] as String?;
     if (!directPlay && transcodingUrl == null) {
@@ -45,9 +50,8 @@ class PlaybackInfo {
       tracks: tracksFromStreams(source['MediaStreams'] as List<dynamic>?),
       defaultAudioIndex: source['DefaultAudioStreamIndex'] as int?,
       defaultSubtitleIndex: source['DefaultSubtitleStreamIndex'] as int?,
-      hasVideo: ((source['MediaStreams'] as List<dynamic>?) ?? []).any(
-        (s) => (s as Map<String, dynamic>)['Type'] == 'Video',
-      ),
+      hasVideo: video != null,
+      videoCodec: (video?['Codec'] as String?)?.toLowerCase(),
     );
   }
 
@@ -79,6 +83,9 @@ class PlaybackInfo {
   /// Vrai si le fichier contient une image (pas seulement du son).
   final bool hasVideo;
 
+  /// Format de l'image du fichier d'origine (« hevc »…), null si inconnu.
+  final String? videoCodec;
+
   /// Fichier téléchargé sur le téléphone (null : lecture depuis le serveur).
   final String? localPath;
 
@@ -100,6 +107,19 @@ class PlaybackInfo {
       for (final code in value.split(','))
         if (code.trim().isNotEmpty) code.trim(),
     ];
+  }
+
+  /// Vrai si le serveur ne convertit que le son : toutes les raisons
+  /// concernent le son, et l'image est dans un format que le flux converti
+  /// accepte tel quel ([copyableVideoCodecs]), donc recopiée sans perte.
+  bool convertsOnlyAudio(List<String> copyableVideoCodecs) {
+    final reasons = transcodeReasons;
+    final url = transcodingUrl?.toLowerCase() ?? '';
+    return !directPlay &&
+        reasons.isNotEmpty &&
+        reasons.every(audioTranscodeReasons.contains) &&
+        copyableVideoCodecs.contains(videoCodec) &&
+        !url.contains('allowvideostreamcopy=false');
   }
 
   List<MediaTrack> get audioTracks =>

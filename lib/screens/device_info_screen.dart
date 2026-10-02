@@ -1,13 +1,16 @@
 import 'package:flutter/material.dart';
 
 import '../models/device_decoders.dart';
+import '../models/media_track.dart';
+import '../models/player_codecs.dart';
 import '../services/device_capabilities.dart';
 import '../theme/app_theme.dart';
 import '../widgets/ui.dart';
 
 /// Page « Ce que ton appareil sait lire » : pour chaque format vidéo, si la
-/// puce le décode (définition, 10 bits), et ce qu'il en est du HDR. Ce qui
-/// n'est pas lu directement est converti par le serveur avant la lecture.
+/// puce le décode (définition, 10 bits), ce qu'il en est du HDR, et les sons
+/// et sous-titres que le lecteur décode lui-même. Ce qui n'est pas lu
+/// directement est converti par le serveur avant la lecture.
 class DeviceInfoScreen extends StatelessWidget {
   const DeviceInfoScreen({super.key});
 
@@ -49,8 +52,8 @@ class DeviceInfoScreen extends StatelessWidget {
                 ),
                 const SizedBox(height: 16),
                 Text(
-                  'La puce vidéo décode elle-même les formats cochés. Le reste '
-                  'est converti par le serveur avant la lecture.',
+                  'Les formats cochés sont lus tels quels. Le reste est '
+                  'converti par le serveur avant la lecture.',
                   style: textTheme.bodyMedium?.copyWith(
                     color: AppColors.textSoft,
                   ),
@@ -134,7 +137,67 @@ class DeviceInfoScreen extends StatelessWidget {
             ),
         ],
       ),
+      const SizedBox(height: 20),
+      const _SectionTitle('Son'),
+      _InfoPanel(
+        children: [
+          for (final MapEntry(key: codec, value: name)
+              in audioCodecNames.entries)
+            decoders.player.decodes(codec)
+                ? _InfoRow(
+                    icon: Icons.check_circle_rounded,
+                    title: name,
+                    detail: 'Lu par le lecteur',
+                  )
+                : _InfoRow(
+                    icon: Icons.remove_circle_outline_rounded,
+                    title: name,
+                    detail:
+                        'Son converti par le serveur, l\'image reste '
+                        'd\'origine',
+                  ),
+        ],
+      ),
+      const SizedBox(height: 20),
+      const _SectionTitle('Sous-titres'),
+      _InfoPanel(
+        children: [
+          const _InfoRow(
+            icon: Icons.check_circle_rounded,
+            title: 'Texte (SRT, ASS, VTT…)',
+            detail: 'Affichés par le lecteur',
+          ),
+          _subtitleRow(decoders.player, 'dvdsub', 'Images DVD (VobSub)'),
+          _subtitleRow(decoders.player, 'pgssub', 'Images Blu-ray (PGS)'),
+        ],
+      ),
+      const SizedBox(height: 12),
+      Text(
+        decoders.player.fromPlayer
+            ? 'Son et sous-titres : liste donnée par le lecteur.'
+            : 'Son et sous-titres : le lecteur n\'a pas répondu, liste '
+                  'connue d\'avance.',
+        style: Theme.of(context).textTheme.bodySmall
+            ?.copyWith(color: AppColors.grey),
+      ),
     ];
+  }
+
+  /// Sous-titres en images : affichés seulement si le lecteur sait les
+  /// dessiner (sinon, grisés dans les menus).
+  Widget _subtitleRow(PlayerCodecs player, String codec, String title) {
+    final track = MediaTrack(index: 0, type: TrackType.subtitle, codec: codec);
+    return player.showsSubtitle(track)
+        ? _InfoRow(
+            icon: Icons.check_circle_rounded,
+            title: title,
+            detail: 'Affichés par le lecteur',
+          )
+        : _InfoRow(
+            icon: Icons.remove_circle_outline_rounded,
+            title: title,
+            detail: 'Non disponibles sur cet appareil',
+          );
   }
 
   Widget _codecRow(String codec, CodecSupport support, DeviceDecoders all) {

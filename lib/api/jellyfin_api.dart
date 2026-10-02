@@ -587,9 +587,12 @@ class JellyfinApi {
   /// Qualité réduite : flux converti par le serveur (débit et largeur limités).
   /// [start] : position de départ, pour que le serveur commence sa conversion
   /// directement au bon endroit (sinon il part du début et le lecteur attend).
-  /// [decoders] : ce que la puce vidéo de l'appareil sait décoder.
+  /// [decoders] : ce que la puce vidéo et le lecteur savent décoder.
   /// [tracks] : pistes audio et sous-titres voulues (le serveur les renvoie
   /// ensuite comme choix par défaut, et les met dans le flux s'il convertit).
+  /// Sous-titres que le lecteur ne sait pas afficher (PGS) choisis par le
+  /// serveur : on redemande sans sous-titres, plutôt que de les faire
+  /// incruster (toute la vidéo serait convertie).
   /// [allowDirectPlay] : faux pour forcer une vraie conversion (quand
   /// l'appareil n'a pas réussi à décoder l'image du fichier).
   Future<PlaybackInfo> getPlaybackInfo({
@@ -619,7 +622,9 @@ class JellyfinApi {
           decoders: decoders,
         ),
         'EnableDirectPlay': quality.isOriginal && allowDirectPlay,
-        'EnableDirectStream': quality.isOriginal && allowDirectPlay,
+        // Pas de « reconditionnement » (flux continu où l'on ne peut pas
+        // avancer) : s'il faut convertir, même le son seul, c'est en HLS
+        'EnableDirectStream': false,
         'EnableTranscoding': true,
         // Si une conversion a lieu, le serveur recopie tel quel ce qu'il peut
         // (sauf conversion forcée : recopier l'image illisible ne servirait à rien)
@@ -628,14 +633,33 @@ class JellyfinApi {
         'AutoOpenLiveStream': true,
       },
     );
+    final PlaybackInfo info;
     try {
-      return PlaybackInfo.fromJson(
+      info = PlaybackInfo.fromJson(
         json as Map<String, dynamic>,
         itemId: itemId,
       );
     } on FormatException catch (e) {
       throw JellyfinException(e.message);
     }
+    final subtitle = info.track(
+      tracks.subtitleIndex ?? info.defaultSubtitleIndex,
+    );
+    if (subtitle != null && !decoders.player.showsSubtitle(subtitle)) {
+      return getPlaybackInfo(
+        userId: userId,
+        itemId: itemId,
+        quality: quality,
+        start: start,
+        decoders: decoders,
+        tracks: TrackSelection(
+          audioIndex: tracks.audioIndex,
+          subtitleIndex: TrackSelection.noSubtitles,
+        ),
+        allowDirectPlay: allowDirectPlay,
+      );
+    }
+    return info;
   }
 
   /// Adresse complète de la vidéo à donner au lecteur :

@@ -2,8 +2,11 @@ import 'package:amplyfin/api/device_profile.dart';
 import 'package:amplyfin/api/jellyfin_api.dart';
 import 'package:amplyfin/models/device_decoders.dart';
 import 'package:amplyfin/models/durations.dart';
+import 'package:amplyfin/models/media_track.dart';
 import 'package:amplyfin/models/playback_info.dart';
 import 'package:amplyfin/models/playback_quality.dart';
+import 'package:amplyfin/models/player_codecs.dart';
+import 'package:amplyfin/models/player_message.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 // Tests de la lecture : profil de l'appareil, réponse du serveur, adresses
@@ -11,16 +14,35 @@ void main() {
   group('buildDeviceProfile', () {
     final profile = buildDeviceProfile(maxBitrate: originalMaxBitrate);
 
-    test('annonce la lecture directe de tous les codecs', () {
+    test('annonce la lecture directe de ce que le lecteur décode', () {
       final directPlay = profile['DirectPlayProfiles'] as List;
       expect(directPlay, hasLength(1));
       final video = directPlay.first as Map;
       expect(video['Type'], 'Video');
       expect(video['Container'], contains('mkv'));
       expect(video['Container'], contains('mp4'));
-      // Aucun codec listé = tous acceptés
-      expect(video.containsKey('VideoCodec'), isFalse);
-      expect(video.containsKey('AudioCodec'), isFalse);
+      final videoCodecs = (video['VideoCodec'] as String).split(',');
+      expect(videoCodecs, containsAll(['h264', 'hevc', 'av1', 'mpeg2video']));
+      // Le lecteur n'a pas de décodeur VC-1
+      expect(videoCodecs, isNot(contains('vc1')));
+    });
+
+    test('sons lus : tout sauf le TrueHD (converti par le serveur)', () {
+      final video = (profile['DirectPlayProfiles'] as List).first as Map;
+      final audioCodecs = (video['AudioCodec'] as String).split(',');
+      expect(audioCodecs, containsAll(['aac', 'ac3', 'eac3', 'dts', 'flac']));
+      expect(audioCodecs, isNot(contains('truehd')));
+    });
+
+    test('lecteur qui décode le TrueHD : annoncé au serveur', () {
+      final full = buildDeviceProfile(
+        maxBitrate: originalMaxBitrate,
+        decoders: const DeviceDecoders(
+          player: PlayerCodecs({'h264', 'aac', 'truehd', 'pcm_s24le'}),
+        ),
+      );
+      final video = (full['DirectPlayProfiles'] as List).first as Map;
+      expect(video['AudioCodec'], 'aac,truehd,pcm_s24le');
     });
 
     test('propose un flux HLS de secours', () {
@@ -29,11 +51,16 @@ void main() {
       expect(transcoding['VideoCodec'], 'h264,hevc');
     });
 
-    test('affiche les sous-titres PGS lui-même (pas d\'incrustation)', () {
+    test('sous-titres dans le fichier : seulement ceux que le lecteur '
+        'dessine (pas de PGS)', () {
       final subtitles = profile['SubtitleProfiles'] as List;
       expect(
         subtitles,
-        contains(equals({'Format': 'pgssub', 'Method': 'Embed'})),
+        contains(equals({'Format': 'dvdsub', 'Method': 'Embed'})),
+      );
+      expect(
+        subtitles,
+        isNot(contains(equals({'Format': 'pgssub', 'Method': 'Embed'}))),
       );
     });
 
@@ -202,6 +229,45 @@ void main() {
       );
     });
 
+    group('seul le son converti', () {
+      PlaybackInfo converted(String reasons, {String codec = 'hevc'}) =>
+          PlaybackInfo.fromJson({
+            'MediaSources': [
+              {
+                'Id': 'source1',
+                'SupportsDirectPlay': false,
+                'TranscodingUrl':
+                    '/videos/film1/master.m3u8?TranscodeReasons=$reasons',
+                'MediaStreams': [
+                  {'Type': 'Video', 'Index': 0, 'Codec': codec},
+                ],
+              },
+            ],
+          }, itemId: 'film1');
+
+      test('son TrueHD, image HEVC recopiée', () {
+        final info = converted('AudioCodecNotSupported');
+        expect(info.videoCodec, 'hevc');
+        expect(info.convertsOnlyAudio(['h264', 'hevc']), isTrue);
+      });
+
+      test('image à convertir aussi : non', () {
+        final info = converted(
+          'AudioCodecNotSupported,VideoBitDepthNotSupported',
+        );
+        expect(info.convertsOnlyAudio(['h264', 'hevc']), isFalse);
+      });
+
+      test('image que le flux converti ne peut pas recopier : non', () {
+        final info = converted('AudioCodecNotSupported', codec: 'av1');
+        expect(info.convertsOnlyAudio(['h264', 'hevc']), isFalse);
+        expect(
+          converted('AudioCodecNotSupported').convertsOnlyAudio(['h264']),
+          isFalse,
+        );
+      });
+    });
+
     test('aucune source : erreur', () {
       expect(
         () => PlaybackInfo.fromJson({'MediaSources': []}, itemId: 'film1'),
@@ -270,6 +336,71 @@ void main() {
     expect(
       ticksToDuration(durationToTicks(const Duration(minutes: 42))),
       const Duration(minutes: 42),
+    );
+  });
+
+  group('PlayerCodecs', () {
+    test('lit la liste du lecteur', () {
+      final codecs = PlayerCodecs.fromDecoderList(
+        '[{"codec":"aac","driver":"aac","description":"AAC"},'
+        '{"codec":"dts","driver":"dca","description":"DCA"},'
+        '{"codec":"hdmv_pgs_subtitle","driver":"pgssub","description":"PGS"}]',
+      )!;
+      expect(codecs.fromPlayer, isTrue);
+      expect(codecs.decodes('dts'), isTrue);
+      expect(codecs.decodes('truehd'), isFalse);
+      // Nom du serveur « pgssub » = « hdmv_pgs_subtitle » pour le lecteur
+      expect(codecs.decodes('pgssub'), isTrue);
+    });
+
+    test('réponse illisible : null', () {
+      expect(PlayerCodecs.fromDecoderList(''), isNull);
+      expect(PlayerCodecs.fromDecoderList('pas du json'), isNull);
+      expect(PlayerCodecs.fromDecoderList('[]'), isNull);
+    });
+
+    test('pistes : son TrueHD et sous-titres PGS illisibles', () {
+      const player = PlayerCodecs.builtIn;
+      const trueHd = MediaTrack(
+        index: 1,
+        type: TrackType.audio,
+        codec: 'truehd',
+      );
+      const ac3 = MediaTrack(index: 2, type: TrackType.audio, codec: 'ac3');
+      const pgs = MediaTrack(
+        index: 3,
+        type: TrackType.subtitle,
+        codec: 'PGSSUB',
+      );
+      const srt = MediaTrack(
+        index: 4,
+        type: TrackType.subtitle,
+        codec: 'subrip',
+      );
+      // Texte dans un format sans décodeur : livré en SRT par le serveur
+      const microDvd = MediaTrack(
+        index: 5,
+        type: TrackType.subtitle,
+        codec: 'microdvd',
+      );
+      expect(player.playsAudio(trueHd), isFalse);
+      expect(player.playsAudio(ac3), isTrue);
+      expect(player.showsSubtitle(pgs), isFalse);
+      expect(player.showsSubtitle(srt), isTrue);
+      expect(player.showsSubtitle(microDvd), isTrue);
+    });
+  });
+
+  test('message du lecteur : sans adresse ni clé', () {
+    expect(
+      cleanPlayerMessage(
+        'Failed to open https://serveur:8096/Videos/1/stream?api_key=abc123',
+      ),
+      'Failed to open [adresse]',
+    );
+    expect(
+      cleanPlayerMessage('Erreur token=secret&x=1 '),
+      'Erreur token=…&x=1',
     );
   });
 }

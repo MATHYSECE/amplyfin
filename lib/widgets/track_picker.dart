@@ -1,16 +1,59 @@
 import 'package:flutter/material.dart';
 
+import '../models/media_track.dart';
+import '../models/player_codecs.dart';
 import '../theme/app_theme.dart';
 
 /// Un choix dans une liste (piste audio, sous-titres, qualité…).
 class PickerOption<T> {
-  const PickerOption(this.value, this.label, {this.description});
+  const PickerOption(
+    this.value,
+    this.label, {
+    this.description,
+    this.enabled = true,
+  });
 
   final T value;
   final String label;
 
   /// Précision affichée sous le libellé (facultative).
   final String? description;
+
+  /// Faux pour un choix grisé, qu'on ne peut pas toucher.
+  final bool enabled;
+}
+
+/// Choix d'une piste audio. Son que le lecteur ne lit pas : converti par
+/// le serveur, ou grisé pour un fichier téléchargé ([local], rien à
+/// convertir sans le serveur).
+PickerOption<int?> audioTrackOption(
+  MediaTrack track,
+  PlayerCodecs player, {
+  bool local = false,
+}) {
+  final playable = player.playsAudio(track);
+  return PickerOption(
+    track.index,
+    track.label,
+    enabled: playable || !local,
+    description: playable
+        ? null
+        : local
+        ? 'Illisible sur cet appareil'
+        : 'Son converti par le serveur',
+  );
+}
+
+/// Choix de sous-titres : grisés si le lecteur ne sait pas les afficher
+/// (sous-titres en images PGS).
+PickerOption<int> subtitleTrackOption(MediaTrack track, PlayerCodecs player) {
+  final available = player.showsSubtitle(track);
+  return PickerOption(
+    track.index,
+    track.label,
+    enabled: available,
+    description: available ? null : 'Non disponible sur cet appareil',
+  );
 }
 
 /// Ligne de réglage sous les choix d'une liste (ex. « Taille des
@@ -53,6 +96,7 @@ Future<PickerOption<T>?> showPicker<T>(
           ),
           for (final option in options)
             ListTile(
+              enabled: option.enabled,
               title: Text(option.label),
               subtitle: option.description == null
                   ? null

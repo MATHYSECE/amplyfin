@@ -1,5 +1,6 @@
 import 'languages.dart';
 import 'media_track.dart';
+import 'player_codecs.dart';
 
 /// Pistes choisies pour une lecture, par leur numéro sur le serveur.
 class TrackSelection {
@@ -42,7 +43,12 @@ class LanguagePreference {
 
   /// Trouve, dans les pistes d'un épisode, celles qui correspondent aux
   /// langues choisies. Langue absente de l'épisode : choix du serveur.
-  TrackSelection resolve(List<MediaTrack> tracks) {
+  /// Les sous-titres que le lecteur ne sait pas afficher ([player]) sont
+  /// ignorés.
+  TrackSelection resolve(
+    List<MediaTrack> tracks, {
+    PlayerCodecs player = PlayerCodecs.builtIn,
+  }) {
     int? audio;
     if (audioLanguage != null) {
       final same = tracks.where(
@@ -58,7 +64,10 @@ class LanguagePreference {
       subtitle = TrackSelection.noSubtitles;
     } else if (subtitleLanguage != null) {
       final same = tracks.where(
-        (t) => t.type == TrackType.subtitle && t.language == subtitleLanguage,
+        (t) =>
+            t.type == TrackType.subtitle &&
+            t.language == subtitleLanguage &&
+            player.showsSubtitle(t),
       );
       // Sous-titres complets de préférence, forcés s'il n'y a que ça
       subtitle =

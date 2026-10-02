@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../api/device_profile.dart';
 import '../api/jellyfin_api.dart';
 import '../models/download_info.dart';
 import '../models/playback_info.dart';
@@ -14,9 +15,11 @@ import 'offline_progress.dart';
 import 'track_preferences.dart';
 
 /// Lance la lecture d'un film ou d'un épisode.
-/// Téléchargé : le fichier du téléphone est lu directement. Sinon, demande
-/// d'abord au serveur si la lecture directe est possible ; si non, explique
-/// pourquoi et demande à l'utilisateur s'il veut convertir.
+/// Téléchargé : le fichier du téléphone est lu directement (sauf si le
+/// lecteur ne sait pas lire son son : le serveur le convertit alors). Sinon,
+/// demande d'abord au serveur si la lecture directe est possible ; si non,
+/// explique pourquoi et demande à l'utilisateur s'il veut convertir. Seul le
+/// son à convertir : pas de question, c'est léger et l'image reste d'origine.
 /// [start] : position de départ (reprise de lecture), le début par défaut.
 /// Se termine quand on revient du lecteur (ou si on annule) et renvoie
 /// l'élément lu en dernier (l'épisode suivant s'il a été enchaîné), null si
@@ -32,11 +35,16 @@ Future<String?> launchPlayback(
   Duration start = Duration.zero,
 }) async {
   final PlaybackInfo info;
-  final local = await DownloadManager.instance.localPlayback(itemId);
+  final decoders = await DeviceCapabilities.decoders();
+  var local = await DownloadManager.instance.localPlayback(itemId);
+  // Son du fichier téléchargé illisible (TrueHD…) : flux du serveur
+  final localAudio = local?.track(tracks.audioIndex ?? local.defaultAudioIndex);
+  final unreadableSound =
+      localAudio != null && !decoders.player.playsAudio(localAudio);
+  if (unreadableSound) local = null;
   if (local != null) {
     info = local;
   } else {
-    final decoders = await DeviceCapabilities.decoders();
     try {
       info = await api.getPlaybackInfo(
         userId: session.userId,
@@ -50,15 +58,20 @@ Future<String?> launchPlayback(
       );
     } on JellyfinException catch (e) {
       if (context.mounted) {
+        final message = unreadableSound
+            ? 'Le son de ce téléchargement ne peut pas être lu sur cet '
+                  'appareil. Connecte-toi au serveur pour qu\'il le convertisse.'
+            : e.message;
         ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text(e.message)));
+            .showSnackBar(SnackBar(content: Text(message)));
       }
       return null;
     }
   }
   if (!context.mounted) return null;
 
-  if (!info.directPlay) {
+  if (!info.directPlay &&
+      !info.convertsOnlyAudio(transcodeVideoCodecs(decoders))) {
     final convert = await showTranscodeDialog(
       context,
       reasonCodes: info.transcodeReasons,
@@ -96,7 +109,10 @@ Future<void> launchDownloadPlayback(
   final seriesId = info.seriesId;
   if (info.isEpisode && seriesId != null) {
     final languages = await TrackPreferences().load(seriesId);
-    tracks = languages.resolve(info.tracks);
+    tracks = languages.resolve(
+      info.tracks,
+      player: DeviceCapabilities.playerCodecs,
+    );
   }
   final saved = OfflineProgress.instance.of(info.itemId);
   var start = saved?.resumePosition ?? Duration.zero;

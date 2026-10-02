@@ -6,6 +6,7 @@ import '../models/media_item.dart';
 import '../models/session.dart';
 import '../models/track_choice.dart';
 import '../models/watch_progress.dart';
+import '../services/device_capabilities.dart';
 import '../services/download_manager.dart';
 import '../services/offline_progress.dart';
 import '../services/playback_launcher.dart';
@@ -121,8 +122,10 @@ class _MovieScreenState extends State<MovieScreen> {
                 audios.firstOrNull)
             ?.index;
 
+    // Sous-titres que le lecteur ne sait pas afficher (PGS) : aucun
     final serverSubtitle = details.subtitleTracks
         .where((t) => t.index == details.defaultSubtitleIndex)
+        .where(DeviceCapabilities.playerCodecs.showsSubtitle)
         .firstOrNull;
     _subtitleIndex = serverSubtitle?.index ?? TrackSelection.noSubtitles;
   }
@@ -133,7 +136,7 @@ class _MovieScreenState extends State<MovieScreen> {
       title: 'Audio',
       options: [
         for (final track in details.audioTracks)
-          PickerOption<int?>(track.index, track.label),
+          audioTrackOption(track, DeviceCapabilities.playerCodecs),
       ],
       selected: _audioIndex,
     );
@@ -147,7 +150,7 @@ class _MovieScreenState extends State<MovieScreen> {
       options: [
         const PickerOption(TrackSelection.noSubtitles, 'Aucun'),
         for (final track in details.subtitleTracks)
-          PickerOption(track.index, track.label),
+          subtitleTrackOption(track, DeviceCapabilities.playerCodecs),
       ],
       selected: _subtitleIndex,
     );

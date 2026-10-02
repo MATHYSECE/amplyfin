@@ -12,6 +12,7 @@ import '../models/season.dart';
 import '../models/session.dart';
 import '../models/track_choice.dart';
 import '../services/connection_monitor.dart';
+import '../services/device_capabilities.dart';
 import '../services/download_groups.dart';
 import '../services/download_manager.dart';
 import '../services/offline_progress.dart';
@@ -208,7 +209,11 @@ class _SeriesScreenState extends State<SeriesScreen> {
           description: 'Selon les réglages de ton compte Jellyfin',
         ),
         const PickerOption<String?>(LanguagePreference.noSubtitles, 'Aucun'),
-        for (final language in languagesOf(_allTracks, TrackType.subtitle))
+        // Seulement les langues avec des sous-titres affichables (pas PGS)
+        for (final language in languagesOf(
+          _allTracks.where(DeviceCapabilities.playerCodecs.showsSubtitle),
+          TrackType.subtitle,
+        ))
           PickerOption<String?>(language, languageName(language)),
       ],
       selected: _languages.subtitleLanguage,
@@ -353,7 +358,10 @@ class _SeriesScreenState extends State<SeriesScreen> {
       title: episode.playerTitle,
       subtitle: episode.playerSubtitle,
       // Les langues de la série, appliquées aux pistes de cet épisode
-      tracks: _languages.resolve(episode.tracks),
+      tracks: _languages.resolve(
+        episode.tracks,
+        player: DeviceCapabilities.playerCodecs,
+      ),
       start: start ?? (progress.canResume ? progress.position : Duration.zero),
     );
     if (!mounted) return;

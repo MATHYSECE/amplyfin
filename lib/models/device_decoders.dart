@@ -1,5 +1,8 @@
-/// Ce que la puce vidéo de l'appareil sait décoder (demandé au téléphone).
+/// Ce que la puce vidéo de l'appareil sait décoder (demandé au téléphone),
+/// et ce que le lecteur décode lui-même (son, sous-titres).
 library;
+
+import 'player_codecs.dart';
 
 /// Formats « lourds » : décodés par la puce vidéo quand elle sait le faire.
 /// Noms des codecs comme pour le serveur Jellyfin.
@@ -64,6 +67,7 @@ class DeviceDecoders {
     this.dolbyVision = false,
     this.hdrScreen = false,
     this.allow10Bit = true,
+    this.player = PlayerCodecs.builtIn,
   });
 
   /// Lu depuis la réponse du code natif. [allow10Bit] : faux sur
@@ -71,6 +75,7 @@ class DeviceDecoders {
   factory DeviceDecoders.fromMap(
     Map<Object?, Object?> map, {
     bool allow10Bit = true,
+    PlayerCodecs player = PlayerCodecs.builtIn,
   }) {
     final codecs = map['codecs'] as Map<Object?, Object?>? ?? const {};
     return DeviceDecoders(
@@ -83,6 +88,7 @@ class DeviceDecoders {
       dolbyVision: map['dolbyVision'] == true,
       hdrScreen: map['hdrScreen'] == true,
       allow10Bit: allow10Bit,
+      player: player,
     );
   }
 
@@ -99,6 +105,10 @@ class DeviceDecoders {
 
   /// Faux pour refuser toute vidéo 10 bits (émulateur).
   final bool allow10Bit;
+
+  /// Formats décodés par le lecteur lui-même (son, sous-titres, vidéos
+  /// anciennes).
+  final PlayerCodecs player;
 
   /// Plus grande largeur lue directement pour [codec] (puce, sinon
   /// processeur jusqu'en 1080p).

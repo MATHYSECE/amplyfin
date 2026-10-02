@@ -9,6 +9,7 @@ import '../models/resume_entry.dart';
 import '../models/session.dart';
 import '../models/track_choice.dart';
 import '../services/connection_monitor.dart';
+import '../services/device_capabilities.dart';
 import '../services/download_groups.dart';
 import '../services/download_manager.dart';
 import '../services/offline_progress.dart';
@@ -230,7 +231,10 @@ class HomeTabState extends State<HomeTab> {
     final seriesId = entry.seriesId;
     if (seriesId != null) {
       final languages = await TrackPreferences().load(seriesId);
-      tracks = languages.resolve(entry.tracks);
+      tracks = languages.resolve(
+        entry.tracks,
+        player: DeviceCapabilities.playerCodecs,
+      );
     }
     if (!mounted) return;
     await launchPlayback(
