@@ -1,3 +1,5 @@
+import 'watch_progress.dart';
+
 /// Un élément de la bibliothèque (film ou série), avec juste ce qu'il faut
 /// pour la grille d'affiches.
 class MediaItem {
@@ -7,6 +9,7 @@ class MediaItem {
     this.type,
     this.year,
     this.posterTag,
+    this.progress = const WatchProgress(),
   });
 
   /// Lit un élément à partir du JSON renvoyé par GET /Items.
@@ -18,6 +21,9 @@ class MediaItem {
       type: json['Type'] as String?,
       year: json['ProductionYear'] as int?,
       posterTag: imageTags?['Primary'] as String?,
+      progress: WatchProgress.fromUserData(
+        json['UserData'] as Map<String, dynamic>?,
+      ),
     );
   }
 
@@ -36,6 +42,10 @@ class MediaItem {
   /// Empreinte de l'affiche : change quand l'affiche change sur le serveur.
   /// Null s'il n'y a pas d'affiche.
   final String? posterTag;
+
+  /// Vu ou pas, et pour une série le nombre d'épisodes pas vus (seulement
+  /// si la demande au serveur l'inclut).
+  final WatchProgress progress;
 
   bool get isSeries => type == 'Series';
 }

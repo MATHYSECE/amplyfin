@@ -7,7 +7,7 @@ import 'media_row.dart';
 import 'ui.dart';
 
 /// Choix du panneau ouvert par un appui long sur une affiche de la rangée.
-enum ResumeAction { resume, restart, openDetails, remove }
+enum ResumeAction { resume, restart, openDetails, markPlayed, remove }
 
 /// Nom de l'animation de l'affiche d'une entrée vers sa fiche.
 String resumeHeroTag(ResumeEntry entry) => 'home-continue-${entry.id}';
@@ -164,6 +164,11 @@ Future<ResumeAction?> showResumeActions(
                     : 'Aller à la page du film',
               ),
               onTap: () => choose(ResumeAction.openDetails),
+            ),
+            ListTile(
+              leading: const Icon(Icons.check_rounded),
+              title: const Text('Marquer comme vu'),
+              onTap: () => choose(ResumeAction.markPlayed),
             ),
             if (!entry.isNext) ...[
               const Divider(),

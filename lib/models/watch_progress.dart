@@ -10,6 +10,7 @@ class WatchProgress {
     this.percentage = 0,
     this.played = false,
     this.lastPlayed,
+    this.unplayedCount,
   });
 
   /// Lit la partie « UserData » d'un élément (absente : rien de commencé).
@@ -24,6 +25,7 @@ class WatchProgress {
       lastPlayed: DateTime.tryParse(
         (userData['LastPlayedDate'] as String?) ?? '',
       ),
+      unplayedCount: userData['UnplayedItemCount'] as int?,
     );
   }
 
@@ -38,6 +40,10 @@ class WatchProgress {
 
   /// Dernière lecture, sur n'importe quel appareil (null si jamais lu).
   final DateTime? lastPlayed;
+
+  /// Série ou saison : nombre d'épisodes pas encore vus (null : inconnu,
+  /// ou film).
+  final int? unplayedCount;
 
   /// Vrai si la lecture peut reprendre là où elle s'était arrêtée.
   bool get canResume => position > Duration.zero;

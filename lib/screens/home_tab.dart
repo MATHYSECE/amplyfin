@@ -21,6 +21,7 @@ import '../widgets/download_rows.dart';
 import '../widgets/home_hero.dart';
 import '../widgets/media_row.dart';
 import '../widgets/ui.dart';
+import '../widgets/watched_controls.dart';
 import 'downloads_screen.dart';
 import 'movie_screen.dart';
 import 'series_screen.dart';
@@ -265,6 +266,16 @@ class HomeTabState extends State<HomeTab> {
           entry.poster,
           heroTag: resumeHeroTag(entry),
           seasonId: entry.seasonId,
+        );
+      case ResumeAction.markPlayed:
+        await toggleWatched(
+          context,
+          api: widget.api,
+          userId: _userId,
+          itemId: entry.id,
+          current: entry.progress,
+          related: [?entry.seriesId],
+          onChanged: refreshContinue,
         );
       case ResumeAction.remove:
         await _remove(entry);

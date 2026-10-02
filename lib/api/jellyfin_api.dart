@@ -156,7 +156,8 @@ class JellyfinApi {
         // On ne veut que l'affiche, pas les autres images
         'enableImageTypes': 'Primary',
         'imageTypeLimit': '1',
-        'enableUserData': 'false',
+        // Vu ou pas, épisodes pas vus d'une série (marques sur les affiches)
+        'enableUserData': 'true',
       },
     );
     final items = (json['Items'] as List<dynamic>?) ?? [];
@@ -541,6 +542,19 @@ class JellyfinApi {
       if (lastPlayed != null)
         'LastPlayedDate': lastPlayed.toUtc().toIso8601String(),
     },
+  );
+
+  /// POST /UserPlayedItems/{id} (vu) ou DELETE (pas vu) : marque un film,
+  /// un épisode, ou tous les épisodes d'une saison ou d'une série. Marquer
+  /// comme vu efface aussi la position de reprise.
+  Future<void> setPlayed({
+    required String userId,
+    required String itemId,
+    required bool played,
+  }) => _send(
+    played ? 'POST' : 'DELETE',
+    '/UserPlayedItems/$itemId',
+    query: {'userId': userId},
   );
 
   /// Adresse de l'affiche d'un film ou d'une série, [width] pixels de large.

@@ -23,6 +23,24 @@ void main() {
       expect(movie.name, 'Sans titre');
       expect(movie.year, isNull);
       expect(movie.posterTag, isNull);
+      expect(movie.progress.played, isFalse);
+    });
+
+    test('vu ou pas, et épisodes pas vus d\'une série', () {
+      final movie = MediaItem.fromJson({
+        'Id': 'film1',
+        'Type': 'Movie',
+        'UserData': {'Played': true},
+      });
+      expect(movie.progress.played, isTrue);
+
+      final series = MediaItem.fromJson({
+        'Id': 'serie1',
+        'Type': 'Series',
+        'UserData': {'Played': false, 'UnplayedItemCount': 12},
+      });
+      expect(series.progress.played, isFalse);
+      expect(series.progress.unplayedCount, 12);
     });
   });
 

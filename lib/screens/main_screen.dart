@@ -59,6 +59,18 @@ class _MainScreenState extends State<MainScreen> {
   /// Vrai quand le contenu passe sous l'en-tête : il devient en verre dépoli.
   bool _solid = false;
 
+  /// Vrai quand l'en-tête est caché (on fait défiler vers le bas) : il ne
+  /// reste que la bande de la barre d'état. Il revient dès qu'on remonte.
+  bool _headerHidden = false;
+
+  /// Dernière position de défilement vue, et chemin parcouru depuis le
+  /// dernier changement de sens (évite que l'en-tête clignote).
+  double _lastOffset = 0;
+  double _travel = 0;
+
+  /// Défilement minimum avant de cacher l'en-tête.
+  static const _hideAfter = 120.0;
+
   @override
   void initState() {
     super.initState();
@@ -103,8 +115,27 @@ class _MainScreenState extends State<MainScreen> {
 
   void _updateHeader() {
     final scroll = _tab < _scrolls.length ? _scrolls[_tab] : null;
-    final solid = scroll != null && scroll.hasClients && scroll.offset > 24;
-    if (solid != _solid) setState(() => _solid = solid);
+    if (scroll == null || !scroll.hasClients) return;
+    final offset = scroll.offset;
+    final solid = offset > 24;
+    final delta = offset - _lastOffset;
+    _lastOffset = offset;
+    // Même sens qu'avant : on cumule ; changement de sens : on repart de 0
+    _travel = (delta > 0) == (_travel > 0) ? _travel + delta : delta;
+    var hidden = _headerHidden;
+    if (offset < _hideAfter) {
+      hidden = false;
+    } else if (_travel > 24) {
+      hidden = true;
+    } else if (_travel < -12) {
+      hidden = false;
+    }
+    if (solid != _solid || hidden != _headerHidden) {
+      setState(() {
+        _solid = solid;
+        _headerHidden = hidden;
+      });
+    }
   }
 
   void _select(int tab) {
@@ -122,6 +153,11 @@ class _MainScreenState extends State<MainScreen> {
     setState(() {
       _tab = tab;
       _visited.add(tab);
+      // Nouvel onglet : l'en-tête revient
+      _headerHidden = false;
+      _travel = 0;
+      final scroll = _scrolls[tab];
+      _lastOffset = scroll.hasClients ? scroll.offset : 0;
     });
     // Retour sur l'accueil : « Continuer à regarder » à jour
     if (tab == 0) _homeKey.currentState?.refreshContinue();
@@ -224,13 +260,17 @@ class _MainScreenState extends State<MainScreen> {
                     ? _buildTab(i, headerHeight, barSpace)
                     : const SizedBox.shrink(),
               ),
-            Positioned(
-              top: 0,
+            // Caché : remonte en ne laissant que la bande de la barre d'état
+            AnimatedPositioned(
+              duration: AppDurations.medium,
+              curve: Curves.easeOutCubic,
+              top: _headerHidden ? padding.top - headerHeight : 0,
               left: 0,
               right: 0,
               child: _Header(
                 title: _titles[_tab],
-                solid: _solid,
+                solid: _solid || _headerHidden,
+                hidden: _headerHidden,
                 height: headerHeight,
                 gutter: AppLayout.gutter(context),
                 wide: wide,
@@ -324,6 +364,7 @@ class _Header extends StatelessWidget {
   const _Header({
     required this.title,
     required this.solid,
+    required this.hidden,
     required this.height,
     required this.gutter,
     required this.wide,
@@ -333,6 +374,9 @@ class _Header extends StatelessWidget {
 
   final String title;
   final bool solid;
+
+  /// Vrai quand l'en-tête est remonté : son contenu s'efface.
+  final bool hidden;
   final double height;
   final double gutter;
 
@@ -365,7 +409,14 @@ class _Header extends StatelessWidget {
               ),
             ),
             padding: EdgeInsets.fromLTRB(gutter, topInset + 8, gutter, 10),
-            child: child,
+            child: IgnorePointer(
+              ignoring: hidden,
+              child: AnimatedOpacity(
+                opacity: hidden ? 0 : 1,
+                duration: AppDurations.fast,
+                child: child,
+              ),
+            ),
           ),
         ),
       ),

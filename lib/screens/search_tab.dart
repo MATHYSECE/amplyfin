@@ -40,7 +40,7 @@ class SearchTab extends StatefulWidget {
   final double headerHeight;
   final double bottomPadding;
 
-  /// Vrai quand l'onglet est affiché : le clavier s'ouvre.
+  /// Vrai quand l'onglet est affiché (le clavier se ferme quand on le quitte).
   final bool active;
 
   @override
@@ -87,7 +87,6 @@ class _SearchTabState extends State<SearchTab> {
     super.initState();
     _loadHistory();
     _loadGenres();
-    if (widget.active) _openKeyboard();
     ConnectionMonitor.instance.addListener(_onConnection);
   }
 
@@ -101,7 +100,8 @@ class _SearchTabState extends State<SearchTab> {
   @override
   void didUpdateWidget(SearchTab old) {
     super.didUpdateWidget(old);
-    if (widget.active && !old.active) _openKeyboard();
+    // Clavier fermé en quittant l'onglet (il ne s'ouvre qu'en touchant le
+    // champ, choix de l'utilisateur)
     if (!widget.active && old.active) _focus.unfocus();
   }
 
@@ -112,12 +112,6 @@ class _SearchTabState extends State<SearchTab> {
     _text.dispose();
     _focus.dispose();
     super.dispose();
-  }
-
-  void _openKeyboard() {
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted && widget.active) _focus.requestFocus();
-    });
   }
 
   Future<void> _loadHistory() async {

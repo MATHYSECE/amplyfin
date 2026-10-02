@@ -111,11 +111,15 @@ class MovieDownloadButton extends StatelessWidget {
     switch (state.phase) {
       case DownloadPhase.none:
         final size = formatFileSize(fileSize);
-        return OutlinedButton.icon(
-          onPressed: _start,
-          icon: const Icon(Icons.download_rounded, size: 22),
-          label: Text(
-            compact || size == null ? 'Télécharger' : 'Télécharger · $size',
+        // Toute la largeur disponible (à côté du bouton « Vu »)
+        return SizedBox(
+          width: double.infinity,
+          child: OutlinedButton.icon(
+            onPressed: _start,
+            icon: const Icon(Icons.download_rounded, size: 22),
+            label: Text(
+              compact || size == null ? 'Télécharger' : 'Télécharger · $size',
+            ),
           ),
         );
       case DownloadPhase.waiting:

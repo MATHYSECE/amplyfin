@@ -6,11 +6,13 @@ import '../models/media_item.dart';
 import '../models/session.dart';
 import '../services/connection_monitor.dart';
 import '../services/library_preferences.dart';
+import '../services/watched_state.dart';
 import '../theme/app_theme.dart';
 import 'download_controls.dart';
 import 'poster_image.dart';
 import 'track_picker.dart';
 import 'ui.dart';
+import 'watched_controls.dart';
 
 /// Grille d'affiches d'un type d'élément (films ou séries), chargée page par
 /// page au fil du défilement. Garde sa position quand on change d'onglet.
@@ -318,6 +320,7 @@ class _LibraryGridState extends State<LibraryGrid>
               api: widget.api,
               item: item,
               onTap: () => widget.onOpen(item),
+              onLongPress: () => _showOptions(item),
             );
             // Nouvelle affiche : arrive en fondu (une fois seulement)
             if (!_shown.add(item.id)) return tile;
@@ -357,6 +360,57 @@ class _LibraryGridState extends State<LibraryGrid>
         ],
       ),
     );
+  }
+
+  /// Appui long sur une affiche : marquer comme vu / pas vu.
+  Future<void> _showOptions(MediaItem item) async {
+    final played = WatchedState.instance.of(item).played;
+    final chosen = await showModalBottomSheet<bool>(
+      context: context,
+      builder: (context) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(
+              title: Text(
+                item.name,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: Theme.of(context).textTheme.titleMedium,
+              ),
+            ),
+            const Divider(),
+            ListTile(
+              leading: Icon(
+                played ? Icons.remove_done_rounded : Icons.check_rounded,
+              ),
+              title: Text(played ? 'Marquer comme pas vu' : 'Marquer comme vu'),
+              onTap: () => Navigator.of(context).pop(true),
+            ),
+          ],
+        ),
+      ),
+    );
+    if (chosen != true || !mounted) return;
+    final userId = widget.session.userId;
+    if (item.isSeries) {
+      await setWatchedForAll(
+        context,
+        api: widget.api,
+        userId: userId,
+        itemId: item.id,
+        what: 'toute la série',
+        played: !played,
+      );
+    } else {
+      await toggleWatched(
+        context,
+        api: widget.api,
+        userId: userId,
+        itemId: item.id,
+        current: WatchedState.instance.of(item),
+      );
+    }
   }
 
   /// Marge de côté de la grille et des genres.
@@ -486,11 +540,13 @@ class _PosterTile extends StatelessWidget {
     required this.api,
     required this.item,
     required this.onTap,
+    required this.onLongPress,
   });
 
   final JellyfinApi api;
   final MediaItem item;
   final VoidCallback onTap;
+  final VoidCallback onLongPress;
 
   @override
   Widget build(BuildContext context) {
@@ -498,6 +554,7 @@ class _PosterTile extends StatelessWidget {
 
     return PressableScale(
       onTap: onTap,
+      onLongPress: onLongPress,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
@@ -521,6 +578,8 @@ class _PosterTile extends StatelessWidget {
                     tag: PosterImage.heroTag(item),
                     child: PosterImage(api: api, item: item),
                   ),
+                  // Vu (coche) ou épisodes pas vus (nombre), en haut à gauche
+                  Positioned(top: 6, left: 6, child: WatchedBadge(item: item)),
                   // Film téléchargé : petite coche en haut à droite
                   if (!item.isSeries)
                     Positioned(

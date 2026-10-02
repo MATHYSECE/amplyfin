@@ -15,6 +15,7 @@ import '../widgets/details_page.dart';
 import '../widgets/download_controls.dart';
 import '../widgets/track_picker.dart';
 import '../widgets/ui.dart';
+import '../widgets/watched_controls.dart';
 
 /// Fiche d'un film : image de fond, affiche, infos, bouton lecture, résumé.
 /// Le titre, l'année et l'affiche (déjà connus grâce à la grille) s'affichent
@@ -228,10 +229,33 @@ class _MovieScreenState extends State<MovieScreen> {
         ),
       ],
       const SizedBox(height: 14),
-      _buildSecondaryButtons(details, resume: resume),
+      // Téléchargement (et « Depuis le début »), puis le bouton « Vu »
+      Row(
+        children: [
+          Expanded(child: _buildSecondaryButtons(details, resume: resume)),
+          const SizedBox(width: 10),
+          WatchedButton(
+            played: progress.played,
+            onPressed: details == null ? null : () => _toggleWatched(details),
+          ),
+        ],
+      ),
       OfflineNote(itemId: widget.movie.id),
     ];
   }
+
+  /// Bouton « Vu » : marque le film comme vu (ou plus vu), puis relit la
+  /// fiche (la reprise disparaît ou revient).
+  Future<void> _toggleWatched(ItemDetails details) => toggleWatched(
+    context,
+    api: widget.api,
+    userId: widget.session.userId,
+    itemId: widget.movie.id,
+    current: details.progress,
+    onChanged: () {
+      if (mounted) _load(keepTracks: true);
+    },
+  );
 
   /// « Depuis le début » (film commencé) et le bouton de téléchargement :
   /// côte à côte tant que rien n'est téléchargé, l'un sous l'autre sinon

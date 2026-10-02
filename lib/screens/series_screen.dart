@@ -23,6 +23,7 @@ import '../widgets/details_page.dart';
 import '../widgets/download_controls.dart';
 import '../widgets/track_picker.dart';
 import '../widgets/ui.dart';
+import '../widgets/watched_controls.dart';
 
 /// Fiche d'une série : infos, résumé, choix de la saison, liste des épisodes.
 /// Sans serveur, si des épisodes sont téléchargés : la même fiche, avec
@@ -527,12 +528,28 @@ class _SeriesScreenState extends State<SeriesScreen> {
           )
         : null;
 
+    // Saisons et bouton ⋯ (vu / pas vu), sauf hors ligne
+    final seasonRow = _offline
+        ? chips
+        : Row(
+            children: [
+              Expanded(child: chips),
+              const SizedBox(width: 8),
+              GlassCircleButton(
+                icon: Icons.more_horiz_rounded,
+                tooltip: 'Marquer comme vu',
+                size: 40,
+                onPressed: () => _showWatchedMenu(shownSeason, episodes),
+              ),
+            ],
+          );
+
     return [
       // Deux colonnes : le téléchargement de la saison à droite des saisons
       if (twoColumns)
         Row(
           children: [
-            Expanded(flex: 6, child: chips),
+            Expanded(flex: 6, child: seasonRow),
             const SizedBox(width: 40),
             Expanded(
               flex: 5,
@@ -544,7 +561,7 @@ class _SeriesScreenState extends State<SeriesScreen> {
           ],
         )
       else
-        chips,
+        seasonRow,
       // Hors ligne : on précise ce qui est affiché
       if (_offline) ...[
         const SizedBox(height: 12),
@@ -615,19 +632,122 @@ class _SeriesScreenState extends State<SeriesScreen> {
     userId: _userId,
     episode: episode,
     onTap: () => _play(episode),
+    onLongPress: () => _toggleEpisodeWatched(episode),
     onInfo: () => _showEpisodeInfo(episode),
   );
+
+  /// Marque un épisode comme vu / pas vu (avec « Annuler »).
+  Future<void> _toggleEpisodeWatched(Episode episode) => toggleWatched(
+    context,
+    api: widget.api,
+    userId: _userId,
+    itemId: episode.id,
+    current: episode.progress,
+    related: [widget.series.id],
+    onChanged: _afterWatchedChange,
+  );
+
+  /// Bouton ⋯ des saisons : marquer la saison affichée, ou toute la série,
+  /// comme vue / pas vue.
+  Future<void> _showWatchedMenu(Season? season, List<Episode>? episodes) async {
+    final seasonPlayed =
+        episodes != null &&
+        episodes.isNotEmpty &&
+        episodes.every((e) => e.played);
+    final seriesPlayed = _details?.progress.played ?? false;
+    final choice = await showModalBottomSheet<_WatchedTarget>(
+      context: context,
+      builder: (context) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (season != null && episodes != null && episodes.isNotEmpty)
+              ListTile(
+                leading: Icon(
+                  seasonPlayed
+                      ? Icons.remove_done_rounded
+                      : Icons.check_rounded,
+                ),
+                title: Text(
+                  seasonPlayed
+                      ? 'Marquer « ${season.name} » comme pas vue'
+                      : 'Marquer « ${season.name} » comme vue',
+                ),
+                onTap: () => Navigator.of(context).pop(_WatchedTarget.season),
+              ),
+            ListTile(
+              leading: Icon(
+                seriesPlayed
+                    ? Icons.remove_done_rounded
+                    : Icons.done_all_rounded,
+              ),
+              title: Text(
+                seriesPlayed
+                    ? 'Marquer toute la série comme pas vue'
+                    : 'Marquer toute la série comme vue',
+              ),
+              onTap: () => Navigator.of(context).pop(_WatchedTarget.series),
+            ),
+          ],
+        ),
+      ),
+    );
+    if (choice == null || !mounted) return;
+    final forSeason = choice == _WatchedTarget.season && season != null;
+    final changed = await setWatchedForAll(
+      context,
+      api: widget.api,
+      userId: _userId,
+      itemId: forSeason ? season.id : widget.series.id,
+      what: forSeason ? '« ${season.name} »' : 'toute la série',
+      played: forSeason ? !seasonPlayed : !seriesPlayed,
+      related: forSeason ? [widget.series.id] : const [],
+    );
+    if (changed) await _afterWatchedChange(allSeasons: !forSeason);
+  }
+
+  /// Après un changement « vu » : relit la fiche (série toute vue ou pas) et
+  /// la saison affichée. [allSeasons] : les autres saisons en mémoire sont
+  /// oubliées, elles seront relues quand on les choisira.
+  Future<void> _afterWatchedChange({bool allSeasons = false}) async {
+    if (!mounted) return;
+    final shownId = _shownSeasonId;
+    if (allSeasons) _episodes.removeWhere((id, _) => id != shownId);
+    final shown = _seasons?.where((s) => s.id == shownId).firstOrNull;
+    await Future.wait([
+      _loadDetails(),
+      if (shown != null) _loadEpisodes(shown),
+    ]);
+  }
 
   /// Bouton ⓘ : infos de l'épisode dans un panneau qui monte du bas.
   /// Le panneau renvoie la position de départ choisie (null : fermé).
   Future<void> _showEpisodeInfo(Episode episode) async {
-    final start = await showModalBottomSheet<Duration>(
+    final choice = await showModalBottomSheet<_EpisodeChoice>(
       context: context,
       isScrollControlled: true,
       builder: (context) => _EpisodeSheet(api: widget.api, episode: episode),
     );
-    if (start != null && mounted) await _play(episode, start: start);
+    if (choice == null || !mounted) return;
+    if (choice.toggleWatched) {
+      await _toggleEpisodeWatched(episode);
+    } else {
+      await _play(episode, start: choice.start);
+    }
   }
+}
+
+/// Choix du bouton ⋯ des saisons.
+enum _WatchedTarget { season, series }
+
+/// Choix fait dans le panneau d'un épisode : le lire (à [start]), ou le
+/// marquer comme vu / pas vu.
+class _EpisodeChoice {
+  const _EpisodeChoice.play(Duration this.start) : toggleWatched = false;
+  const _EpisodeChoice.toggleWatched() : start = null, toggleWatched = true;
+
+  final Duration? start;
+  final bool toggleWatched;
 }
 
 /// Largeur demandée au serveur pour les vignettes d'épisode, en pixels.
@@ -683,6 +803,7 @@ class _EpisodeTile extends StatelessWidget {
     required this.userId,
     required this.episode,
     required this.onTap,
+    required this.onLongPress,
     required this.onInfo,
   });
 
@@ -690,6 +811,9 @@ class _EpisodeTile extends StatelessWidget {
   final String userId;
   final Episode episode;
   final VoidCallback onTap;
+
+  /// Appui long : vu / pas vu.
+  final VoidCallback onLongPress;
   final VoidCallback onInfo;
 
   @override
@@ -698,6 +822,7 @@ class _EpisodeTile extends StatelessWidget {
 
     return InkWell(
       onTap: onTap,
+      onLongPress: onLongPress,
       borderRadius: BorderRadius.circular(AppRadius.poster),
       child: Padding(
         padding: const EdgeInsets.symmetric(vertical: 7),
@@ -859,22 +984,43 @@ class _EpisodeSheet extends StatelessWidget {
                 ),
                 const SizedBox(height: 14),
                 FilledButton.icon(
-                  onPressed: () => Navigator.of(context).pop(progress.position),
+                  onPressed: () =>
+                      Navigator.of(context)
+                          .pop(_EpisodeChoice.play(progress.position)),
                   icon: const Icon(Icons.play_arrow_rounded, size: 24),
                   label: Text(progress.resumeLabel),
                 ),
                 const SizedBox(height: 10),
                 OutlinedButton.icon(
-                  onPressed: () => Navigator.of(context).pop(Duration.zero),
+                  onPressed: () =>
+                      Navigator.of(context)
+                          .pop(const _EpisodeChoice.play(Duration.zero)),
                   icon: const Icon(Icons.replay_rounded, size: 22),
                   label: const Text('Depuis le début'),
                 ),
               ] else
                 FilledButton.icon(
-                  onPressed: () => Navigator.of(context).pop(Duration.zero),
+                  onPressed: () =>
+                      Navigator.of(context)
+                          .pop(const _EpisodeChoice.play(Duration.zero)),
                   icon: const Icon(Icons.play_arrow_rounded, size: 24),
                   label: const Text('Lire l\'épisode'),
                 ),
+              const SizedBox(height: 10),
+              OutlinedButton.icon(
+                onPressed: () =>
+                    Navigator.of(context)
+                        .pop(const _EpisodeChoice.toggleWatched()),
+                icon: Icon(
+                  episode.played
+                      ? Icons.remove_done_rounded
+                      : Icons.check_rounded,
+                  size: 22,
+                ),
+                label: Text(
+                  episode.played ? 'Marquer comme pas vu' : 'Marquer comme vu',
+                ),
+              ),
             ],
           ),
         ),
