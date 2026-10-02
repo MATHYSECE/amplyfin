@@ -352,6 +352,10 @@ class _PlayerScreenState extends State<PlayerScreen> {
             decoders: _decoders,
             tracks: _tracks,
             allowDirectPlay: !_forceTranscode,
+            // Même fichier qu'avant (changement de piste ou de qualité)
+            mediaSourceId: _info.value?.itemId == _itemId
+                ? _info.value?.mediaSourceId
+                : null,
           );
       if (!mounted) return;
 

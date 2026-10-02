@@ -595,6 +595,9 @@ class JellyfinApi {
   /// incruster (toute la vidéo serait convertie).
   /// [allowDirectPlay] : faux pour forcer une vraie conversion (quand
   /// l'appareil n'a pas réussi à décoder l'image du fichier).
+  /// [mediaSourceId] : fichier vidéo à lire (par défaut celui de l'élément
+  /// lui-même). Obligatoire pour le serveur : sans lui, il ignore la piste
+  /// audio et les sous-titres demandés.
   Future<PlaybackInfo> getPlaybackInfo({
     required String userId,
     required String itemId,
@@ -603,6 +606,7 @@ class JellyfinApi {
     DeviceDecoders decoders = const DeviceDecoders(),
     TrackSelection tracks = const TrackSelection(),
     bool allowDirectPlay = true,
+    String? mediaSourceId,
   }) async {
     final bitrate = quality.maxBitrate ?? originalMaxBitrate;
     final json = await _send(
@@ -611,6 +615,7 @@ class JellyfinApi {
       query: {'userId': userId},
       body: {
         'UserId': userId,
+        'MediaSourceId': mediaSourceId ?? itemId,
         'StartTimeTicks': durationToTicks(start),
         if (tracks.audioIndex != null) 'AudioStreamIndex': tracks.audioIndex,
         if (tracks.subtitleIndex != null)
@@ -657,6 +662,7 @@ class JellyfinApi {
           subtitleIndex: TrackSelection.noSubtitles,
         ),
         allowDirectPlay: allowDirectPlay,
+        mediaSourceId: info.mediaSourceId,
       );
     }
     return info;
