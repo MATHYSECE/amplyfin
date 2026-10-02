@@ -176,11 +176,15 @@ class _DownloadsScreenState extends State<DownloadsScreen> with UndoDelete {
                 _manager.states,
                 hidden: hiddenDownloads,
               );
+              // Tablette : une colonne centrée plutôt que toute la largeur
+              final side = AppLayout.isWide(context)
+                  ? AppLayout.centeredGutter(context)
+                  : 20.0;
               return SingleChildScrollView(
                 padding: EdgeInsets.fromLTRB(
-                  20,
+                  side,
                   padding.top + 12,
-                  20,
+                  side,
                   padding.bottom + 32,
                 ),
                 child: Column(

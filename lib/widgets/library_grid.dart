@@ -270,7 +270,9 @@ class _LibraryGridState extends State<LibraryGrid>
   @override
   Widget build(BuildContext context) {
     super.build(context); // nécessaire pour AutomaticKeepAliveClientMixin
-    const padding = EdgeInsets.fromLTRB(16, 12, 16, 12);
+    // Tablette : alignée sur le titre de l'onglet (téléphone inchangé)
+    final side = _sideMargin(context);
+    final padding = EdgeInsets.fromLTRB(side, 12, side, 12);
 
     final Widget content;
     if (_items.isEmpty && (_loading || _totalCount == null) && _error == null) {
@@ -357,6 +359,10 @@ class _LibraryGridState extends State<LibraryGrid>
     );
   }
 
+  /// Marge de côté de la grille et des genres.
+  static double _sideMargin(BuildContext context) =>
+      AppLayout.isWide(context) ? AppLayout.gutter(context) : 16;
+
   /// Bas de la grille : roue de chargement, ou erreur avec « Réessayer ».
   Widget _buildFooter() {
     if (_error != null) {
@@ -429,7 +435,10 @@ class _FilterBar extends StatelessWidget {
                           height: 40,
                           child: ListView(
                             scrollDirection: Axis.horizontal,
-                            padding: const EdgeInsets.only(left: 16, right: 8),
+                            padding: EdgeInsets.only(
+                              left: _LibraryGridState._sideMargin(context),
+                              right: 8,
+                            ),
                             children: [
                               _chip('Tous', null),
                               for (final genre in genres)
@@ -442,7 +451,9 @@ class _FilterBar extends StatelessWidget {
             ),
           ),
           Padding(
-            padding: const EdgeInsets.only(right: 16),
+            padding: EdgeInsets.only(
+              right: _LibraryGridState._sideMargin(context),
+            ),
             child: GlassCircleButton(
               icon: Icons.swap_vert_rounded,
               tooltip: 'Trier : ${sort.label}',

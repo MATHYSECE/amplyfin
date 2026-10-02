@@ -394,6 +394,17 @@ class _SeriesScreenState extends State<SeriesScreen> {
   Widget build(BuildContext context) {
     final series = widget.series;
     final details = _details;
+    final Widget overview;
+    if (details != null) {
+      overview = DetailsOverview(details: details);
+    } else if (_detailsError != null) {
+      overview = RetryMessage(message: _detailsError!, onRetry: _loadDetails);
+    } else {
+      overview = const DetailsOverviewSkeleton();
+    }
+    // iPad en paysage : langues à gauche, résumé à droite, puis les saisons
+    // et les épisodes sur toute la largeur
+    final twoColumns = AppLayout.isTwoColumn(context);
 
     return DetailsPage(
       api: widget.api,
@@ -411,14 +422,10 @@ class _SeriesScreenState extends State<SeriesScreen> {
         rating: details?.ratingLabel,
         heroTag: widget.heroTag,
       ),
+      aside: twoColumns ? [overview] : const [],
+      below: twoColumns ? _buildSeasons(twoColumns: true) : const [],
       children: [
-        if (details != null)
-          DetailsOverview(details: details)
-        else if (_detailsError != null)
-          RetryMessage(message: _detailsError!, onRetry: _loadDetails)
-        else
-          const DetailsOverviewSkeleton(),
-        const SizedBox(height: 26),
+        if (!twoColumns) ...[overview, const SizedBox(height: 26)],
         Text(
           'Langues pour toute la série',
           style: Theme.of(context).textTheme.labelLarge
@@ -452,14 +459,17 @@ class _SeriesScreenState extends State<SeriesScreen> {
             ),
           ],
         ),
-        const SizedBox(height: 26),
-        ..._buildSeasons(),
+        if (!twoColumns) ...[
+          const SizedBox(height: 26),
+          ..._buildSeasons(twoColumns: false),
+        ],
       ],
     );
   }
 
-  /// Rangée de choix de la saison, puis les épisodes de la saison choisie.
-  List<Widget> _buildSeasons() {
+  /// Rangée de choix de la saison, puis les épisodes de la saison choisie
+  /// ([twoColumns] : deux épisodes par ligne).
+  List<Widget> _buildSeasons({required bool twoColumns}) {
     final seasons = _seasons;
     if (seasons == null) {
       return [
@@ -483,26 +493,58 @@ class _SeriesScreenState extends State<SeriesScreen> {
         shownId != selected.id &&
         _loadingSeasons.contains(selected.id);
 
-    return [
-      // Saisons en pilules, défilement horizontal si elles ne tiennent pas
-      SingleChildScrollView(
-        scrollDirection: Axis.horizontal,
-        clipBehavior: Clip.none,
-        child: Row(
-          children: [
-            for (final season in seasons)
-              Padding(
-                key: season.id == selected?.id ? _selectedChipKey : null,
-                padding: const EdgeInsets.only(right: 8),
-                child: ChoiceChip(
-                  label: Text(season.name),
-                  selected: season.id == selected?.id,
-                  onSelected: (_) => _selectSeason(season),
-                ),
+    // Saisons en pilules, défilement horizontal si elles ne tiennent pas
+    final chips = SingleChildScrollView(
+      scrollDirection: Axis.horizontal,
+      clipBehavior: Clip.none,
+      child: Row(
+        children: [
+          for (final season in seasons)
+            Padding(
+              key: season.id == selected?.id ? _selectedChipKey : null,
+              padding: const EdgeInsets.only(right: 8),
+              child: ChoiceChip(
+                label: Text(season.name),
+                selected: season.id == selected?.id,
+                onSelected: (_) => _selectSeason(season),
               ),
-          ],
-        ),
+            ),
+        ],
       ),
+    );
+    // Télécharger toute la saison affichée
+    final download =
+        !_offline &&
+            episodes != null &&
+            episodes.isNotEmpty &&
+            shownSeason != null
+        ? SeasonDownloadButton(
+            key: ValueKey(shownSeason.id),
+            api: widget.api,
+            userId: _userId,
+            seasonName: shownSeason.name,
+            episodes: episodes,
+          )
+        : null;
+
+    return [
+      // Deux colonnes : le téléchargement de la saison à droite des saisons
+      if (twoColumns)
+        Row(
+          children: [
+            Expanded(flex: 6, child: chips),
+            const SizedBox(width: 40),
+            Expanded(
+              flex: 5,
+              child: Align(
+                alignment: Alignment.centerLeft,
+                child: download ?? const SizedBox.shrink(),
+              ),
+            ),
+          ],
+        )
+      else
+        chips,
       // Hors ligne : on précise ce qui est affiché
       if (_offline) ...[
         const SizedBox(height: 12),
@@ -525,19 +567,9 @@ class _SeriesScreenState extends State<SeriesScreen> {
             ),
           ],
         ),
-      ]
-      // Télécharger toute la saison affichée
-      else if (episodes != null &&
-          episodes.isNotEmpty &&
-          shownSeason != null) ...[
+      ] else if (download != null && !twoColumns) ...[
         const SizedBox(height: 12),
-        SeasonDownloadButton(
-          key: ValueKey(shownSeason.id),
-          api: widget.api,
-          userId: _userId,
-          seasonName: shownSeason.name,
-          episodes: episodes,
-        ),
+        download,
       ],
       const SizedBox(height: 10),
       // Fine barre de chargement, sans changer la hauteur de la page
@@ -559,17 +591,32 @@ class _SeriesScreenState extends State<SeriesScreen> {
         const _EpisodesSkeleton()
       else if (episodes.isEmpty)
         const Text('Aucun épisode dans cette saison.')
+      else if (twoColumns)
+        for (var i = 0; i < episodes.length; i += 2)
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(child: _episodeTile(episodes[i])),
+              const SizedBox(width: 24),
+              Expanded(
+                child: i + 1 < episodes.length
+                    ? _episodeTile(episodes[i + 1])
+                    : const SizedBox.shrink(),
+              ),
+            ],
+          )
       else
-        for (final episode in episodes)
-          _EpisodeTile(
-            api: widget.api,
-            userId: _userId,
-            episode: episode,
-            onTap: () => _play(episode),
-            onInfo: () => _showEpisodeInfo(episode),
-          ),
+        for (final episode in episodes) _episodeTile(episode),
     ];
   }
+
+  Widget _episodeTile(Episode episode) => _EpisodeTile(
+    api: widget.api,
+    userId: _userId,
+    episode: episode,
+    onTap: () => _play(episode),
+    onInfo: () => _showEpisodeInfo(episode),
+  );
 
   /// Bouton ⓘ : infos de l'épisode dans un panneau qui monte du bas.
   /// Le panneau renvoie la position de départ choisie (null : fermé).

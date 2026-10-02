@@ -16,6 +16,10 @@ import 'ui.dart';
 /// défile plus lentement que le contenu, en-tête ([header]) posé dessus,
 /// puis le contenu [children]. Une barre en verre dépoli avec le titre
 /// apparaît quand on fait défiler.
+///
+/// Sur un iPad en paysage ([AppLayout.isTwoColumn]), avec un [aside] : deux
+/// colonnes, l'en-tête et [children] à gauche, [aside] à droite, puis
+/// [below] sur toute la largeur.
 class DetailsPage extends StatefulWidget {
   const DetailsPage({
     super.key,
@@ -25,6 +29,8 @@ class DetailsPage extends StatefulWidget {
     required this.showBackdropFallback,
     required this.header,
     required this.children,
+    this.aside = const [],
+    this.below = const [],
   });
 
   final JellyfinApi api;
@@ -42,16 +48,42 @@ class DetailsPage extends StatefulWidget {
 
   final List<Widget> children;
 
+  /// Colonne de droite (deux colonnes seulement ; vide = une seule colonne).
+  final List<Widget> aside;
+
+  /// Sous les deux colonnes, sur toute la largeur (deux colonnes seulement).
+  final List<Widget> below;
+
   @override
   State<DetailsPage> createState() => _DetailsPageState();
 }
 
 class _DetailsPageState extends State<DetailsPage> {
-  /// Hauteur de l'image de fond.
+  /// Hauteur de l'image de fond (téléphone).
   static const _backdropHeight = 420.0;
 
   /// Position de l'en-tête : il chevauche le bas de l'image.
   static const _headerTop = 290.0;
+
+  /// L'en-tête chevauche le bas de l'image de cette hauteur.
+  static const _headerOverlap = _backdropHeight - _headerTop;
+
+  /// Écart entre les deux colonnes.
+  static const _columnGap = 40.0;
+
+  /// Vrai quand la fiche est en deux colonnes.
+  bool get _twoColumns =>
+      widget.aside.isNotEmpty && AppLayout.isTwoColumn(context);
+
+  /// Hauteur de l'image de fond : la moitié de l'écran en deux colonnes,
+  /// pour que la fiche tienne sur un écran.
+  double get _backdropHeightNow {
+    if (!_twoColumns) return _backdropHeight;
+    final height = MediaQuery.sizeOf(context).height * 0.5;
+    return height.clamp(340.0, 560.0);
+  }
+
+  double get _headerTopNow => _backdropHeightNow - _headerOverlap;
 
   final _scrollController = ScrollController();
 
@@ -71,13 +103,32 @@ class _DetailsPageState extends State<DetailsPage> {
   }
 
   void _onScroll() {
-    final show = _scrollController.offset > _headerTop - 40;
+    final show = _scrollController.offset > _headerTopNow - 40;
     if (show != _showBar) setState(() => _showBar = show);
   }
+
+  /// Deux colonnes côte à côte : la gauche un peu plus large.
+  Widget _columns(Widget left, Widget right) => Row(
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: [
+      Expanded(flex: 6, child: left),
+      const SizedBox(width: _columnGap),
+      Expanded(flex: 5, child: right),
+    ],
+  );
+
+  /// Une colonne : les éléments prennent toute sa largeur (comme dans une
+  /// liste).
+  Widget _column(List<Widget> children) => Column(
+    crossAxisAlignment: CrossAxisAlignment.stretch,
+    children: children,
+  );
 
   @override
   Widget build(BuildContext context) {
     final topInset = MediaQuery.paddingOf(context).top;
+    final gutter = AppLayout.gutter(context);
+    final twoColumns = _twoColumns;
 
     return Scaffold(
       body: GlowBackground(
@@ -97,7 +148,7 @@ class _DetailsPageState extends State<DetailsPage> {
                         top: 0,
                         left: 0,
                         right: 0,
-                        height: _backdropHeight,
+                        height: _backdropHeightNow,
                         // Effet de profondeur : l'image défile moins vite
                         child: AnimatedBuilder(
                           animation: _scrollController,
@@ -119,21 +170,39 @@ class _DetailsPageState extends State<DetailsPage> {
                         ),
                       ),
                       Padding(
-                        padding: const EdgeInsets.fromLTRB(
-                          20,
-                          _headerTop,
-                          20,
+                        padding: EdgeInsets.fromLTRB(
+                          gutter,
+                          _headerTopNow,
+                          gutter,
                           0,
                         ),
-                        child: widget.header,
+                        // Deux colonnes : l'en-tête reste dans celle de gauche
+                        child: twoColumns
+                            ? _columns(widget.header, const SizedBox.shrink())
+                            : widget.header,
                       ),
                     ],
                   ),
                 ),
-                SliverPadding(
-                  padding: const EdgeInsets.fromLTRB(20, 22, 20, 48),
-                  sliver: SliverList.list(children: widget.children),
-                ),
+                if (twoColumns) ...[
+                  SliverPadding(
+                    padding: EdgeInsets.fromLTRB(gutter, 22, gutter, 0),
+                    sliver: SliverToBoxAdapter(
+                      child: _columns(
+                        _column(widget.children),
+                        _column(widget.aside),
+                      ),
+                    ),
+                  ),
+                  SliverPadding(
+                    padding: EdgeInsets.fromLTRB(gutter, 26, gutter, 48),
+                    sliver: SliverList.list(children: widget.below),
+                  ),
+                ] else
+                  SliverPadding(
+                    padding: EdgeInsets.fromLTRB(gutter, 22, gutter, 48),
+                    sliver: SliverList.list(children: widget.children),
+                  ),
               ],
             ),
             // Barre du haut en verre dépoli, visible une fois l'image passée
@@ -167,7 +236,7 @@ class _DetailsPageState extends State<DetailsPage> {
             ),
             Positioned(
               top: topInset + 8,
-              left: 16,
+              left: gutter - 4,
               child: GlassCircleButton(
                 icon: Icons.chevron_left_rounded,
                 tooltip: 'Retour',

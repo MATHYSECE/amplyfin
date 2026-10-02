@@ -148,11 +148,15 @@ class _DownloadedSeriesScreenState extends State<DownloadedSeriesScreen>
                 _last = series;
               }
               final shown = series ?? _last;
+              // Tablette : une colonne centrée plutôt que toute la largeur
+              final side = AppLayout.isWide(context)
+                  ? AppLayout.centeredGutter(context)
+                  : 20.0;
               return SingleChildScrollView(
                 padding: EdgeInsets.fromLTRB(
-                  20,
+                  side,
                   padding.top + 12,
-                  20,
+                  side,
                   padding.bottom + 32,
                 ),
                 child: Column(

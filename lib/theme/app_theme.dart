@@ -65,6 +65,41 @@ abstract final class AppRadius {
   static const pill = 999.0;
 }
 
+/// Mise en page selon la largeur de l'écran (téléphone, tablette).
+abstract final class AppLayout {
+  /// À partir de cette largeur : tablette (marges plus grandes, barre du
+  /// bas flottante).
+  static const wideWidth = 700.0;
+
+  /// À partir de cette largeur : fiches en deux colonnes (iPad en paysage).
+  static const twoColumnWidth = 1000.0;
+
+  /// Largeur maximum des listes (épisodes, téléchargements, recherche) sur
+  /// une tablette : au-delà, elles restent centrées.
+  static const maxContentWidth = 900.0;
+
+  /// Vrai sur un écran de tablette.
+  static bool isWide(BuildContext context) =>
+      MediaQuery.sizeOf(context).width >= wideWidth;
+
+  /// Vrai quand les fiches passent en deux colonnes.
+  static bool isTwoColumn(BuildContext context) =>
+      MediaQuery.sizeOf(context).width >= twoColumnWidth;
+
+  /// Marge de chaque côté de l'écran : la même sur tous les écrans.
+  static double gutter(BuildContext context) => isWide(context) ? 40 : 20;
+
+  /// Marges de côté qui gardent le contenu dans une colonne centrée de
+  /// [maxContentWidth] au plus (et jamais moins que [gutter]).
+  static double centeredGutter(BuildContext context) {
+    final width = MediaQuery.sizeOf(context).width;
+    final side = gutter(context);
+    return width - 2 * side > maxContentWidth
+        ? (width - maxContentWidth) / 2
+        : side;
+  }
+}
+
 /// Sous-titres (comme Plex) : texte blanc dans la police du téléphone
 /// (SF Pro sur iPhone, Roboto sur Android), plus nette que Manrope en petit,
 /// dans une boîte sombre arrondie autour du bloc de texte.

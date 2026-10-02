@@ -208,7 +208,7 @@ class _MainScreenState extends State<MainScreen> {
   @override
   Widget build(BuildContext context) {
     final padding = MediaQuery.paddingOf(context);
-    final wide = MediaQuery.sizeOf(context).width >= 700;
+    final wide = AppLayout.isWide(context);
     final headerHeight = padding.top + 64;
     // Place prise par la barre du bas (flottante sur une tablette)
     final barSpace = padding.bottom + (wide ? 92 : 64);
@@ -232,7 +232,7 @@ class _MainScreenState extends State<MainScreen> {
                 title: _titles[_tab],
                 solid: _solid,
                 height: headerHeight,
-                gutter: wide ? 40 : 20,
+                gutter: AppLayout.gutter(context),
                 wide: wide,
                 onDownloads: _openDownloads,
                 onAccount: _openAccount,
@@ -446,19 +446,23 @@ class _BottomBar extends StatelessWidget {
                 ),
               ),
             ),
-            Row(
-              children: [
-                for (final (i, (icon, label)) in _items.indexed)
-                  Expanded(
-                    child: _BarItem(
-                      icon: icon,
-                      label: label,
-                      selected: i == index,
-                      wide: wide,
-                      onTap: () => onSelect(i),
+            // Toute la hauteur de la barre : sur une tablette, les onglets
+            // sont centrés sur la pastille
+            Positioned.fill(
+              child: Row(
+                children: [
+                  for (final (i, (icon, label)) in _items.indexed)
+                    Expanded(
+                      child: _BarItem(
+                        icon: icon,
+                        label: label,
+                        selected: i == index,
+                        wide: wide,
+                        onTap: () => onSelect(i),
+                      ),
                     ),
-                  ),
-              ],
+                ],
+              ),
             ),
           ],
         );

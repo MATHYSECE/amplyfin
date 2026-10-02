@@ -311,6 +311,16 @@ class _MovieScreenState extends State<MovieScreen> {
   Widget build(BuildContext context) {
     final movie = widget.movie;
     final details = _details;
+    // Résumé (ou son chargement), à droite sur un iPad en paysage
+    final Widget overview;
+    if (details != null) {
+      overview = DetailsOverview(details: details);
+    } else if (_error != null) {
+      overview = RetryMessage(message: _error!, onRetry: _load);
+    } else {
+      overview = const DetailsOverviewSkeleton();
+    }
+    final twoColumns = AppLayout.isTwoColumn(context);
 
     return DetailsPage(
       api: widget.api,
@@ -330,17 +340,15 @@ class _MovieScreenState extends State<MovieScreen> {
         // Qualité du fichier : 4K, HEVC, HDR10, E-AC3 5.1…
         chips: details?.quality?.labels ?? const [],
       ),
+      aside: twoColumns ? [overview] : const [],
       children: [
         ..._buildPlayButtons(details),
         const SizedBox(height: 18),
-        if (details != null) ...[
-          _buildTrackSelectors(details),
-          const SizedBox(height: 22),
-          DetailsOverview(details: details),
-        ] else if (_error != null)
-          RetryMessage(message: _error!, onRetry: _load)
-        else
-          const DetailsOverviewSkeleton(),
+        if (details != null) _buildTrackSelectors(details),
+        if (!twoColumns) ...[
+          if (details != null) const SizedBox(height: 22),
+          overview,
+        ],
       ],
     );
   }
