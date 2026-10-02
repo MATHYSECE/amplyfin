@@ -5,6 +5,7 @@ import 'dart:io';
 
 import 'package:background_downloader/background_downloader.dart';
 import 'package:flutter/foundation.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../api/jellyfin_api.dart';
 import '../models/download_info.dart';
@@ -167,6 +168,10 @@ class DownloadManager extends ChangeNotifier {
     );
     downloader.updates.listen(_onUpdate);
     await downloader.start();
+    // Données mobiles autorisées ou non (réglage retenu sur le téléphone)
+    final prefs = await SharedPreferences.getInstance();
+    _mobileData = prefs.getBool(_mobileDataKey) ?? false;
+    await _applyNetworkRule();
     _directoryPath = File(await _filePath('_')).parent.path;
 
     // Téléchargements déjà connus (terminés, ou en cours avant la fermeture)
@@ -187,7 +192,30 @@ class DownloadManager extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// Lance le téléchargement d'un film ou d'un épisode (Wi-Fi uniquement).
+  static const _mobileDataKey = 'downloads_mobile_data';
+  bool _mobileData = false;
+
+  /// Vrai si les téléchargements peuvent aussi passer par les données
+  /// mobiles (sinon : Wi-Fi uniquement, le réglage par défaut).
+  bool get allowsMobileData => _mobileData;
+
+  /// Change le réglage « données mobiles » : s'applique aussi aux
+  /// téléchargements déjà lancés.
+  Future<void> setMobileData(bool allowed) async {
+    await init();
+    _mobileData = allowed;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_mobileDataKey, allowed);
+    await _applyNetworkRule();
+    notifyListeners();
+  }
+
+  Future<void> _applyNetworkRule() => FileDownloader().requireWiFi(
+    _mobileData ? RequireWiFi.forNoTasks : RequireWiFi.forAllTasks,
+  );
+
+  /// Lance le téléchargement d'un film ou d'un épisode (Wi-Fi uniquement,
+  /// sauf si les données mobiles sont autorisées).
   Future<void> start({
     required JellyfinApi api,
     required String userId,

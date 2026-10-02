@@ -504,7 +504,8 @@ class SeasonDownloadButton extends StatelessWidget {
       message:
           '$count épisode${count > 1 ? 's' : ''}'
           '${size == null ? '' : ', environ $size'}.$kept Le téléchargement '
-          'se fait en Wi-Fi, deux épisodes à la fois.',
+          'se fait ${DownloadManager.instance.allowsMobileData ? 'en Wi-Fi ou en données mobiles' : 'en Wi-Fi'}, '
+          'deux épisodes à la fois.',
       action: 'Télécharger',
       cancel: 'Plus tard',
     );

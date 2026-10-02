@@ -6,6 +6,7 @@ import '../models/watch_progress.dart';
 import '../services/connection_monitor.dart';
 import '../services/watched_state.dart';
 import '../theme/app_theme.dart';
+import 'ui.dart';
 
 /// Marque « vu » sur une affiche (en haut à gauche, la coche « téléchargé »
 /// étant à droite) : coche sur un film vu ou une série toute vue, nombre
@@ -216,31 +217,17 @@ Future<bool> setWatchedForAll(
     return false;
   }
   final messenger = ScaffoldMessenger.of(context);
-  final confirmed = await showDialog<bool>(
-    context: context,
-    builder: (context) => AlertDialog(
-      title: Text(
-        played ? 'Marquer $what comme vu ?' : 'Marquer $what comme pas vu ?',
-      ),
-      content: Text(
-        played
-            ? 'Tous les épisodes seront cochés comme vus.'
-            : 'Tous les épisodes seront remis comme jamais vus, '
-                  'positions de reprise comprises.',
-      ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.of(context).pop(false),
-          child: const Text('Annuler'),
-        ),
-        FilledButton(
-          onPressed: () => Navigator.of(context).pop(true),
-          child: Text(played ? 'Marquer comme vu' : 'Marquer comme pas vu'),
-        ),
-      ],
-    ),
+  final confirmed = await showConfirmDialog(
+    context,
+    title: played ? 'Marquer $what comme vu ?' : 'Marquer $what comme pas vu ?',
+    message: played
+        ? 'Tous les épisodes seront cochés comme vus.'
+        : 'Tous les épisodes seront remis comme jamais vus, positions de '
+              'reprise comprises.',
+    action: played ? 'Marquer comme vu' : 'Marquer comme pas vu',
+    cancel: 'Annuler',
   );
-  if (confirmed != true) return false;
+  if (!confirmed) return false;
   try {
     await WatchedState.instance.setPlayed(
       api,

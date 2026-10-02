@@ -3,11 +3,11 @@ import 'package:flutter/material.dart';
 import '../models/session.dart';
 
 /// Choix du menu « Compte ».
-enum AccountAction { deviceInfo, logout }
+enum AccountAction { settings, logout }
 
-/// Menu « Compte » (bouton en haut à droite) : qui est connecté, puis « Ce
-/// que ton appareil sait lire » et « Se déconnecter ». Renvoie le choix, ou
-/// null si on ferme le menu.
+/// Menu « Compte » (bouton en haut à droite) : qui est connecté, puis
+/// « Paramètres » et « Se déconnecter ». Renvoie le choix, ou null si on
+/// ferme le menu.
 Future<AccountAction?> showAccountSheet(BuildContext context, Session session) {
   return showModalBottomSheet<AccountAction>(
     context: context,
@@ -27,10 +27,10 @@ Future<AccountAction?> showAccountSheet(BuildContext context, Session session) {
             ),
             const Divider(),
             ListTile(
-              leading: const Icon(Icons.memory_rounded),
-              title: const Text('Ce que ton appareil sait lire'),
-              subtitle: const Text('Formats vidéo, 4K, 10 bits, HDR'),
-              onTap: () => choose(AccountAction.deviceInfo),
+              leading: const Icon(Icons.settings_outlined),
+              title: const Text('Paramètres'),
+              subtitle: const Text('Langues, téléchargements, appareil…'),
+              onTap: () => choose(AccountAction.settings),
             ),
             ListTile(
               leading: const Icon(Icons.logout_rounded),

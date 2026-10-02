@@ -13,8 +13,10 @@ import '../models/playback_info.dart';
 import '../models/playback_quality.dart';
 import '../models/resume_entry.dart';
 import '../models/season.dart';
+import '../models/server_admin.dart';
 import '../models/session.dart';
 import '../models/track_choice.dart';
+import '../models/user_settings.dart';
 import '../models/watch_progress.dart';
 import 'device_profile.dart';
 
@@ -556,6 +558,78 @@ class JellyfinApi {
     '/UserPlayedItems/$itemId',
     query: {'userId': userId},
   );
+
+  // ---------- Réglages du compte ----------
+
+  /// GET /Users/Me : langues préférées et droits du compte connecté.
+  Future<UserSettings> getUserSettings() async {
+    final json = await _send('GET', '/Users/Me');
+    return UserSettings.fromMe(json as Map<String, dynamic>);
+  }
+
+  /// POST /Users/Configuration : enregistre les réglages du compte (tous,
+  /// le serveur remplace l'ensemble).
+  Future<void> saveUserSettings({
+    required String userId,
+    required UserSettings settings,
+  }) => _send(
+    'POST',
+    '/Users/Configuration',
+    query: {'userId': userId},
+    body: settings.toConfiguration(),
+  );
+
+  // ---------- Administration (administrateurs seulement) ----------
+
+  /// GET /System/Info : nom, version et système du serveur.
+  Future<ServerInfo> getServerInfo() async {
+    final json = await _send('GET', '/System/Info');
+    return ServerInfo.fromJson(json as Map<String, dynamic>);
+  }
+
+  /// GET /System/Info/Storage : place libre de chaque bibliothèque.
+  Future<List<LibraryStorage>> getLibraryStorage() async {
+    final json = await _send('GET', '/System/Info/Storage');
+    return LibraryStorage.listFromJson(json as Map<String, dynamic>);
+  }
+
+  /// GET /Sessions : ce qui est lu en ce moment (séances actives ces
+  /// 15 dernières minutes, seulement celles qui lisent quelque chose).
+  Future<List<ActiveSession>> getActiveSessions() async {
+    final json = await _send(
+      'GET',
+      '/Sessions',
+      query: {'activeWithinSeconds': '960'},
+    );
+    return [
+      for (final session in (json as List<dynamic>?) ?? [])
+        ?ActiveSession.fromJson(session as Map<String, dynamic>),
+    ];
+  }
+
+  /// POST /Library/Refresh : analyse les fichiers de toutes les
+  /// bibliothèques (nouveaux films, épisodes…).
+  Future<void> refreshLibrary() => _send('POST', '/Library/Refresh');
+
+  /// GET /System/ActivityLog/Entries : les [limit] derniers événements.
+  Future<List<ActivityEntry>> getActivityLog({int limit = 30}) async {
+    final json = await _send(
+      'GET',
+      '/System/ActivityLog/Entries',
+      query: {'limit': '$limit'},
+    );
+    return [
+      for (final entry
+          in ((json as Map<String, dynamic>)['Items'] as List<dynamic>?) ?? [])
+        ActivityEntry.fromJson(entry as Map<String, dynamic>),
+    ];
+  }
+
+  /// POST /System/Restart : redémarre le serveur.
+  Future<void> restartServer() => _send('POST', '/System/Restart');
+
+  /// POST /System/Shutdown : éteint le serveur (à rallumer à la main).
+  Future<void> shutdownServer() => _send('POST', '/System/Shutdown');
 
   /// Adresse de l'affiche d'un film ou d'une série, [width] pixels de large.
   /// Null s'il n'y a pas d'affiche.

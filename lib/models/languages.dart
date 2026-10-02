@@ -85,3 +85,7 @@ String languageName(String? code) {
   if (normalized == null) return 'Langue inconnue';
   return _names[normalized] ?? normalized.toUpperCase();
 }
+
+/// Langues proposées dans les réglages (codes du serveur), dans l'ordre de
+/// la liste des noms.
+List<String> get knownLanguages => _names.keys.toList();

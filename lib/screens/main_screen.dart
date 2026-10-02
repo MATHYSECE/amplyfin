@@ -13,13 +13,13 @@ import '../widgets/download_controls.dart';
 import '../widgets/library_grid.dart';
 import '../widgets/transitions.dart';
 import '../widgets/ui.dart';
-import 'device_info_screen.dart';
 import 'downloads_screen.dart';
 import 'home_tab.dart';
 import 'login_screen.dart';
 import 'movie_screen.dart';
 import 'search_tab.dart';
 import 'series_screen.dart';
+import 'settings_screen.dart';
 
 /// Écran principal après la connexion : en-tête (titre, téléchargements,
 /// déconnexion), quatre onglets (Accueil, Films, Séries, Recherche) et la
@@ -195,14 +195,17 @@ class _MainScreenState extends State<MainScreen> {
     );
   }
 
-  /// Menu « Compte » : ce que l'appareil sait lire, ou déconnexion.
+  /// Menu « Compte » : paramètres, ou déconnexion.
   Future<void> _openAccount() async {
     final action = await showAccountSheet(context, widget.session);
     if (!mounted) return;
     switch (action) {
-      case AccountAction.deviceInfo:
+      case AccountAction.settings:
         await Navigator.of(context).push(
-          MaterialPageRoute<void>(builder: (_) => const DeviceInfoScreen()),
+          MaterialPageRoute<void>(
+            builder: (_) =>
+                SettingsScreen(api: widget.api, session: widget.session),
+          ),
         );
       case AccountAction.logout:
         // Confirmation : évite de se déconnecter sans le faire exprès
