@@ -212,7 +212,10 @@ class _HomeHeroState extends State<HomeHero> {
       ),
     );
 
-    if (layout.isWide) return SizedBox(height: 470, child: card);
+    // Coupé aux bords : l'image qui zoome ne déborde pas sous le dégradé
+    if (layout.isWide) {
+      return SizedBox(height: 470, child: ClipRect(child: card));
+    }
     return Padding(
       padding: EdgeInsets.symmetric(horizontal: layout.gutter),
       child: SizedBox(
