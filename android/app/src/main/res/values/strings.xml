@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Notifications des téléchargements (background_downloader), en français -->
+    <string name="bg_downloader_cancel">Annuler</string>
+    <string name="bg_downloader_pause">Pause</string>
+    <string name="bg_downloader_resume">Reprendre</string>
+    <string name="bg_downloader_notification_channel_name">Téléchargements</string>
+    <string name="bg_downloader_notification_channel_description">Progression des films et épisodes téléchargés</string>
+</resources>

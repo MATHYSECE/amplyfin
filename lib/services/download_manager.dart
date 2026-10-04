@@ -147,6 +147,12 @@ class DownloadManager extends ChangeNotifier {
         (Config.resourceTimeout, const Duration(hours: 48)),
         // Deux vidéos à la fois au plus (par groupe)
         (Config.holdingQueue, (null, null, _maxParallel)),
+        // iPhone : boutons des notifications en français (Android : fichier
+        // android/app/src/main/res/values/strings.xml)
+        (
+          Config.localize,
+          {'Cancel': 'Annuler', 'Pause': 'Pause', 'Resume': 'Reprendre'},
+        ),
       ],
       // Android : service de premier plan (notification) pour les longs
       // téléchargements, sinon Android les coupe au bout de 9 minutes
@@ -165,6 +171,12 @@ class DownloadManager extends ChangeNotifier {
         '{displayName}',
       ),
       progressBar: true,
+    );
+    // Appui sur une notification : l'écran qui écoute ouvre les
+    // téléchargements
+    downloader.registerCallbacks(
+      group: _mediaGroup,
+      taskNotificationTapCallback: (_, _) => onNotificationTap?.call(),
     );
     downloader.updates.listen(_onUpdate);
     await downloader.start();
@@ -191,6 +203,10 @@ class DownloadManager extends ChangeNotifier {
     }
     notifyListeners();
   }
+
+  /// Appelé quand on touche la notification d'un téléchargement (l'écran
+  /// principal ouvre alors l'écran Téléchargements).
+  VoidCallback? onNotificationTap;
 
   static const _mobileDataKey = 'downloads_mobile_data';
   bool _mobileData = false;

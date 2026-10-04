@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import '../api/jellyfin_api.dart';
 import '../models/media_item.dart';
 import '../models/session.dart';
+import '../services/download_manager.dart';
 import '../services/session_store.dart';
 import '../theme/app_theme.dart';
 import '../widgets/account_sheet.dart';
@@ -80,20 +81,35 @@ class _MainScreenState extends State<MainScreen> {
     if (widget.openDownloads) {
       WidgetsBinding.instance.addPostFrameCallback((_) => _showDownloads());
     }
+    // Appui sur la notification d'un téléchargement
+    DownloadManager.instance.onNotificationTap = () =>
+        _showDownloads(offlineStart: false);
   }
 
-  /// Téléchargements affichés d'emblée (sans animation à l'ouverture,
-  /// glissement au retour).
-  void _showDownloads() {
-    if (!mounted) return;
-    Navigator.of(context).push(
+  /// Vrai pendant que l'écran Téléchargements est ouvert (pas deux fois).
+  bool _downloadsOpen = false;
+
+  /// Ouvre l'écran Téléchargements, puis met l'accueil à jour au retour.
+  Future<void> _pushDownloads(Route<void> route) async {
+    if (_downloadsOpen || !mounted) return;
+    _downloadsOpen = true;
+    await Navigator.of(context).push(route);
+    _downloadsOpen = false;
+    await _homeKey.currentState?.refreshContinue();
+  }
+
+  /// Téléchargements affichés d'emblée ([offlineStart] : démarrage hors
+  /// ligne, sans animation à l'ouverture) ou depuis une notification
+  /// (glissement), glissement au retour.
+  void _showDownloads({bool offlineStart = true}) {
+    _pushDownloads(
       PageRouteBuilder<void>(
-        transitionDuration: Duration.zero,
+        transitionDuration: offlineStart ? Duration.zero : AppDurations.medium,
         reverseTransitionDuration: AppDurations.medium,
         pageBuilder: (_, _, _) => DownloadsScreen(
           api: widget.api,
           session: widget.session,
-          offlineStart: true,
+          offlineStart: offlineStart,
         ),
         transitionsBuilder: (_, animation, _, child) => SlideTransition(
           position: Tween(begin: const Offset(1, 0), end: Offset.zero).animate(
@@ -107,6 +123,7 @@ class _MainScreenState extends State<MainScreen> {
 
   @override
   void dispose() {
+    DownloadManager.instance.onNotificationTap = null;
     for (final scroll in _scrolls) {
       scroll.dispose();
     }
@@ -165,16 +182,12 @@ class _MainScreenState extends State<MainScreen> {
   }
 
   /// Écran des téléchargements, ouvert en cercle depuis le bouton.
-  Future<void> _openDownloads(Offset center) async {
-    await Navigator.of(context).push(
-      CircleRevealRoute<void>(
-        center: center,
-        builder: (_) =>
-            DownloadsScreen(api: widget.api, session: widget.session),
-      ),
-    );
-    await _homeKey.currentState?.refreshContinue();
-  }
+  Future<void> _openDownloads(Offset center) => _pushDownloads(
+    CircleRevealRoute<void>(
+      center: center,
+      builder: (_) => DownloadsScreen(api: widget.api, session: widget.session),
+    ),
+  );
 
   /// Fiche d'un film ou d'une série depuis les onglets Films et Séries.
   Future<void> _open(MediaItem item) async {

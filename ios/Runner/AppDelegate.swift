@@ -2,6 +2,7 @@ import AVFoundation
 import CoreMedia
 import Flutter
 import UIKit
+import UserNotifications
 import VideoToolbox
 
 @main
@@ -10,6 +11,9 @@ import VideoToolbox
     _ application: UIApplication,
     didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?
   ) -> Bool {
+    // Notifications des téléchargements (background_downloader) : sans
+    // cette ligne, iOS ne les affiche pas
+    UNUserNotificationCenter.current().delegate = self as UNUserNotificationCenterDelegate
     return super.application(application, didFinishLaunchingWithOptions: launchOptions)
   }
 
