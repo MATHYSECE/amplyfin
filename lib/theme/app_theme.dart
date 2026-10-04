@@ -128,8 +128,14 @@ abstract final class AppDurations {
   static const emphasized = Duration(milliseconds: 480);
 }
 
-/// Construit le thème de l'appli.
-ThemeData buildAppTheme() {
+/// Construit le thème de l'appli. [tv] : sur une télé, ce qui est
+/// sélectionné à la télécommande se voit de loin (voir [_tvTheme]).
+ThemeData buildAppTheme({bool tv = false}) {
+  final theme = _buildTheme();
+  return tv ? _tvTheme(theme) : theme;
+}
+
+ThemeData _buildTheme() {
   const scheme = ColorScheme(
     brightness: Brightness.dark,
     primary: AppColors.white,
@@ -388,6 +394,44 @@ ThemeData buildAppTheme() {
       color: AppColors.white,
       linearTrackColor: AppColors.glassStrong,
       circularTrackColor: Colors.transparent,
+    ),
+  );
+}
+
+/// Télé : un bouton sélectionné passe en blanc (texte noir), les autres
+/// restent discrets ; une pastille sélectionnée s'éclaircit ; une ligne
+/// sélectionnée (menus, réglages) prend un fond clair.
+ThemeData _tvTheme(ThemeData theme) {
+  bool focused(Set<WidgetState> states) => states.contains(WidgetState.focused);
+  final buttonStyle = ButtonStyle(
+    backgroundColor: WidgetStateProperty.resolveWith((states) {
+      if (states.contains(WidgetState.disabled)) return AppColors.glass;
+      return focused(states) ? AppColors.white : AppColors.glassStrong;
+    }),
+    foregroundColor: WidgetStateProperty.resolveWith((states) {
+      if (states.contains(WidgetState.disabled)) return AppColors.grey;
+      return focused(states) ? AppColors.black : AppColors.white;
+    }),
+    overlayColor: const WidgetStatePropertyAll(Colors.transparent),
+  );
+  return theme.copyWith(
+    focusColor: const Color(0x4DFFFFFF), // 30 %
+    filledButtonTheme: FilledButtonThemeData(
+      style: buttonStyle.merge(theme.filledButtonTheme.style),
+    ),
+    outlinedButtonTheme: OutlinedButtonThemeData(
+      style: buttonStyle.merge(theme.outlinedButtonTheme.style),
+    ),
+    textButtonTheme: TextButtonThemeData(
+      style: buttonStyle.merge(theme.textButtonTheme.style),
+    ),
+    chipTheme: theme.chipTheme.copyWith(
+      color: WidgetStateProperty.resolveWith((states) {
+        if (states.contains(WidgetState.selected)) return AppColors.white;
+        return focused(states)
+            ? const Color(0x66FFFFFF)
+            : AppColors.glassStrong;
+      }),
     ),
   );
 }

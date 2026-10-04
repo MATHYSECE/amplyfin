@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import '../api/jellyfin_api.dart';
 import '../models/media_item.dart';
 import '../models/session.dart';
+import '../services/device_capabilities.dart';
 import '../services/download_manager.dart';
 import '../services/session_store.dart';
 import '../theme/app_theme.dart';
@@ -13,6 +14,7 @@ import '../widgets/connection_pill.dart';
 import '../widgets/download_controls.dart';
 import '../widgets/library_grid.dart';
 import '../widgets/transitions.dart';
+import '../widgets/tv_focus.dart';
 import '../widgets/ui.dart';
 import 'downloads_screen.dart';
 import 'home_tab.dart';
@@ -262,46 +264,58 @@ class _MainScreenState extends State<MainScreen> {
     final padding = MediaQuery.paddingOf(context);
     final wide = AppLayout.isWide(context);
     final headerHeight = padding.top + 64;
+    // Télé : menu vertical à gauche au lieu de la barre du bas
+    final tv = DeviceCapabilities.isTv;
     // Place prise par la barre du bas (flottante sur une tablette)
-    final barSpace = padding.bottom + (wide ? 92 : 64);
+    final barSpace = padding.bottom + (tv ? 24 : (wide ? 92 : 64));
+
+    final content = Stack(
+      children: [
+        for (var i = 0; i < _titles.length; i++)
+          _TabPage(
+            active: i == _tab,
+            child: _visited.contains(i)
+                ? _buildTab(i, headerHeight, barSpace)
+                : const SizedBox.shrink(),
+          ),
+        // Caché : remonte en ne laissant que la bande de la barre d'état
+        AnimatedPositioned(
+          duration: AppDurations.medium,
+          curve: Curves.easeOutCubic,
+          top: _headerHidden ? padding.top - headerHeight : 0,
+          left: 0,
+          right: 0,
+          child: _Header(
+            title: _titles[_tab],
+            solid: _solid || _headerHidden,
+            hidden: _headerHidden,
+            height: headerHeight,
+            gutter: AppLayout.gutter(context),
+            wide: wide,
+            onDownloads: _openDownloads,
+            onAccount: _openAccount,
+          ),
+        ),
+        if (!tv)
+          Positioned(
+            left: 0,
+            right: 0,
+            bottom: 0,
+            child: _BottomBar(index: _tab, wide: wide, onSelect: _select),
+          ),
+      ],
+    );
 
     return Scaffold(
       body: GlowBackground(
-        child: Stack(
-          children: [
-            for (var i = 0; i < _titles.length; i++)
-              _TabPage(
-                active: i == _tab,
-                child: _visited.contains(i)
-                    ? _buildTab(i, headerHeight, barSpace)
-                    : const SizedBox.shrink(),
-              ),
-            // Caché : remonte en ne laissant que la bande de la barre d'état
-            AnimatedPositioned(
-              duration: AppDurations.medium,
-              curve: Curves.easeOutCubic,
-              top: _headerHidden ? padding.top - headerHeight : 0,
-              left: 0,
-              right: 0,
-              child: _Header(
-                title: _titles[_tab],
-                solid: _solid || _headerHidden,
-                hidden: _headerHidden,
-                height: headerHeight,
-                gutter: AppLayout.gutter(context),
-                wide: wide,
-                onDownloads: _openDownloads,
-                onAccount: _openAccount,
-              ),
-            ),
-            Positioned(
-              left: 0,
-              right: 0,
-              bottom: 0,
-              child: _BottomBar(index: _tab, wide: wide, onSelect: _select),
-            ),
-          ],
-        ),
+        child: tv
+            ? Row(
+                children: [
+                  _SideRail(index: _tab, onSelect: _select),
+                  Expanded(child: content),
+                ],
+              )
+            : content,
       ),
     );
   }
@@ -356,17 +370,21 @@ class _TabPage extends StatelessWidget {
   Widget build(BuildContext context) {
     return IgnorePointer(
       ignoring: !active,
-      child: HeroMode(
-        enabled: active,
-        child: AnimatedOpacity(
-          opacity: active ? 1 : 0,
-          duration: AppDurations.medium,
-          curve: Curves.easeOut,
-          child: AnimatedSlide(
-            offset: active ? Offset.zero : const Offset(0, 0.015),
+      // Télécommande : rien de sélectionnable dans un onglet caché
+      child: ExcludeFocus(
+        excluding: !active,
+        child: HeroMode(
+          enabled: active,
+          child: AnimatedOpacity(
+            opacity: active ? 1 : 0,
             duration: AppDurations.medium,
-            curve: Curves.easeOutCubic,
-            child: child,
+            curve: Curves.easeOut,
+            child: AnimatedSlide(
+              offset: active ? Offset.zero : const Offset(0, 0.015),
+              duration: AppDurations.medium,
+              curve: Curves.easeOutCubic,
+              child: child,
+            ),
           ),
         ),
       ),
@@ -577,6 +595,65 @@ class _BottomBar extends StatelessWidget {
   }
 }
 
+/// Télé : menu vertical à gauche (on y va avec la flèche gauche). Onglet
+/// choisi en blanc ; OK change d'onglet.
+class _SideRail extends StatelessWidget {
+  const _SideRail({required this.index, required this.onSelect});
+
+  final int index;
+  final ValueChanged<int> onSelect;
+
+  @override
+  Widget build(BuildContext context) {
+    final textTheme = Theme.of(context).textTheme;
+    return Container(
+      width: 104,
+      decoration: const BoxDecoration(
+        color: AppColors.scrim55,
+        border: Border(right: BorderSide(color: AppColors.glassBorder)),
+      ),
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          for (final (i, (icon, label)) in _BottomBar._items.indexed)
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 8),
+              child: TvFocusable(
+                onTap: () => onSelect(i),
+                radius: AppRadius.card,
+                child: AnimatedContainer(
+                  duration: AppDurations.medium,
+                  width: 80,
+                  padding: const EdgeInsets.symmetric(vertical: 10),
+                  decoration: BoxDecoration(
+                    color: i == index ? AppColors.white : Colors.transparent,
+                    borderRadius: BorderRadius.circular(AppRadius.card),
+                  ),
+                  child: Column(
+                    children: [
+                      Icon(
+                        icon,
+                        size: 26,
+                        color: i == index ? AppColors.black : AppColors.grey,
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        label,
+                        style: textTheme.labelSmall?.copyWith(
+                          color: i == index ? AppColors.black : AppColors.grey,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
 /// Un onglet de la barre : icône et nom, en noir sur la pastille quand il
 /// est choisi.
 class _BarItem extends StatelessWidget {
@@ -625,22 +702,28 @@ class _BarItem extends StatelessWidget {
       selected: selected,
       label: label,
       excludeSemantics: true,
-      child: GestureDetector(
-        behavior: HitTestBehavior.opaque,
+      // Télé : onglet sélectionnable à la télécommande
+      child: TvFocusable(
         onTap: onTap,
-        child: wide
-            ? Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [iconWidget, const SizedBox(width: 8), text],
-              )
-            : Column(
-                children: [
-                  const SizedBox(height: 10),
-                  iconWidget,
-                  const SizedBox(height: 7),
-                  text,
-                ],
-              ),
+        radius: AppRadius.pill,
+        scale: 1.04,
+        child: GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onTap: onTap,
+          child: wide
+              ? Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [iconWidget, const SizedBox(width: 8), text],
+                )
+              : Column(
+                  children: [
+                    const SizedBox(height: 10),
+                    iconWidget,
+                    const SizedBox(height: 7),
+                    text,
+                  ],
+                ),
+        ),
       ),
     );
   }

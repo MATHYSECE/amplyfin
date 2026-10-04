@@ -10,12 +10,15 @@ import 'services/device_capabilities.dart';
 import 'services/download_manager.dart';
 import 'services/offline_progress.dart';
 import 'theme/app_theme.dart';
+import 'widgets/tv_focus.dart';
 
 Future<void> main() async {
   // Nécessaire avant d'utiliser le coffre-fort du téléphone
   WidgetsFlutterBinding.ensureInitialized();
   // Télé ou pas : l'interface en dépend dès le premier écran
   await DeviceCapabilities.detectTv();
+  // Télé : la page suit la sélection de la télécommande
+  if (DeviceCapabilities.isTv) followTvFocus();
   // Prépare le moteur vidéo (media_kit)
   MediaKit.ensureInitialized();
   // Reprend le suivi des téléchargements (terminés ou en cours)
@@ -47,7 +50,11 @@ class AmplyfinApp extends StatelessWidget {
     return MaterialApp(
       title: 'Amplyfin',
       debugShowCheckedModeBanner: false,
-      theme: buildAppTheme(),
+      theme: buildAppTheme(tv: DeviceCapabilities.isTv),
+      // Télé : tout est réduit (vu de loin, l'écran paraît plus petit)
+      builder: DeviceCapabilities.isTv
+          ? (context, child) => TvScale(child: child!)
+          : null,
       home: const StartScreen(),
     );
   }

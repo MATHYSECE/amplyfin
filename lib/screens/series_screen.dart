@@ -24,6 +24,7 @@ import '../widgets/download_controls.dart';
 import '../widgets/track_picker.dart';
 import '../widgets/ui.dart';
 import '../widgets/watched_controls.dart';
+import '../widgets/tv_focus.dart';
 
 /// Fiche d'une série : infos, résumé, choix de la saison, liste des épisodes.
 /// Sans serveur, si des épisodes sont téléchargés : la même fiche, avec
@@ -505,6 +506,8 @@ class _SeriesScreenState extends State<SeriesScreen> {
               key: season.id == selected?.id ? _selectedChipKey : null,
               padding: const EdgeInsets.only(right: 8),
               child: ChoiceChip(
+                // Télé : la saison affichée est sélectionnée à l'arrivée
+                autofocus: DeviceCapabilities.isTv && season.id == selected?.id,
                 label: Text(season.name),
                 selected: season.id == selected?.id,
                 onSelected: (_) => _selectSeason(season),
@@ -820,9 +823,20 @@ class _EpisodeTile extends StatelessWidget {
   Widget build(BuildContext context) {
     final textTheme = Theme.of(context).textTheme;
 
+    // Télé : ligne sélectionnable (OK = lecture, Menu = vu / pas vu)
+    return TvFocusable(
+      onTap: onTap,
+      onMenu: onLongPress,
+      scale: 1.02,
+      child: _buildRow(context, textTheme),
+    );
+  }
+
+  Widget _buildRow(BuildContext context, TextTheme textTheme) {
     return InkWell(
       onTap: onTap,
       onLongPress: onLongPress,
+      canRequestFocus: !DeviceCapabilities.isTv,
       borderRadius: BorderRadius.circular(AppRadius.poster),
       child: Padding(
         padding: const EdgeInsets.symmetric(vertical: 7),

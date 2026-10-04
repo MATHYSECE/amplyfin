@@ -9,12 +9,14 @@ import '../models/media_item.dart';
 import '../models/search_results.dart';
 import '../models/session.dart';
 import '../services/connection_monitor.dart';
+import '../services/device_capabilities.dart';
 import '../services/download_manager.dart';
 import '../services/search_history.dart';
 import '../theme/app_theme.dart';
 import '../widgets/genre_card.dart';
 import '../widgets/media_row.dart';
 import '../widgets/ui.dart';
+import '../widgets/tv_focus.dart';
 import 'genre_screen.dart';
 import 'movie_screen.dart';
 import 'series_screen.dart';
@@ -55,7 +57,10 @@ class _SearchTabState extends State<SearchTab> {
   static const _minLength = 2;
 
   final _text = TextEditingController();
-  final _focus = FocusNode();
+
+  /// Champ de recherche. Télé : hors du parcours aux flèches (c'est son
+  /// cadre qui se sélectionne, OK ouvre le clavier).
+  final _focus = FocusNode(skipTraversal: DeviceCapabilities.isTv);
   final _history = SearchHistory();
   Timer? _debounce;
 
@@ -332,15 +337,21 @@ class _SearchTabState extends State<SearchTab> {
       children: [
         Padding(
           padding: EdgeInsets.symmetric(horizontal: layout.gutter),
-          child: _SearchField(
-            controller: _text,
-            focusNode: _focus,
-            searching: _searching,
-            onChanged: _onChanged,
-            onSubmitted: (value) {
-              final term = value.trim();
-              if (term.length >= _minLength) _remember(term);
-            },
+          // Télé : le champ se sélectionne aux flèches, OK ouvre le clavier
+          child: TvFocusable(
+            radius: AppRadius.pill,
+            scale: 1.02,
+            onTap: _focus.requestFocus,
+            child: _SearchField(
+              controller: _text,
+              focusNode: _focus,
+              searching: _searching,
+              onChanged: _onChanged,
+              onSubmitted: (value) {
+                final term = value.trim();
+                if (term.length >= _minLength) _remember(term);
+              },
+            ),
           ),
         ),
         if (_offline && _query.length >= _minLength)

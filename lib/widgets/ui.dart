@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 
+import '../services/device_capabilities.dart';
 import '../theme/app_theme.dart';
+import 'tv_focus.dart';
 
 /// Petits éléments visuels communs à tous les écrans.
 
@@ -116,6 +118,16 @@ class GlassCircleButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // Télé : sélection ronde à la télécommande (à la place de celle du bouton)
+    return TvFocusable(
+      onTap: onPressed,
+      radius: size / 2,
+      scale: 1.12,
+      child: _buildButton(),
+    );
+  }
+
+  Widget _buildButton() {
     return Tooltip(
       message: tooltip,
       child: Material(
@@ -126,6 +138,7 @@ class GlassCircleButton extends StatelessWidget {
         clipBehavior: Clip.antiAlias,
         child: InkWell(
           onTap: onPressed,
+          canRequestFocus: !DeviceCapabilities.isTv,
           child: SizedBox(
             width: size,
             height: size,
@@ -455,6 +468,15 @@ class _PressableScaleState extends State<PressableScale> {
 
   @override
   Widget build(BuildContext context) {
+    // Télé : sélectionnable à la télécommande (OK = appui, Menu = appui long)
+    return TvFocusable(
+      onTap: widget.onTap,
+      onMenu: widget.onLongPress,
+      child: _buildTouch(),
+    );
+  }
+
+  Widget _buildTouch() {
     return GestureDetector(
       behavior: HitTestBehavior.opaque,
       onTapDown: (_) => _press(true),

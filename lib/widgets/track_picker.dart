@@ -2,7 +2,9 @@ import 'package:flutter/material.dart';
 
 import '../models/media_track.dart';
 import '../models/player_codecs.dart';
+import '../services/device_capabilities.dart';
 import '../theme/app_theme.dart';
+import 'tv_focus.dart';
 
 /// Un choix dans une liste (piste audio, sous-titres, qualité…).
 class PickerOption<T> {
@@ -156,8 +158,19 @@ class TrackSelectorTile extends StatelessWidget {
   Widget build(BuildContext context) {
     final textTheme = Theme.of(context).textTheme;
     final enabled = onTap != null;
+    // Télé : ligne sélectionnable avec le contour blanc commun
+    return TvFocusable(
+      onTap: onTap,
+      radius: AppRadius.card,
+      scale: 1.02,
+      child: _buildRow(textTheme, enabled),
+    );
+  }
+
+  Widget _buildRow(TextTheme textTheme, bool enabled) {
     return InkWell(
       onTap: onTap,
+      canRequestFocus: !DeviceCapabilities.isTv,
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 13),
         child: Row(

@@ -11,6 +11,7 @@ import '../services/download_manager.dart';
 import '../services/player_preferences.dart';
 import '../theme/app_theme.dart';
 import '../widgets/track_picker.dart';
+import '../widgets/tv_focus.dart';
 import '../widgets/ui.dart';
 import 'admin_screen.dart';
 import 'device_info_screen.dart';
@@ -405,14 +406,26 @@ class SettingsTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return ListTile(
-      leading: Icon(icon),
-      title: Text(title),
-      subtitle: Text(value),
-      trailing: onTap == null
-          ? null
-          : const Icon(Icons.chevron_right_rounded, color: AppColors.greyDark),
+    // Télé : ligne sélectionnable avec le contour blanc commun
+    return TvFocusable(
       onTap: onTap,
+      radius: AppRadius.card,
+      scale: 1.02,
+      child: ExcludeFocus(
+        excluding: DeviceCapabilities.isTv,
+        child: ListTile(
+          leading: Icon(icon),
+          title: Text(title),
+          subtitle: Text(value),
+          trailing: onTap == null
+              ? null
+              : const Icon(
+                  Icons.chevron_right_rounded,
+                  color: AppColors.greyDark,
+                ),
+          onTap: onTap,
+        ),
+      ),
     );
   }
 }

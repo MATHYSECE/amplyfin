@@ -196,6 +196,8 @@ class _MovieScreenState extends State<MovieScreen> {
     );
     return [
       FilledButton.icon(
+        // Télé : « Lecture » sélectionné à l'arrivée sur la fiche
+        autofocus: DeviceCapabilities.isTv,
         onPressed: () =>
             _play(start: resume ? progress.position : Duration.zero),
         style: FilledButton.styleFrom(minimumSize: const Size(0, 56)),

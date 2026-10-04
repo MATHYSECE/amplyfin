@@ -10,11 +10,18 @@ import android.os.StatFs
 import android.view.Display
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
+import io.flutter.embedding.engine.renderer.FlutterRenderer
 import io.flutter.plugin.common.MethodChannel
 
 class MainActivity : FlutterActivity() {
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
+        // Télé : la vidéo passe par une SurfaceTexture, qui applique le
+        // recadrage de l'image décodée. Le chemin par défaut (ImageReader)
+        // l'ignore : sur la Fire TV (puce MediaTek), une 4K de 1604 lignes
+        // arrive dans une image de 2176 lignes → image écrasée et bas vert.
+        // Sans risque ici : la Fire TV dessine avec OpenGL (pas Vulkan).
+        if (isTv()) FlutterRenderer.debugForceSurfaceProducerGlTextures = true
         // Place libre et totale du stockage du téléphone (écran Téléchargements)
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "amplyfin/storage")
             .setMethodCallHandler { call, result ->

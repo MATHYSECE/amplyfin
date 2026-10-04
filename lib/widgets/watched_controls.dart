@@ -4,9 +4,11 @@ import '../api/jellyfin_api.dart';
 import '../models/media_item.dart';
 import '../models/watch_progress.dart';
 import '../services/connection_monitor.dart';
+import '../services/device_capabilities.dart';
 import '../services/watched_state.dart';
 import '../theme/app_theme.dart';
 import 'ui.dart';
+import 'tv_focus.dart';
 
 /// Marque « vu » sur une affiche (en haut à gauche, la coche « téléchargé »
 /// étant à droite) : coche sur un film vu ou une série toute vue, nombre
@@ -90,32 +92,39 @@ class WatchedButton extends StatelessWidget {
       listenable: ConnectionMonitor.instance,
       builder: (context, _) {
         final online = ConnectionMonitor.instance.online;
-        return Tooltip(
-          message: !online
-              ? 'Disponible avec une connexion'
-              : played
-              ? 'Marquer ${what}comme pas vu'
-              : 'Marquer ${what}comme vu',
-          child: AnimatedOpacity(
-            opacity: online ? 1 : 0.4,
-            duration: AppDurations.fast,
-            child: Material(
-              color: played ? AppColors.white : AppColors.scrim35,
-              shape: CircleBorder(
-                side: BorderSide(
-                  color: played ? AppColors.white : AppColors.glassBorder,
+        // Télé : sélection ronde avec le contour blanc commun
+        return TvFocusable(
+          onTap: online ? onPressed : () => showOfflineMessage(context),
+          radius: size / 2,
+          scale: 1.1,
+          child: Tooltip(
+            message: !online
+                ? 'Disponible avec une connexion'
+                : played
+                ? 'Marquer ${what}comme pas vu'
+                : 'Marquer ${what}comme vu',
+            child: AnimatedOpacity(
+              opacity: online ? 1 : 0.4,
+              duration: AppDurations.fast,
+              child: Material(
+                color: played ? AppColors.white : AppColors.scrim35,
+                shape: CircleBorder(
+                  side: BorderSide(
+                    color: played ? AppColors.white : AppColors.glassBorder,
+                  ),
                 ),
-              ),
-              clipBehavior: Clip.antiAlias,
-              child: InkWell(
-                onTap: online ? onPressed : () => showOfflineMessage(context),
-                child: SizedBox(
-                  width: size,
-                  height: size,
-                  child: Icon(
-                    Icons.check_rounded,
-                    size: size * 0.46,
-                    color: played ? AppColors.black : AppColors.white,
+                clipBehavior: Clip.antiAlias,
+                child: InkWell(
+                  onTap: online ? onPressed : () => showOfflineMessage(context),
+                  canRequestFocus: !DeviceCapabilities.isTv,
+                  child: SizedBox(
+                    width: size,
+                    height: size,
+                    child: Icon(
+                      Icons.check_rounded,
+                      size: size * 0.46,
+                      color: played ? AppColors.black : AppColors.white,
+                    ),
                   ),
                 ),
               ),

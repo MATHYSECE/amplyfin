@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 
 import '../api/jellyfin_api.dart';
 import '../models/home_items.dart';
+import '../services/device_capabilities.dart';
 import '../theme/app_theme.dart';
 import 'media_row.dart';
 
@@ -373,6 +374,8 @@ class _HeroButton extends StatelessWidget {
     final button = filled
         ? FilledButton.icon(
             onPressed: onPressed,
+            // Télé : « Lecture » sélectionné à l'arrivée sur l'accueil
+            autofocus: DeviceCapabilities.isTv,
             style: FilledButton.styleFrom(minimumSize: size),
             icon: Icon(icon, size: 22),
             label: Text(label),
@@ -381,7 +384,10 @@ class _HeroButton extends StatelessWidget {
             onPressed: onPressed,
             style: OutlinedButton.styleFrom(
               minimumSize: size,
-              backgroundColor: AppColors.glassStrong,
+              // Télé : la couleur suit la sélection (thème)
+              backgroundColor: DeviceCapabilities.isTv
+                  ? null
+                  : AppColors.glassStrong,
             ),
             icon: Icon(icon, size: 20),
             label: Text(label),
