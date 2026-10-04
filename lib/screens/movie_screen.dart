@@ -273,6 +273,8 @@ class _MovieScreenState extends State<MovieScreen> {
       fileSize: details?.fileSize,
       compact: compact,
     );
+    // Télé : pas de téléchargement, seulement « Depuis le début »
+    if (DeviceCapabilities.isTv) return resume ? restart : const SizedBox();
     if (!resume) return download();
 
     final manager = DownloadManager.instance;

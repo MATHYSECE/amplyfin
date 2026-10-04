@@ -6,13 +6,16 @@ import 'package:flutter/services.dart';
 import 'package:media_kit/media_kit.dart';
 
 import 'screens/start_screen.dart';
+import 'services/device_capabilities.dart';
 import 'services/download_manager.dart';
 import 'services/offline_progress.dart';
 import 'theme/app_theme.dart';
 
-void main() {
+Future<void> main() async {
   // Nécessaire avant d'utiliser le coffre-fort du téléphone
   WidgetsFlutterBinding.ensureInitialized();
+  // Télé ou pas : l'interface en dépend dès le premier écran
+  await DeviceCapabilities.detectTv();
   // Prépare le moteur vidéo (media_kit)
   MediaKit.ensureInitialized();
   // Reprend le suivi des téléchargements (terminés ou en cours)

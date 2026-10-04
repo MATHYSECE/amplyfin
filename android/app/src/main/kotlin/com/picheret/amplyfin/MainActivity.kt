@@ -1,5 +1,8 @@
 package com.picheret.amplyfin
 
+import android.app.UiModeManager
+import android.content.pm.PackageManager
+import android.content.res.Configuration
 import android.media.MediaCodecInfo
 import android.media.MediaCodecList
 import android.os.Build
@@ -25,16 +28,24 @@ class MainActivity : FlutterActivity() {
         // Ce que la puce vidéo sait décoder, et si l'écran est HDR
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "amplyfin/device")
             .setMethodCallHandler { call, result ->
-                if (call.method == "decoders") {
-                    try {
+                when (call.method) {
+                    "decoders" -> try {
                         result.success(decoders())
                     } catch (e: Exception) {
                         result.error("decoders", e.message, null)
                     }
-                } else {
-                    result.notImplemented()
+                    "isTv" -> result.success(isTv())
+                    else -> result.notImplemented()
                 }
             }
+    }
+
+    /// Vrai sur une télé (Fire TV, Android TV / Google TV).
+    private fun isTv(): Boolean {
+        val uiMode = getSystemService(UI_MODE_SERVICE) as UiModeManager
+        return uiMode.currentModeType == Configuration.UI_MODE_TYPE_TELEVISION ||
+            packageManager.hasSystemFeature(PackageManager.FEATURE_LEANBACK) ||
+            packageManager.hasSystemFeature("amazon.hardware.fire_tv")
     }
 
     /// Formats lourds (nom Jellyfin → type Android).

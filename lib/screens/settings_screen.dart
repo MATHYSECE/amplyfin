@@ -6,6 +6,7 @@ import '../models/session.dart';
 import '../models/subtitle_size.dart';
 import '../models/user_settings.dart';
 import '../services/connection_monitor.dart';
+import '../services/device_capabilities.dart';
 import '../services/download_manager.dart';
 import '../services/player_preferences.dart';
 import '../theme/app_theme.dart';
@@ -213,25 +214,28 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 ),
               ],
             ),
-            const SizedBox(height: 22),
-            const SettingsSectionTitle('Téléchargements'),
-            ListenableBuilder(
-              listenable: DownloadManager.instance,
-              builder: (context, _) => SettingsPanel(
-                children: [
-                  SwitchListTile(
-                    secondary: const Icon(Icons.signal_cellular_alt_rounded),
-                    title: const Text('Utiliser les données mobiles'),
-                    subtitle: const Text(
-                      'Sinon, en Wi-Fi uniquement. Un film pèse souvent '
-                      'plusieurs Go : attention à ton forfait.',
+            // Télé : pas de téléchargements
+            if (!DeviceCapabilities.isTv) ...[
+              const SizedBox(height: 22),
+              const SettingsSectionTitle('Téléchargements'),
+              ListenableBuilder(
+                listenable: DownloadManager.instance,
+                builder: (context, _) => SettingsPanel(
+                  children: [
+                    SwitchListTile(
+                      secondary: const Icon(Icons.signal_cellular_alt_rounded),
+                      title: const Text('Utiliser les données mobiles'),
+                      subtitle: const Text(
+                        'Sinon, en Wi-Fi uniquement. Un film pèse souvent '
+                        'plusieurs Go : attention à ton forfait.',
+                      ),
+                      value: DownloadManager.instance.allowsMobileData,
+                      onChanged: DownloadManager.instance.setMobileData,
                     ),
-                    value: DownloadManager.instance.allowsMobileData,
-                    onChanged: DownloadManager.instance.setMobileData,
-                  ),
-                ],
+                  ],
+                ),
               ),
-            ),
+            ],
             const SizedBox(height: 22),
             const SettingsSectionTitle('Appareil'),
             SettingsPanel(

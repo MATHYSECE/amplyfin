@@ -20,6 +20,22 @@ class DeviceCapabilities {
   /// AppDelegate.swift sur iPhone).
   static const _channel = MethodChannel('amplyfin/device');
 
+  /// Vrai sur une télé (Fire TV, Android TV) : interface à la télécommande,
+  /// pas de téléchargements. Connu dès le démarrage ([detectTv]).
+  static bool isTv = false;
+
+  /// Demande au téléphone s'il est une télé (une seule fois, au démarrage).
+  static Future<void> detectTv() async {
+    if (!Platform.isAndroid) return;
+    try {
+      isTv = await _channel.invokeMethod<bool>('isTv') ?? false;
+    } on PlatformException {
+      isTv = false;
+    } on MissingPluginException {
+      isTv = false;
+    }
+  }
+
   /// Vrai sur un émulateur Android : son affichage vidéo et son décodeur
   /// ont des limites (pas d'OpenGL pour le lecteur, pas de vidéo 10 bits).
   static Future<bool> isAndroidEmulator() async {

@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import '../api/jellyfin_api.dart';
 import '../models/episode.dart';
 import '../models/file_size.dart';
+import '../services/device_capabilities.dart';
 import '../services/download_groups.dart';
 import '../services/download_manager.dart';
 import '../theme/app_theme.dart';
@@ -87,6 +88,8 @@ class MovieDownloadButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // Télé : pas de téléchargements
+    if (DeviceCapabilities.isTv) return const SizedBox.shrink();
     final manager = DownloadManager.instance;
     return ListenableBuilder(
       listenable: manager,
@@ -372,6 +375,8 @@ class EpisodeDownloadButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // Télé : pas de téléchargements
+    if (DeviceCapabilities.isTv) return const SizedBox.shrink();
     final manager = DownloadManager.instance;
     return ListenableBuilder(
       listenable: manager,
@@ -546,6 +551,8 @@ class SeasonDownloadButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // Télé : pas de téléchargements
+    if (DeviceCapabilities.isTv) return const SizedBox.shrink();
     final manager = DownloadManager.instance;
     return ListenableBuilder(
       listenable: manager,
@@ -633,6 +640,8 @@ class DownloadsButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // Télé : pas de téléchargements
+    if (DeviceCapabilities.isTv) return const SizedBox.shrink();
     final manager = DownloadManager.instance;
     return ListenableBuilder(
       listenable: manager,
