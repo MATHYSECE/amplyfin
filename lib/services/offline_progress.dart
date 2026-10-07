@@ -6,6 +6,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../api/jellyfin_api.dart';
 import '../models/watch_progress.dart';
+import 'profile_data.dart';
 
 /// Où en est la lecture d'un fichier téléchargé, gardé sur le téléphone
 /// (pour reprendre au bon endroit sans le serveur).
@@ -130,19 +131,33 @@ class OfflineProgress extends ChangeNotifier {
 
   static final instance = OfflineProgress._();
 
-  static const _key = 'offline_progress';
+  static const _name = 'offline_progress';
 
   final Map<String, SavedProgress> _items = {};
   Future<void>? _ready;
   Future<void>? _syncing;
 
-  /// Relit les positions enregistrées (au démarrage de l'appli).
-  Future<void> init() => _ready ??= _load();
+  /// Profil dont les positions sont chargées (chacun a les siennes).
+  String? _loadedFor;
 
-  Future<void> _load() async {
+  /// Relit les positions du profil en cours (au démarrage, et à chaque
+  /// changement de profil).
+  Future<void> init() {
+    final userId = ProfileData.userId;
+    if (_ready == null || userId != _loadedFor) {
+      _loadedFor = userId;
+      _items.clear();
+      notifyListeners();
+      _ready = _load(userId);
+    }
+    return _ready!;
+  }
+
+  Future<void> _load(String? userId) async {
+    if (userId == null) return;
     final prefs = await SharedPreferences.getInstance();
-    final text = prefs.getString(_key);
-    if (text == null) return;
+    final text = prefs.getString(ProfileData.key(_name, userId: userId));
+    if (text == null || userId != _loadedFor) return;
     try {
       final json = jsonDecode(text) as Map<String, dynamic>;
       for (final MapEntry(key: id, value: value) in json.entries) {
@@ -199,6 +214,8 @@ class OfflineProgress extends ChangeNotifier {
 
   Future<void> _sync(JellyfinApi api, String userId) async {
     await init();
+    // Jamais les positions d'une personne sur le compte d'une autre
+    if (userId != _loadedFor) return;
     final pending = [
       for (final MapEntry(key: id, value: saved) in _items.entries)
         if (saved.pending) (id, saved),
@@ -248,9 +265,11 @@ class OfflineProgress extends ChangeNotifier {
   }
 
   Future<void> _save() async {
+    final userId = _loadedFor;
+    if (userId == null) return;
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(
-      _key,
+      ProfileData.key(_name, userId: userId),
       jsonEncode({
         for (final MapEntry(key: id, value: saved) in _items.entries)
           id: saved.toJson(),

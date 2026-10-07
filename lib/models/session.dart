@@ -1,5 +1,6 @@
 /// Les informations d'une connexion réussie à un serveur Jellyfin.
 /// Le mot de passe n'en fait jamais partie : seul le jeton est conservé.
+/// Chaque personne connectée sur l'appareil a la sienne (un « profil »).
 class Session {
   const Session({
     required this.serverUrl,
@@ -19,4 +20,22 @@ class Session {
 
   /// Nom affiché de l'utilisateur.
   final String userName;
+
+  /// Même personne sur le même serveur (un seul profil par compte).
+  bool sameAccount(Session other) =>
+      other.serverUrl == serverUrl && other.userId == userId;
+
+  Map<String, dynamic> toJson() => {
+    'serverUrl': serverUrl,
+    'accessToken': accessToken,
+    'userId': userId,
+    'userName': userName,
+  };
+
+  factory Session.fromJson(Map<String, dynamic> json) => Session(
+    serverUrl: json['serverUrl'] as String,
+    accessToken: json['accessToken'] as String,
+    userId: json['userId'] as String,
+    userName: (json['userName'] as String?) ?? '',
+  );
 }

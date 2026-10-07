@@ -1,10 +1,12 @@
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../models/search_results.dart';
+import 'profile_data.dart';
 
-/// Recherches récentes, gardées sur le téléphone (les 10 dernières).
+/// Recherches récentes du profil en cours, gardées sur le téléphone (les 10
+/// dernières).
 class SearchHistory {
-  static const _key = 'search_history';
+  static String get _key => ProfileData.key('search_history');
 
   Future<List<String>> load() async {
     final prefs = await SharedPreferences.getInstance();
