@@ -7,9 +7,9 @@ import 'package:media_kit/media_kit.dart';
 import 'package:screen_brightness/screen_brightness.dart';
 import 'package:volume_controller/volume_controller.dart';
 
-import '../models/durations.dart';
 import '../services/device_capabilities.dart';
 import '../theme/app_theme.dart';
+import 'seek_bar.dart';
 import 'tv_focus.dart';
 import 'ui.dart';
 
@@ -24,10 +24,12 @@ enum _Level { brightness, volume }
 ///   sur la moitié droite : volume du téléphone.
 ///
 /// Sur une télé, à la télécommande :
-/// - commandes masquées : OK = lecture / pause, gauche / droite = recule /
-///   avance (10 s, puis 30 s en maintenant la touche), haut / bas / Menu =
-///   affiche les commandes ;
+/// - commandes masquées : OK = lecture / pause, haut / bas / Menu = affiche
+///   les commandes, gauche / droite = les affiche avec la barre sélectionnée ;
 /// - commandes affichées : les flèches passent d'un bouton à l'autre ;
+/// - barre sélectionnée : gauche / droite déplacent un repère (10 s, de plus
+///   en plus vite en maintenant), la vidéo y saute au relâchement ou avec OK
+///   ([TvScrubber]) ;
 /// - Retour cache les commandes ([PlayerControlsState.handleBack]) ;
 /// - les touches lecture / pause / avance / retour rapide marchent toujours.
 class PlayerControls extends StatefulWidget {
@@ -104,12 +106,22 @@ class PlayerControlsState extends State<PlayerControls> {
   // le bouton lecture / pause est sélectionné quand elles s'affichent
   final _rootFocus = FocusNode(debugLabel: 'Lecteur');
   final _playFocus = FocusNode(debugLabel: 'Lecture / pause');
+  final _seekFocus = FocusNode(debugLabel: 'Barre de progression');
   bool get _tv => DeviceCapabilities.isTv;
+
+  /// Télé : repère déplacé aux flèches sur la barre.
+  late final _scrubber = TvScrubber(
+    position: () => _player.state.position,
+    duration: () => _player.state.duration,
+    seek: _player.seek,
+  );
 
   @override
   void initState() {
     super.initState();
     _scheduleHide();
+    // Commandes affichées pendant le déplacement, masquées 3 s après
+    _scrubber.addListener(_scheduleHide);
     // En pause, les commandes restent affichées
     _playingSubscription = _player.stream.playing.listen((playing) {
       if (playing) {
@@ -148,6 +160,8 @@ class PlayerControlsState extends State<PlayerControls> {
     _playingSubscription?.cancel();
     _rootFocus.dispose();
     _playFocus.dispose();
+    _seekFocus.dispose();
+    _scrubber.dispose();
     if (_tv) {
       super.dispose();
       return;
@@ -180,7 +194,7 @@ class PlayerControlsState extends State<PlayerControls> {
   /// Relance le compte à rebours avant de masquer les commandes.
   void _scheduleHide() {
     _hideTimer?.cancel();
-    if (!_player.state.playing || _menuOpen) return;
+    if (!_player.state.playing || _menuOpen || _scrubber.pending) return;
     _hideTimer = Timer(_hideDelay, () {
       if (mounted) _setVisible(false);
     });
@@ -215,6 +229,8 @@ class PlayerControlsState extends State<PlayerControls> {
   /// lecteur reste ouvert) ; renvoie faux si elles l'étaient déjà.
   bool handleBack() {
     if (!_tv || !_visible) return false;
+    // Déplacement en cours : la vidéo saute quand même au repère
+    _scrubber.commit();
     _hideTimer?.cancel();
     _setVisible(false);
     return true;
@@ -222,10 +238,16 @@ class PlayerControlsState extends State<PlayerControls> {
 
   /// Télé : touches de la télécommande.
   KeyEventResult _onKey(FocusNode node, KeyEvent event) {
-    if (event is KeyUpEvent) return KeyEventResult.ignored;
-    widget.onKeyActivity?.call();
     final key = event.logicalKey;
+    final direction = _seekDirection(key);
+    // Flèche relâchée : le repère s'arrête, la vidéo y saute peu après
+    if (event is KeyUpEvent) {
+      if (direction != 0) _scrubber.release();
+      return KeyEventResult.ignored;
+    }
+    widget.onKeyActivity?.call();
     final repeat = event is KeyRepeatEvent;
+    final onBar = _seekFocus.hasPrimaryFocus;
 
     // Touches de lecture : toujours
     if (key == LogicalKeyboardKey.mediaPlayPause ||
@@ -234,12 +256,19 @@ class PlayerControlsState extends State<PlayerControls> {
       if (!repeat) _playOrPause();
       return KeyEventResult.handled;
     }
-    if (key == LogicalKeyboardKey.mediaFastForward ||
-        key == LogicalKeyboardKey.mediaRewind) {
-      _seekWithFeedback(
-        key == LogicalKeyboardKey.mediaFastForward ? 1 : -1,
-        repeat: repeat,
-      );
+    // Avance / retour rapide toujours, et gauche / droite sur la barre,
+    // commandes masquées ou flèche déjà enfoncée (la barre peut mettre un
+    // instant à être sélectionnée) : déplacement du repère
+    final arrow =
+        key == LogicalKeyboardKey.arrowLeft ||
+        key == LogicalKeyboardKey.arrowRight;
+    if (direction != 0 && (!arrow || onBar || !_visible || _scrubber.holding)) {
+      _scrub(direction, repeat: repeat);
+      return KeyEventResult.handled;
+    }
+    // OK sur la barre : saute tout de suite au repère, sinon lecture / pause
+    if (onBar && _isOk(key)) {
+      if (!repeat) _scrubber.pending ? _scrubber.commit() : _playOrPause();
       return KeyEventResult.handled;
     }
 
@@ -250,22 +279,11 @@ class PlayerControlsState extends State<PlayerControls> {
     }
 
     // Commandes masquées
-    if (key == LogicalKeyboardKey.select ||
-        key == LogicalKeyboardKey.enter ||
-        key == LogicalKeyboardKey.numpadEnter ||
-        key == LogicalKeyboardKey.gameButtonA) {
+    if (_isOk(key)) {
       if (!repeat && !(widget.onSelectOverride?.call() ?? false)) {
         _player.playOrPause();
         _showWithFocus();
       }
-      return KeyEventResult.handled;
-    }
-    if (key == LogicalKeyboardKey.arrowLeft ||
-        key == LogicalKeyboardKey.arrowRight) {
-      _seekWithFeedback(
-        key == LogicalKeyboardKey.arrowRight ? 1 : -1,
-        repeat: repeat,
-      );
       return KeyEventResult.handled;
     }
     if (key == LogicalKeyboardKey.arrowUp ||
@@ -277,12 +295,35 @@ class PlayerControlsState extends State<PlayerControls> {
     return KeyEventResult.ignored;
   }
 
-  /// Télé : recule ou avance ([direction] -1 / 1) de 10 s, ou de 30 s quand
-  /// la touche reste enfoncée, avec la bulle « +10 s · 12:34 ».
-  void _seekWithFeedback(int direction, {required bool repeat}) {
-    final step = Duration(seconds: repeat ? 30 : 10);
-    _seekBy(direction > 0 ? step : -step);
-    _showSeekFeedback(direction, seconds: step.inSeconds);
+  static bool _isOk(LogicalKeyboardKey key) =>
+      key == LogicalKeyboardKey.select ||
+      key == LogicalKeyboardKey.enter ||
+      key == LogicalKeyboardKey.numpadEnter ||
+      key == LogicalKeyboardKey.gameButtonA;
+
+  /// Sens du déplacement d'une touche : -1 recule, 1 avance, 0 aucun.
+  static int _seekDirection(LogicalKeyboardKey key) {
+    if (key == LogicalKeyboardKey.arrowRight ||
+        key == LogicalKeyboardKey.mediaFastForward) {
+      return 1;
+    }
+    if (key == LogicalKeyboardKey.arrowLeft ||
+        key == LogicalKeyboardKey.mediaRewind) {
+      return -1;
+    }
+    return 0;
+  }
+
+  /// Télé : déplace le repère ([direction] -1 / 1), commandes affichées et
+  /// barre sélectionnée.
+  void _scrub(int direction, {required bool repeat}) {
+    if (!_seekFocus.hasPrimaryFocus) {
+      _setVisible(true);
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _seekFocus.requestFocus();
+      });
+    }
+    repeat ? _scrubber.hold(direction) : _scrubber.press(direction);
   }
 
   void _toggleVisible() {
@@ -324,14 +365,8 @@ class PlayerControlsState extends State<PlayerControls> {
     }
   }
 
-  /// Durée du dernier saut (pour la bulle) et position visée.
-  int _seekSeconds = 10;
-
-  void _showSeekFeedback(int direction, {int seconds = 10}) {
-    setState(() {
-      _seekFeedback = direction;
-      _seekSeconds = seconds;
-    });
+  void _showSeekFeedback(int direction) {
+    setState(() => _seekFeedback = direction);
     _seekFeedbackTimer?.cancel();
     _seekFeedbackTimer = Timer(const Duration(milliseconds: 600), () {
       if (mounted) setState(() => _seekFeedback = 0);
@@ -382,14 +417,6 @@ class PlayerControlsState extends State<PlayerControls> {
       onKeyEvent: _onKey,
       child: controls,
     );
-  }
-
-  /// Bulle du saut : « −10 s », et sur télé la position visée.
-  String _seekLabel(int direction) {
-    final sign = direction < 0 ? '−' : '+';
-    final label = '$sign$_seekSeconds s';
-    if (!_tv) return label;
-    return '$label · ${formatPosition(_player.state.position)}';
   }
 
   Widget _buildLayout() {
@@ -459,10 +486,7 @@ class PlayerControlsState extends State<PlayerControls> {
               top: 0,
               bottom: 0,
               child: Center(
-                child: _SeekBubble(
-                  visible: _seekFeedback < 0,
-                  label: _seekLabel(-1),
-                ),
+                child: _SeekBubble(visible: _seekFeedback < 0, label: '−10 s'),
               ),
             ),
             Positioned(
@@ -470,10 +494,7 @@ class PlayerControlsState extends State<PlayerControls> {
               top: 0,
               bottom: 0,
               child: Center(
-                child: _SeekBubble(
-                  visible: _seekFeedback > 0,
-                  label: _seekLabel(1),
-                ),
+                child: _SeekBubble(visible: _seekFeedback > 0, label: '+10 s'),
               ),
             ),
             // Roue quand la vidéo charge (même commandes masquées)
@@ -626,11 +647,13 @@ class PlayerControlsState extends State<PlayerControls> {
                   ],
                 ),
                 const Spacer(),
-                // Bas : barre de progression et temps (télé : avec les
-                // boutons ±10 s plutôt que sélectionnable)
-                ExcludeFocus(
-                  excluding: _tv,
-                  child: _SeekBar(player: _player, onInteraction: _interacted),
+                // Bas : barre de progression et temps (télé : sélectionnable,
+                // repère déplacé aux flèches)
+                SeekBar(
+                  player: _player,
+                  onInteraction: _interacted,
+                  focusNode: _tv ? _seekFocus : null,
+                  scrubber: _tv ? _scrubber : null,
                 ),
               ],
             ),
@@ -709,141 +732,6 @@ class _SourceBadge extends StatelessWidget {
       valueListenable: label,
       builder: (context, text, _) =>
           text == null ? const SizedBox.shrink() : OutlinePill(text),
-    );
-  }
-}
-
-/// Barre de progression : on peut la toucher ou la faire glisser pour se
-/// déplacer dans la vidéo. En dessous, temps écoulé et temps restant.
-class _SeekBar extends StatefulWidget {
-  const _SeekBar({required this.player, required this.onInteraction});
-
-  final Player player;
-  final VoidCallback onInteraction;
-
-  @override
-  State<_SeekBar> createState() => _SeekBarState();
-}
-
-class _SeekBarState extends State<_SeekBar> {
-  /// Position visée pendant un glissement (de 0 à 1), null sinon.
-  double? _dragValue;
-
-  Player get _player => widget.player;
-
-  double _valueAt(double dx, double width) => (dx / width).clamp(0.0, 1.0);
-
-  void _seekTo(double value) {
-    final duration = _player.state.duration;
-    if (duration > Duration.zero) _player.seek(duration * value);
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final textTheme = Theme.of(context).textTheme;
-
-    return StreamBuilder<Duration>(
-      stream: _player.stream.position,
-      initialData: _player.state.position,
-      builder: (context, snapshot) {
-        final duration = _player.state.duration;
-        final hasDuration = duration > Duration.zero;
-        final position = snapshot.data ?? Duration.zero;
-        final played =
-            _dragValue ??
-            (hasDuration
-                ? position.inMilliseconds / duration.inMilliseconds
-                : 0.0);
-        final buffered = hasDuration
-            ? _player.state.buffer.inMilliseconds / duration.inMilliseconds
-            : 0.0;
-        final shown = hasDuration
-            ? duration * played.clamp(0.0, 1.0)
-            : position;
-
-        return Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            LayoutBuilder(
-              builder: (context, constraints) {
-                final width = constraints.maxWidth;
-                final thumb = _dragValue == null ? 14.0 : 20.0;
-                return GestureDetector(
-                  behavior: HitTestBehavior.opaque,
-                  onTapUp: (d) {
-                    _seekTo(_valueAt(d.localPosition.dx, width));
-                    widget.onInteraction();
-                  },
-                  onHorizontalDragStart: (d) => setState(
-                    () => _dragValue = _valueAt(d.localPosition.dx, width),
-                  ),
-                  onHorizontalDragUpdate: (d) {
-                    setState(
-                      () => _dragValue = _valueAt(d.localPosition.dx, width),
-                    );
-                    widget.onInteraction();
-                  },
-                  onHorizontalDragEnd: (_) {
-                    final value = _dragValue;
-                    if (value != null) _seekTo(value);
-                    setState(() => _dragValue = null);
-                  },
-                  child: SizedBox(
-                    height: 30,
-                    child: Stack(
-                      alignment: Alignment.centerLeft,
-                      clipBehavior: Clip.none,
-                      children: [
-                        _bar(width, 1, AppColors.track),
-                        _bar(width, buffered, AppColors.trackBuffer),
-                        _bar(width, played, AppColors.white),
-                        Positioned(
-                          left: width * played.clamp(0.0, 1.0) - thumb / 2,
-                          child: AnimatedContainer(
-                            duration: AppDurations.fast,
-                            width: thumb,
-                            height: thumb,
-                            decoration: const BoxDecoration(
-                              color: AppColors.white,
-                              shape: BoxShape.circle,
-                              boxShadow: [
-                                BoxShadow(
-                                  color: AppColors.scrim55,
-                                  blurRadius: 8,
-                                  offset: Offset(0, 2),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                );
-              },
-            ),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Text(formatPosition(shown), style: textTheme.labelMedium),
-                Text(
-                  hasDuration ? '−${formatPosition(duration - shown)}' : '',
-                  style: textTheme.labelMedium,
-                ),
-              ],
-            ),
-          ],
-        );
-      },
-    );
-  }
-
-  /// Un morceau de barre, de [fraction] de la largeur.
-  Widget _bar(double width, double fraction, Color color) {
-    return Container(
-      width: width * fraction.clamp(0.0, 1.0),
-      height: 5,
-      decoration: ShapeDecoration(color: color, shape: const StadiumBorder()),
     );
   }
 }
