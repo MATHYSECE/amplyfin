@@ -109,6 +109,16 @@ void main() {
       expect(seeks, hasLength(1));
     });
 
+    testWidgets('relâchement perdu : pas de grand saut à l\'appui suivant', (
+      tester,
+    ) async {
+      scrubber.press(1); // jamais relâché
+      clock = DateTime(2026).add(const Duration(minutes: 1));
+      scrubber.hold(1); // une minute plus tard : comme un appui simple
+      expect(scrubber.target, const Duration(minutes: 10, seconds: 20));
+      await scrubber.commit();
+    });
+
     testWidgets('OK : saut tout de suite', (tester) async {
       scrubber.press(1);
       await scrubber.commit();

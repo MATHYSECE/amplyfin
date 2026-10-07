@@ -248,37 +248,49 @@ class PlayerControlsState extends State<PlayerControls> {
     widget.onKeyActivity?.call();
     final repeat = event is KeyRepeatEvent;
     final onBar = _seekFocus.hasPrimaryFocus;
+    // Aucun bouton sélectionné (commandes masquées, ou affichées au
+    // lancement / par la touche lecture-pause) : les touches agissent comme
+    // commandes masquées, sinon les flèches ne trouveraient aucun bouton
+    final noButton = !_visible || _rootFocus.hasPrimaryFocus;
 
-    // Touches de lecture : toujours
+    // Touches de lecture : toujours (et un bouton sélectionné pour naviguer)
     if (key == LogicalKeyboardKey.mediaPlayPause ||
         key == LogicalKeyboardKey.mediaPlay ||
         key == LogicalKeyboardKey.mediaPause) {
-      if (!repeat) _playOrPause();
+      if (!repeat) {
+        _playOrPause();
+        if (_rootFocus.hasPrimaryFocus) _showWithFocus();
+      }
       return KeyEventResult.handled;
     }
     // Avance / retour rapide toujours, et gauche / droite sur la barre,
-    // commandes masquées ou flèche déjà enfoncée (la barre peut mettre un
-    // instant à être sélectionnée) : déplacement du repère
+    // commandes masquées ou flèche toujours enfoncée (la barre peut mettre
+    // un instant à être sélectionnée) : déplacement du repère
     final arrow =
         key == LogicalKeyboardKey.arrowLeft ||
         key == LogicalKeyboardKey.arrowRight;
-    if (direction != 0 && (!arrow || onBar || !_visible || _scrubber.holding)) {
+    if (direction != 0 &&
+        (!arrow || onBar || noButton || (repeat && _scrubber.holding))) {
       _scrub(direction, repeat: repeat);
       return KeyEventResult.handled;
     }
+    // Nouvel appui ailleurs que sur la barre : le maintien précédent est
+    // fini (son relâchement a pu arriver ailleurs, ex. « Passer l'intro »),
+    // la flèche passe d'un bouton à l'autre
+    if (arrow && !repeat && _scrubber.holding) _scrubber.release();
     // OK sur la barre : saute tout de suite au repère, sinon lecture / pause
     if (onBar && _isOk(key)) {
       if (!repeat) _scrubber.pending ? _scrubber.commit() : _playOrPause();
       return KeyEventResult.handled;
     }
 
-    // Commandes affichées : les flèches et OK vont aux boutons
-    if (_visible) {
+    // Un bouton sélectionné : les flèches et OK vont aux boutons
+    if (!noButton) {
       _scheduleHide();
       return KeyEventResult.ignored;
     }
 
-    // Commandes masquées
+    // Aucun bouton sélectionné
     if (_isOk(key)) {
       if (!repeat && !(widget.onSelectOverride?.call() ?? false)) {
         _player.playOrPause();

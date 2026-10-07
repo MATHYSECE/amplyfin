@@ -72,8 +72,14 @@ class TvScrubber extends ChangeNotifier {
   void hold(int direction) {
     final start = _holdStart;
     final last = _lastMove;
-    if (start == null || last == null) return press(direction);
     final now = _now();
+    // Pas de répétition depuis un moment : le relâchement a été perdu, on
+    // repart d'un appui simple plutôt que de faire un grand saut
+    if (start == null ||
+        last == null ||
+        now.difference(last) > const Duration(milliseconds: 500)) {
+      return press(direction);
+    }
     _lastMove = now;
     final total = duration();
     final seconds =
