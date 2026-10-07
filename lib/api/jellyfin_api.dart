@@ -9,6 +9,7 @@ import '../models/durations.dart';
 import '../models/episode.dart';
 import '../models/item_details.dart';
 import '../models/media_item.dart';
+import '../models/media_segments.dart';
 import '../models/playback_info.dart';
 import '../models/playback_quality.dart';
 import '../models/resume_entry.dart';
@@ -388,22 +389,13 @@ class JellyfinApi {
     return items[1] as Map<String, dynamic>;
   }
 
-  /// GET /MediaSegments/{id} : début du générique de fin, s'il est connu
-  /// (le serveur ne le détecte qu'avec une extension, ex. Intro Skipper).
-  Future<Duration?> getOutroStart(String itemId) async {
-    final json = await _send(
-      'GET',
-      '/MediaSegments/$itemId',
-      query: {'includeSegmentTypes': 'Outro'},
-    );
-    final items = (json['Items'] as List<dynamic>?) ?? [];
-    final starts = [
-      for (final item in items.cast<Map<String, dynamic>>())
-        if (item['Type'] == 'Outro')
-          ?ticksToDuration(item['StartTicks'] as int?),
-    ];
-    if (starts.isEmpty) return null;
-    return starts.reduce((a, b) => a < b ? a : b);
+  /// GET /MediaSegments/{id} : génériques de début et de fin repérés par
+  /// une extension du serveur (Intro Skipper). Vide si rien n'est repéré.
+  /// Pas de filtre par type : le serveur n'accepte pas « Intro,Outro » (il
+  /// veut le paramètre répété) ; on trie ici.
+  Future<MediaSegments> getMediaSegments(String itemId) async {
+    final json = await _send('GET', '/MediaSegments/$itemId');
+    return MediaSegments.fromList(json['Items'] as List<dynamic>?);
   }
 
   /// GET /UserItems/Resume : films et épisodes commencés, du plus récent

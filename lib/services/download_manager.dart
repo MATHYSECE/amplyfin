@@ -315,6 +315,13 @@ class DownloadManager extends ChangeNotifier {
       final seriesJson = series[seriesId];
       if (seriesJson != null) info = info.withSeries(seriesJson);
     }
+    // Génériques repérés (« Passer l'intro » hors ligne) : sans eux, le
+    // téléchargement se fait quand même
+    try {
+      info = info.withSegments(await api.getMediaSegments(itemId));
+    } on JellyfinException {
+      // Rien de repéré, ou extension absente du serveur
+    }
     // Annulé pendant qu'on attendait le serveur
     if (!_states.containsKey(itemId)) return;
 

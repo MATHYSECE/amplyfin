@@ -19,9 +19,14 @@ class NextEpisodeCard extends StatefulWidget {
     required this.onPlayNow,
     required this.onTimeout,
     required this.onDismiss,
+    this.playFocusNode,
   });
 
   final NextEpisode episode;
+
+  /// Télé : « Lire maintenant », sélectionné par le lecteur quand la carte
+  /// apparaît.
+  final FocusNode? playFocusNode;
 
   /// Vrai quand la vidéo avance : le compte à rebours aussi.
   final ValueListenable<bool> running;
@@ -133,6 +138,7 @@ class _NextEpisodeCardState extends State<NextEpisodeCard>
                   child: FilledButton(
                     // Télé : sélectionné dès que la carte apparaît
                     autofocus: DeviceCapabilities.isTv,
+                    focusNode: widget.playFocusNode,
                     onPressed: widget.onPlayNow,
                     child: AnimatedBuilder(
                       animation: _countdown,
@@ -241,10 +247,14 @@ class StillWatchingOverlay extends StatelessWidget {
     required this.episode,
     required this.onContinue,
     required this.onStop,
+    this.continueFocusNode,
   });
 
   /// Épisode qui sera lu en continuant.
   final NextEpisode episode;
+
+  /// Télé : « Continuer », sélectionné par le lecteur.
+  final FocusNode? continueFocusNode;
   final VoidCallback onContinue;
   final VoidCallback onStop;
 
@@ -291,6 +301,7 @@ class StillWatchingOverlay extends StatelessWidget {
                   const SizedBox(width: 12),
                   FilledButton.icon(
                     autofocus: DeviceCapabilities.isTv,
+                    focusNode: continueFocusNode,
                     onPressed: onContinue,
                     icon: const Icon(Icons.play_arrow_rounded),
                     label: const Text('Continuer'),

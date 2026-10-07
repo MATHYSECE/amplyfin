@@ -10,6 +10,7 @@ import '../api/device_profile.dart';
 import '../api/jellyfin_api.dart';
 import '../models/device_decoders.dart';
 import '../models/media_track.dart';
+import '../models/media_segments.dart';
 import '../models/next_episode.dart';
 import '../models/player_message.dart';
 import '../models/playback_info.dart';
@@ -27,6 +28,7 @@ import '../theme/app_theme.dart';
 import '../widgets/error_details.dart';
 import '../widgets/next_episode_card.dart';
 import '../widgets/player_controls.dart';
+import '../widgets/skip_intro_button.dart';
 import '../widgets/subtitle_overlay.dart';
 import '../widgets/track_picker.dart';
 import '../widgets/transcode_dialog.dart';
@@ -163,8 +165,30 @@ class _PlayerScreenState extends State<PlayerScreen> {
   /// qu'il n'est pas connu).
   NextEpisode? _next;
 
+  /// Génériques de début et de fin repérés par le serveur (Intro Skipper).
+  MediaSegments _segments = const MediaSegments();
+
   /// Début du générique de fin, s'il est connu du serveur.
-  Duration? _outroStart;
+  Duration? get _outroStart => _segments.outroStart;
+
+  // ---------- Passer l'intro ----------
+
+  /// Vrai quand la vidéo est dans le générique de début.
+  bool _inIntro = false;
+
+  /// Vrai les 10 premières secondes du générique (en temps de vidéo) : le
+  /// bouton « Passer l'intro » se voit même commandes masquées ; ensuite,
+  /// seulement avec les commandes (comme Netflix).
+  bool _introFresh = false;
+
+  /// Position où l'on est entré dans le générique.
+  Duration _introEnteredAt = Duration.zero;
+  static const _introPromptTime = Duration(seconds: 10);
+
+  /// Télé : « Passer l'intro » et les cartes, sélectionnés à leur arrivée.
+  final _skipFocus = FocusNode(debugLabel: 'Passer l\'intro');
+  final _nextFocus = FocusNode(debugLabel: 'Lire maintenant');
+  final _stillFocus = FocusNode(debugLabel: 'Continuer');
 
   /// Vrai quand la carte « Épisode suivant » est affichée.
   bool _nextShown = false;
@@ -255,6 +279,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
       prefetched: widget.initialInfo,
     );
     _prepareNext();
+    _loadSegments();
   }
 
   /// Réglage de l'affichage vidéo. Sur Android, la puce vidéo décode l'image
@@ -276,6 +301,9 @@ class _PlayerScreenState extends State<PlayerScreen> {
   void dispose() {
     _progressTimer?.cancel();
     _startupErrorTimer?.cancel();
+    _skipFocus.dispose();
+    _nextFocus.dispose();
+    _stillFocus.dispose();
     for (final subscription in _subscriptions) {
       subscription.cancel();
     }
@@ -568,17 +596,72 @@ class _PlayerScreenState extends State<PlayerScreen> {
       itemId: itemId,
     );
     if (next == null || !mounted || itemId != _itemId) return;
-    final outroStart = await findOutroStart(widget.api, itemId);
-    if (!mounted || itemId != _itemId) return;
-    setState(() {
-      _next = next;
-      _outroStart = outroStart;
-    });
+    setState(() => _next = next);
     _onPosition(_player.state.position);
+  }
+
+  /// Génériques de début et de fin de l'élément lu (« Passer l'intro »,
+  /// moment de la carte « Épisode suivant »).
+  Future<void> _loadSegments() async {
+    final itemId = _itemId;
+    final segments = await findSegments(widget.api, itemId);
+    if (!mounted || itemId != _itemId) return;
+    setState(() => _segments = segments);
+    _onPosition(_player.state.position);
+  }
+
+  /// « Passer l'intro » : saut à la fin du générique de début.
+  void _skipIntro() {
+    final intro = _segments.intro;
+    if (intro == null) return;
+    _player.seek(intro.end);
+    _setInIntro(false, intro.end);
+  }
+
+  /// Entrée ou sortie du générique de début ([position] : où en est la
+  /// vidéo).
+  void _setInIntro(bool inIntro, Duration position) {
+    if (inIntro && _inIntro) {
+      // Bouton bien visible les 10 premières secondes du générique
+      final fresh = position < _introEnteredAt + _introPromptTime;
+      if (fresh != _introFresh) setState(() => _introFresh = fresh);
+      return;
+    }
+    if (inIntro == _inIntro) return;
+    final hadFocus = _skipFocus.hasFocus;
+    _introEnteredAt = position;
+    setState(() {
+      _inIntro = inIntro;
+      _introFresh = inIntro;
+    });
+    if (inIntro) {
+      _focusSoon(_skipFocus);
+    } else if (hadFocus) {
+      // Le bouton sélectionné disparaît : le lecteur reprend les touches
+      WidgetsBinding.instance.addPostFrameCallback(
+        (_) => _controlsKey.currentState?.takeFocus(),
+      );
+    }
+  }
+
+  /// Télé : sélectionne [node] dès qu'il est affiché (OK suffit alors).
+  void _focusSoon(FocusNode node) {
+    if (!DeviceCapabilities.isTv) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted && node.context != null) node.requestFocus();
+    });
   }
 
   /// Affiche la carte « Épisode suivant » pendant le générique de fin.
   void _onPosition(Duration position) {
+    final intro = _segments.intro;
+    _setInIntro(
+      intro != null &&
+          intro.contains(position) &&
+          !_switching &&
+          _error == null,
+      position,
+    );
     final trigger = _next == null
         ? null
         : nextEpisodeTrigger(_player.state.duration, outroStart: _outroStart);
@@ -591,7 +674,10 @@ class _PlayerScreenState extends State<PlayerScreen> {
         !_switching &&
         !_askingStillWatching &&
         _error == null;
-    if (show != _nextShown && mounted) setState(() => _nextShown = show);
+    if (show != _nextShown && mounted) {
+      setState(() => _nextShown = show);
+      if (show) _focusSoon(_nextFocus);
+    }
   }
 
   /// Fin du compte à rebours (ou de l'épisode) : le suivant, sauf après
@@ -604,6 +690,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
         _askingStillWatching = true;
         _nextShown = false;
       });
+      _focusSoon(_stillFocus);
       return;
     }
     _autoPlays++;
@@ -646,7 +733,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
       _subtitle = next.subtitle;
       _tracks = tracks;
       _next = null;
-      _outroStart = null;
+      _segments = const MediaSegments();
       _nextDismissed = false;
       _decodeProblemShown = false;
     });
@@ -710,6 +797,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
     if (!mounted) return;
     setState(() => _switching = false);
     _prepareNext();
+    _loadSegments();
   }
 
   /// Langues à garder pour l'épisode suivant : celles écoutées en ce moment,
@@ -967,10 +1055,16 @@ class _PlayerScreenState extends State<PlayerScreen> {
       // Retour du téléphone : on passe par _close (renvoie l'élément lu)
       canPop: false,
       onPopInvokedWithResult: (didPop, _) {
-        // Télé : Retour cache d'abord les commandes
-        if (didPop || (_controlsKey.currentState?.handleBack() ?? false)) {
+        if (didPop) return;
+        // Télé : Retour sur « Passer l'intro » le cache seulement
+        if (_skipFocus.hasFocus) {
+          _introEnteredAt = Duration.zero;
+          setState(() => _introFresh = false);
+          _controlsKey.currentState?.takeFocus();
           return;
         }
+        // Télé : Retour cache d'abord les commandes
+        if (_controlsKey.currentState?.handleBack() ?? false) return;
         _close();
       },
       child: Scaffold(
@@ -1002,6 +1096,12 @@ class _PlayerScreenState extends State<PlayerScreen> {
                   key: _controlsKey,
                   // Télé : une touche = on regarde bien
                   onKeyActivity: () => _autoPlays = 0,
+                  // Télé : OK saute l'intro quand le bouton est affiché
+                  onSelectOverride: () {
+                    if (!_inIntro || !_introFresh) return false;
+                    _skipIntro();
+                    return true;
+                  },
                   player: _player,
                   title: _title,
                   subtitle: _subtitle,
@@ -1059,6 +1159,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
                             child: NextEpisodeCard(
                               episode: next,
                               running: _playing,
+                              playFocusNode: _nextFocus,
                               onPlayNow: _playNext,
                               onTimeout: _autoAdvance,
                               onDismiss: () => setState(() {
@@ -1071,9 +1172,41 @@ class _PlayerScreenState extends State<PlayerScreen> {
                   ),
                 ),
               ),
+              // « Passer l'intro » : bien visible au début du générique,
+              // ensuite seulement avec les commandes
+              Positioned(
+                right: insets.right + 24,
+                bottom: 0,
+                child: ValueListenableBuilder(
+                  valueListenable: _controlsVisible,
+                  builder: (context, raised, _) {
+                    final visible = _inIntro && (_introFresh || raised);
+                    return AnimatedPadding(
+                      padding: EdgeInsets.only(bottom: raised ? 108 : 32),
+                      duration: AppDurations.medium,
+                      curve: Curves.easeOutCubic,
+                      child: IgnorePointer(
+                        ignoring: !visible,
+                        child: AnimatedOpacity(
+                          opacity: visible ? 1 : 0,
+                          duration: AppDurations.medium,
+                          child: ExcludeFocus(
+                            excluding: !visible,
+                            child: SkipIntroButton(
+                              focusNode: _skipFocus,
+                              onPressed: _skipIntro,
+                            ),
+                          ),
+                        ),
+                      ),
+                    );
+                  },
+                ),
+              ),
               if (_askingStillWatching && next != null)
                 StillWatchingOverlay(
                   episode: next,
+                  continueFocusNode: _stillFocus,
                   onContinue: _continueWatching,
                   onStop: _close,
                 ),

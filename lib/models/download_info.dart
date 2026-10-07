@@ -2,6 +2,7 @@ import 'durations.dart';
 import 'episode.dart';
 import 'item_details.dart';
 import 'media_item.dart';
+import 'media_segments.dart';
 import 'media_quality.dart';
 import 'media_track.dart';
 import 'playback_info.dart';
@@ -36,6 +37,7 @@ class DownloadInfo {
     this.seriesYear,
     this.seriesEndYear,
     this.seriesStatus,
+    this.segments = const MediaSegments(),
   });
 
   /// Lit la fiche complète renvoyée par GET /Items/{id} au moment du
@@ -115,7 +117,13 @@ class DownloadInfo {
     seriesYear: json['seriesYear'] as int?,
     seriesEndYear: json['seriesEndYear'] as int?,
     seriesStatus: json['seriesStatus'] as String?,
+    segments: MediaSegments.fromList(json['segments'] as List<dynamic>?),
   );
+
+  /// Les mêmes infos, avec les génériques repérés par le serveur (pour
+  /// « Passer l'intro » hors ligne).
+  DownloadInfo withSegments(MediaSegments segments) =>
+      DownloadInfo.fromJson({...toJson(), 'segments': segments.toJson()});
 
   /// Les mêmes infos, avec celles de la série (fiche GET /Items/{id} de la
   /// série) : résumé, années, état. Pour afficher sa fiche sans le serveur.
@@ -158,7 +166,12 @@ class DownloadInfo {
     'seriesYear': seriesYear,
     'seriesEndYear': seriesEndYear,
     'seriesStatus': seriesStatus,
+    'segments': segments.toJson(),
   };
+
+  /// Génériques de début et de fin repérés par le serveur (vide : rien, ou
+  /// téléchargé avant cette fonction).
+  final MediaSegments segments;
 
   final String itemId;
 

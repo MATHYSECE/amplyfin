@@ -43,6 +43,7 @@ class PlayerControls extends StatefulWidget {
     required this.onQuality,
     this.onVisibleChanged,
     this.onKeyActivity,
+    this.onSelectOverride,
   });
 
   final Player player;
@@ -69,6 +70,10 @@ class PlayerControls extends StatefulWidget {
 
   /// Télé : une touche de la télécommande a été pressée (on regarde bien).
   final VoidCallback? onKeyActivity;
+
+  /// Télé, commandes masquées : OK d'abord proposé ici (ex. « Passer
+  /// l'intro » affiché) ; renvoie vrai s'il a servi.
+  final bool Function()? onSelectOverride;
 
   @override
   State<PlayerControls> createState() => PlayerControlsState();
@@ -200,6 +205,12 @@ class PlayerControlsState extends State<PlayerControls> {
     });
   }
 
+  /// Télé : le lecteur reprend les touches (ex. après la disparition du
+  /// bouton « Passer l'intro » qui était sélectionné).
+  void takeFocus() {
+    if (_tv && !_visible) _rootFocus.requestFocus();
+  }
+
   /// Télé : bouton Retour. Commandes affichées : on les masque (et le
   /// lecteur reste ouvert) ; renvoie faux si elles l'étaient déjà.
   bool handleBack() {
@@ -243,7 +254,7 @@ class PlayerControlsState extends State<PlayerControls> {
         key == LogicalKeyboardKey.enter ||
         key == LogicalKeyboardKey.numpadEnter ||
         key == LogicalKeyboardKey.gameButtonA) {
-      if (!repeat) {
+      if (!repeat && !(widget.onSelectOverride?.call() ?? false)) {
         _player.playOrPause();
         _showWithFocus();
       }

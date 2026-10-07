@@ -2,6 +2,7 @@ import 'dart:async';
 
 import '../api/jellyfin_api.dart';
 import '../models/download_info.dart';
+import '../models/media_segments.dart';
 import '../models/next_episode.dart';
 import 'download_manager.dart';
 import 'offline_progress.dart';
@@ -60,13 +61,14 @@ Future<NextEpisode?> findNextEpisode(
   }
 }
 
-/// Début du générique de fin de [itemId], s'il est connu du serveur.
-Future<Duration?> findOutroStart(JellyfinApi api, String itemId) async {
+/// Génériques de début et de fin de [itemId] repérés par le serveur (Intro
+/// Skipper). Sans réponse : ceux gardés avec le téléchargement, sinon rien
+/// (la carte « Épisode suivant » apparaîtra alors avant la fin).
+Future<MediaSegments> findSegments(JellyfinApi api, String itemId) async {
   try {
-    return await api.getOutroStart(itemId).timeout(_serverTimeout);
+    return await api.getMediaSegments(itemId).timeout(_serverTimeout);
   } on Exception {
-    // Inconnu (ou pas de réseau) : la carte apparaîtra avant la fin
-    return null;
+    return _downloaded(itemId)?.segments ?? const MediaSegments();
   }
 }
 
