@@ -67,16 +67,29 @@ class SessionStore {
     ProfileData.use(session.userId);
   }
 
-  /// Retire le profil en cours (déconnexion). Les autres profils restent ;
+  /// Le profil [session] devient le profil en cours (« Qui regarde ? »).
+  Future<void> select(Session session) async {
+    await _storage.write(key: _kCurrent, value: session.userId);
+    ProfileData.use(session.userId);
+  }
+
+  /// Retire le profil [session] de l'appareil. Les autres profils restent ;
   /// l'adresse du serveur et l'identifiant de l'appareil aussi.
-  Future<void> clear() async {
-    final current = await _storage.read(key: _kCurrent);
+  Future<void> remove(Session session) async {
     await _write([
-      for (final session in await profiles())
-        if (session.userId != current) session,
+      for (final other in await profiles())
+        if (!other.sameAccount(session)) other,
     ]);
-    await _storage.delete(key: _kCurrent);
-    ProfileData.use(null);
+    if (await _storage.read(key: _kCurrent) == session.userId) {
+      await _storage.delete(key: _kCurrent);
+      ProfileData.use(null);
+    }
+  }
+
+  /// Retire le profil en cours (déconnexion).
+  Future<void> clear() async {
+    final current = await load();
+    if (current != null) await remove(current);
   }
 
   /// Dernière adresse de serveur utilisée (pour pré-remplir le champ).

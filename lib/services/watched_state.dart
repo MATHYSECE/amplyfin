@@ -19,6 +19,13 @@ class WatchedState extends ChangeNotifier {
   /// au chargement.
   WatchProgress of(MediaItem item) => _changed[item.id] ?? item.progress;
 
+  /// Changement de profil : les « vu / pas vu » retenus étaient ceux de
+  /// l'autre personne.
+  void reset() {
+    _changed.clear();
+    notifyListeners();
+  }
+
   /// Marque [itemId] comme vu ou pas vu sur le serveur, puis relit son état
   /// et celui des éléments [related] (ex. la série d'un épisode : son nombre
   /// d'épisodes pas vus change aussi).

@@ -114,11 +114,28 @@ class JellyfinApi {
       accessToken: json['AccessToken'] as String,
       userId: user['Id'] as String,
       userName: (user['Name'] as String?) ?? username,
+      imageTag: user['PrimaryImageTag'] as String?,
     );
   }
 
   /// GET /Users/Me : vérifie que le jeton est toujours valide.
   Future<void> checkToken() => _send('GET', '/Users/Me');
+
+  /// GET /Users/Me : nom et version de la photo du compte connecté (pour
+  /// tenir son profil à jour).
+  Future<({String name, String? imageTag})> getProfileInfo() async {
+    final json = await _send('GET', '/Users/Me');
+    return (
+      name: (json['Name'] as String?) ?? '',
+      imageTag: json['PrimaryImageTag'] as String?,
+    );
+  }
+
+  /// GET /UserImage : photo de profil d'un utilisateur. Le serveur demande
+  /// d'être connecté : à charger avec [streamHeaders].
+  String userImageUrl(String userId, String imageTag) =>
+      '$serverUrl/UserImage?userId=$userId'
+      '&tag=${Uri.encodeQueryComponent(imageTag)}';
 
   /// POST /Sessions/Logout : invalide le jeton côté serveur.
   Future<void> logout() => _send('POST', '/Sessions/Logout');

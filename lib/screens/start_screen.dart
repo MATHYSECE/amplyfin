@@ -2,17 +2,16 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 
-import '../api/jellyfin_api.dart';
-import '../services/connection_monitor.dart';
-import '../services/download_manager.dart';
+import '../services/device_capabilities.dart';
+import '../services/profile_switch.dart';
 import '../services/session_store.dart';
 import '../theme/app_theme.dart';
 import '../widgets/splash_view.dart';
 import 'login_screen.dart';
-import 'main_screen.dart';
+import 'profiles_screen.dart';
 
-/// Premier écran affiché : le logo animé, pendant qu'on vérifie
-/// s'il faut se connecter ou si la session enregistrée est encore valable.
+/// Premier écran affiché : le logo animé, pendant qu'on choisit l'écran
+/// suivant (connexion, « Qui regarde ? » ou le dernier profil).
 class StartScreen extends StatefulWidget {
   const StartScreen({super.key});
 
@@ -40,41 +39,21 @@ class _StartScreenState extends State<StartScreen> {
   /// Écran à ouvrir après le démarrage.
   Future<Widget> _decide() async {
     final store = SessionStore();
-    final session = await store.load();
+    final profiles = await store.profiles();
+    final current = await store.load();
+    // Tablette : le petit côté de l'écran (ne change pas en tournant)
+    final tablet = mounted && MediaQuery.sizeOf(context).shortestSide >= 600;
 
     // Personne n'est connecté : écran de connexion
-    if (session == null) return const LoginScreen();
+    if (profiles.isEmpty) return const LoginScreen();
 
-    final api = JellyfinApi(
-      serverUrl: session.serverUrl,
-      deviceId: await store.deviceId(),
-      token: session.accessToken,
-    );
-
-    // Le jeton est-il toujours accepté par le serveur ? (4 s au plus)
-    switch (await checkServer(api)) {
-      case ServerStatus.unauthorized:
-        // Jeton révoqué (ex. déconnecté depuis le tableau de bord Jellyfin)
-        await store.clear();
-        return const LoginScreen();
-      case ServerStatus.reachable:
-        ConnectionMonitor.instance.start(api, session.userId, online: true);
-        return MainScreen(api: api, session: session);
-      case ServerStatus.unreachable:
-        // Hors ligne : on garde la session, et les téléchargements (s'il y
-        // en a) s'ouvrent par-dessus l'écran principal
-        ConnectionMonitor.instance.start(api, session.userId, online: false);
-        final downloads = DownloadManager.instance;
-        await downloads.init();
-        final hasDownloads = downloads.states.values.any(
-          (s) => s.phase == DownloadPhase.complete,
-        );
-        return MainScreen(
-          api: api,
-          session: session,
-          openDownloads: hasDownloads,
-        );
+    // Télé et tablette (partagées) : « Qui regarde ? » ; téléphone : le
+    // dernier profil directement
+    if (current == null ||
+        askWhoIsWatching(tv: DeviceCapabilities.isTv, tablet: tablet)) {
+      return const ProfilesScreen();
     }
+    return openProfile(current);
   }
 
   /// Passe à l'écran suivant en fondu.

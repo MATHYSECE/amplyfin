@@ -3,11 +3,11 @@ import 'package:flutter/material.dart';
 import '../models/session.dart';
 
 /// Choix du menu « Compte ».
-enum AccountAction { settings, logout }
+enum AccountAction { switchProfile, settings, logout }
 
 /// Menu « Compte » (bouton en haut à droite) : qui est connecté, puis
-/// « Paramètres » et « Se déconnecter ». Renvoie le choix, ou null si on
-/// ferme le menu.
+/// « Changer de profil », « Paramètres » et « Se déconnecter ». Renvoie le
+/// choix, ou null si on ferme le menu.
 Future<AccountAction?> showAccountSheet(BuildContext context, Session session) {
   return showModalBottomSheet<AccountAction>(
     context: context,
@@ -26,6 +26,12 @@ Future<AccountAction?> showAccountSheet(BuildContext context, Session session) {
               subtitle: Text(session.serverUrl),
             ),
             const Divider(),
+            ListTile(
+              leading: const Icon(Icons.switch_account_outlined),
+              title: const Text('Changer de profil'),
+              subtitle: const Text('Qui regarde ?'),
+              onTap: () => choose(AccountAction.switchProfile),
+            ),
             ListTile(
               leading: const Icon(Icons.settings_outlined),
               title: const Text('Paramètres'),

@@ -18,7 +18,7 @@ import '../widgets/tv_focus.dart';
 import '../widgets/ui.dart';
 import 'downloads_screen.dart';
 import 'home_tab.dart';
-import 'login_screen.dart';
+import 'profiles_screen.dart';
 import 'movie_screen.dart';
 import 'search_tab.dart';
 import 'series_screen.dart';
@@ -210,11 +210,13 @@ class _MainScreenState extends State<MainScreen> {
     );
   }
 
-  /// Menu « Compte » : paramètres, ou déconnexion.
+  /// Menu « Compte » : changer de profil, paramètres, ou déconnexion.
   Future<void> _openAccount() async {
     final action = await showAccountSheet(context, widget.session);
     if (!mounted) return;
     switch (action) {
+      case AccountAction.switchProfile:
+        showOnly(context, const ProfilesScreen());
       case AccountAction.settings:
         await Navigator.of(context).push(
           MaterialPageRoute<void>(
@@ -228,8 +230,9 @@ class _MainScreenState extends State<MainScreen> {
           context,
           title: 'Se déconnecter ?',
           message:
-              'Il faudra saisir à nouveau ton mot de passe pour revenir. '
-              'Les téléchargements restent sur le téléphone.',
+              'Ton profil sera retiré de cet appareil : il faudra saisir à '
+              'nouveau ton mot de passe pour revenir. Les autres profils et '
+              'les téléchargements restent.',
           action: 'Se déconnecter',
           cancel: 'Annuler',
         );
@@ -249,14 +252,12 @@ class _MainScreenState extends State<MainScreen> {
     await _backToLogin();
   }
 
-  /// Efface la session du téléphone et revient à l'écran de connexion.
+  /// Retire ce profil de l'appareil, puis « Qui regarde ? » (ou l'écran de
+  /// connexion s'il n'en reste aucun).
   Future<void> _backToLogin() async {
     await SessionStore().clear();
     if (!mounted) return;
-    Navigator.of(context).pushAndRemoveUntil(
-      MaterialPageRoute(builder: (_) => const LoginScreen()),
-      (_) => false,
-    );
+    showOnly(context, const ProfilesScreen());
   }
 
   @override
