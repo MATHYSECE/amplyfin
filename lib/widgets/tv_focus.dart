@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -21,15 +23,46 @@ void followTvFocus() {
   });
 }
 
-/// Touche « Menu » (☰) de la télécommande : remplace l'appui long.
+/// Touche « Menu » (☰) de la télécommande : comme OK maintenu (appui long).
 class TvMenuIntent extends Intent {
   const TvMenuIntent();
+}
+
+/// Touches qui valent « OK » sur une télécommande.
+final _okKeys = {
+  LogicalKeyboardKey.select,
+  LogicalKeyboardKey.enter,
+  LogicalKeyboardKey.numpadEnter,
+  LogicalKeyboardKey.gameButtonA,
+};
+
+/// Durée d'appui sur OK pour un appui long.
+const tvLongPressDelay = Duration(milliseconds: 500);
+
+/// Gestionnaire de sélection où les répétitions de OK sont déjà ignorées.
+FocusManager? _okRepeatsIgnoredOn;
+
+/// Télé : tant qu'on garde le doigt sur OK, la télécommande répète « OK ».
+/// Ces répétitions sont ignorées partout, sinon elles arrivent sur l'écran
+/// qui vient de s'ouvrir (OK maintenu sur une affiche ouvre la fiche, puis
+/// lance la lecture ; après un appui long, elles choisiraient la première
+/// option du menu). À appeler une fois au démarrage.
+void ignoreTvOkRepeats() {
+  final manager = FocusManager.instance;
+  if (identical(_okRepeatsIgnoredOn, manager)) return;
+  _okRepeatsIgnoredOn = manager;
+  manager.addEarlyKeyEventHandler(
+    (event) => event is KeyRepeatEvent && _okKeys.contains(event.logicalKey)
+        ? KeyEventResult.handled
+        : KeyEventResult.ignored,
+  );
 }
 
 /// Rend [child] sélectionnable à la télécommande, sur une télé seulement
 /// (ailleurs, [child] est rendu tel quel) : il grossit un peu et prend un
 /// contour blanc quand il est sélectionné, la page défile pour le montrer,
-/// OK lance [onTap] et la touche Menu lance [onMenu].
+/// OK lance [onTap]. OK maintenu 0,5 s ou la touche Menu lancent [onMenu]
+/// (l'appui long du téléphone) ; dans ce cas, [onTap] part au relâchement.
 class TvFocusable extends StatefulWidget {
   const TvFocusable({
     super.key,
@@ -63,15 +96,80 @@ class TvFocusable extends StatefulWidget {
 class _TvFocusableState extends State<TvFocusable> {
   bool _focused = false;
 
+  /// OK enfoncé : l'élément rétrécit un peu, comme sur le téléphone.
+  bool _pressed = false;
+
+  /// Compte les 0,5 s de l'appui long (actif tant que OK est enfoncé).
+  Timer? _holdTimer;
+
+  FocusNode? _ownNode;
+  FocusNode get _node => widget.focusNode ?? (_ownNode ??= FocusNode());
+
   // Le défilement vers l'élément sélectionné : voir [followTvFocus]
-  void _onFocusChange(bool focused) => setState(() => _focused = focused);
+  void _onFocusChange(bool focused) {
+    if (!focused) _cancelHold();
+    setState(() => _focused = focused);
+  }
+
+  void _cancelHold() {
+    _holdTimer?.cancel();
+    _holdTimer = null;
+    _pressed = false;
+  }
+
+  /// Élément avec appui long : OK court = [onTap] au relâchement,
+  /// OK maintenu = [onMenu] sans attendre le relâchement.
+  /// Les autres éléments gardent le OK habituel (dès l'appui).
+  KeyEventResult _onKey(FocusNode node, KeyEvent event) {
+    // Seulement si c'est lui qui est sélectionné, pas un bouton à l'intérieur
+    // (ex. ⓘ d'une ligne d'épisode)
+    if (widget.onMenu == null ||
+        !_node.hasPrimaryFocus ||
+        !_okKeys.contains(event.logicalKey)) {
+      return KeyEventResult.ignored;
+    }
+    if (event is KeyDownEvent) {
+      _holdTimer?.cancel();
+      _holdTimer = Timer(tvLongPressDelay, _onLongPress);
+      setState(() => _pressed = true);
+    } else if (event is KeyUpEvent) {
+      // Pas de compteur : OK a été enfoncé ailleurs (écran précédent)
+      final shortPress = _holdTimer?.isActive ?? false;
+      setState(_cancelHold);
+      if (shortPress) widget.onTap?.call();
+    }
+    return KeyEventResult.handled;
+  }
+
+  void _onLongPress() {
+    if (!mounted) return;
+    setState(_cancelHold);
+    widget.onMenu?.call();
+  }
+
+  @override
+  void dispose() {
+    _holdTimer?.cancel();
+    _ownNode?.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
     if (!DeviceCapabilities.isTv) return widget.child;
+    // Ce Focus voit les touches avant les raccourcis de l'appli (OK = appui)
+    return Focus(
+      canRequestFocus: false,
+      skipTraversal: true,
+      onKeyEvent: _onKey,
+      child: _buildFocusable(),
+    );
+  }
+
+  Widget _buildFocusable() {
     return FocusableActionDetector(
       autofocus: widget.autofocus,
-      focusNode: widget.focusNode,
+      focusNode: _node,
       onFocusChange: _onFocusChange,
       shortcuts: const {
         SingleActivator(LogicalKeyboardKey.contextMenu): TvMenuIntent(),
@@ -91,7 +189,7 @@ class _TvFocusableState extends State<TvFocusable> {
         ),
       },
       child: AnimatedScale(
-        scale: _focused ? widget.scale : 1,
+        scale: _pressed ? 0.95 : (_focused ? widget.scale : 1),
         duration: AppDurations.fast,
         curve: Curves.easeOutCubic,
         child: AnimatedContainer(

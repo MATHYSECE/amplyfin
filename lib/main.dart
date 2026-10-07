@@ -17,8 +17,12 @@ Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   // Télé ou pas : l'interface en dépend dès le premier écran
   await DeviceCapabilities.detectTv();
-  // Télé : la page suit la sélection de la télécommande
-  if (DeviceCapabilities.isTv) followTvFocus();
+  // Télé : la page suit la sélection de la télécommande, et OK maintenu
+  // ne se répète pas
+  if (DeviceCapabilities.isTv) {
+    followTvFocus();
+    ignoreTvOkRepeats();
+  }
   // Prépare le moteur vidéo (media_kit)
   MediaKit.ensureInitialized();
   // Reprend le suivi des téléchargements (terminés ou en cours)

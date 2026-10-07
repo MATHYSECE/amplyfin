@@ -468,7 +468,8 @@ class _PressableScaleState extends State<PressableScale> {
 
   @override
   Widget build(BuildContext context) {
-    // Télé : sélectionnable à la télécommande (OK = appui, Menu = appui long)
+    // Télé : sélectionnable à la télécommande (OK = appui,
+    // OK maintenu ou Menu = appui long)
     return TvFocusable(
       onTap: widget.onTap,
       onMenu: widget.onLongPress,
