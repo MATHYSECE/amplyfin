@@ -125,64 +125,69 @@ Future<ResumeAction?> showResumeActions(
 ) {
   return showModalBottomSheet<ResumeAction>(
     context: context,
+    // Plus haut que la moitié de l'écran si besoin (télé, paysage), et
+    // défilant s'il manque encore de place
+    isScrollControlled: true,
     builder: (context) {
       void choose(ResumeAction action) => Navigator.of(context).pop(action);
       return SafeArea(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            ListTile(
-              title: Text(
-                entry.title,
-                style: Theme.of(context).textTheme.titleMedium,
-              ),
-              subtitle: Text(
-                [
-                  if (entry.subtitle.isNotEmpty) entry.subtitle,
-                  ?entry.nextLabel,
-                ].join(' · '),
-              ),
-            ),
-            ListTile(
-              leading: const Icon(Icons.play_arrow_rounded),
-              title: Text(
-                entry.isNext ? 'Lire l\'épisode' : entry.progress.resumeLabel,
-              ),
-              onTap: () => choose(ResumeAction.resume),
-            ),
-            if (!entry.isNext)
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
               ListTile(
-                leading: const Icon(Icons.replay_rounded),
-                title: const Text('Depuis le début'),
-                onTap: () => choose(ResumeAction.restart),
-              ),
-            ListTile(
-              leading: const Icon(Icons.info_outline_rounded),
-              title: Text(
-                entry.isEpisode
-                    ? 'Aller à la page de la série'
-                    : 'Aller à la page du film',
-              ),
-              onTap: () => choose(ResumeAction.openDetails),
-            ),
-            ListTile(
-              leading: const Icon(Icons.check_rounded),
-              title: const Text('Marquer comme vu'),
-              onTap: () => choose(ResumeAction.markPlayed),
-            ),
-            if (!entry.isNext) ...[
-              const Divider(),
-              ListTile(
-                leading: const Icon(Icons.remove_circle_outline_rounded),
-                title: const Text('Retirer de Continuer à regarder'),
-                subtitle: const Text(
-                  'La progression est effacée, comme si tu ne l\'avais '
-                  'pas regardé',
+                title: Text(
+                  entry.title,
+                  style: Theme.of(context).textTheme.titleMedium,
                 ),
-                onTap: () => choose(ResumeAction.remove),
+                subtitle: Text(
+                  [
+                    if (entry.subtitle.isNotEmpty) entry.subtitle,
+                    ?entry.nextLabel,
+                  ].join(' · '),
+                ),
               ),
+              ListTile(
+                leading: const Icon(Icons.play_arrow_rounded),
+                title: Text(
+                  entry.isNext ? 'Lire l\'épisode' : entry.progress.resumeLabel,
+                ),
+                onTap: () => choose(ResumeAction.resume),
+              ),
+              if (!entry.isNext)
+                ListTile(
+                  leading: const Icon(Icons.replay_rounded),
+                  title: const Text('Depuis le début'),
+                  onTap: () => choose(ResumeAction.restart),
+                ),
+              ListTile(
+                leading: const Icon(Icons.info_outline_rounded),
+                title: Text(
+                  entry.isEpisode
+                      ? 'Aller à la page de la série'
+                      : 'Aller à la page du film',
+                ),
+                onTap: () => choose(ResumeAction.openDetails),
+              ),
+              ListTile(
+                leading: const Icon(Icons.check_rounded),
+                title: const Text('Marquer comme vu'),
+                onTap: () => choose(ResumeAction.markPlayed),
+              ),
+              if (!entry.isNext) ...[
+                const Divider(),
+                ListTile(
+                  leading: const Icon(Icons.remove_circle_outline_rounded),
+                  title: const Text('Retirer de Continuer à regarder'),
+                  subtitle: const Text(
+                    'La progression est effacée, comme si tu ne l\'avais '
+                    'pas regardé',
+                  ),
+                  onTap: () => choose(ResumeAction.remove),
+                ),
+              ],
             ],
-          ],
+          ),
         ),
       );
     },
