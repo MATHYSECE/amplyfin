@@ -35,7 +35,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   /// Réglages du compte (null tant qu'ils chargent, ou sans serveur).
   UserSettings? _settings;
   String? _error;
-  SubtitleSize _subtitleSize = SubtitleSize.medium;
+  SubtitleSize _subtitleSize = SubtitleSize.standard;
 
   @override
   void initState() {

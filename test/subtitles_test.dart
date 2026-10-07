@@ -11,6 +11,10 @@ void main() {
       // Téléphone à l'horizontale (390 de haut) : environ 18
       expect(SubtitleSize.medium.fontSizeFor(390), closeTo(18.3, 0.1));
       expect(
+        SubtitleSize.extraSmall.fontSizeFor(390),
+        lessThan(SubtitleSize.small.fontSizeFor(390)),
+      );
+      expect(
         SubtitleSize.small.fontSizeFor(390),
         lessThan(SubtitleSize.medium.fontSizeFor(390)),
       );
@@ -20,18 +24,24 @@ void main() {
       );
     });
 
-    test('taille enregistrée inconnue ou absente : moyenne', () {
+    test('« Très petite » en tête du menu, « Petite » par défaut', () {
+      expect(SubtitleSize.values.first, SubtitleSize.extraSmall);
+      expect(SubtitleSize.standard, SubtitleSize.small);
+    });
+
+    test('taille enregistrée inconnue ou absente : petite', () {
       expect(SubtitleSize.fromName('large'), SubtitleSize.large);
-      expect(SubtitleSize.fromName('géante'), SubtitleSize.medium);
-      expect(SubtitleSize.fromName(null), SubtitleSize.medium);
+      expect(SubtitleSize.fromName('extraSmall'), SubtitleSize.extraSmall);
+      expect(SubtitleSize.fromName('géante'), SubtitleSize.small);
+      expect(SubtitleSize.fromName(null), SubtitleSize.small);
     });
 
     test('retenue sur le téléphone', () async {
       SharedPreferences.setMockInitialValues({});
       final preferences = PlayerPreferences();
-      expect(await preferences.loadSubtitleSize(), SubtitleSize.medium);
-      await preferences.saveSubtitleSize(SubtitleSize.small);
       expect(await preferences.loadSubtitleSize(), SubtitleSize.small);
+      await preferences.saveSubtitleSize(SubtitleSize.extraSmall);
+      expect(await preferences.loadSubtitleSize(), SubtitleSize.extraSmall);
     });
   });
 

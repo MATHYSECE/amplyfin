@@ -1,5 +1,6 @@
 /// Taille des sous-titres, choisie dans le lecteur et retenue sur l'appareil.
 enum SubtitleSize {
+  extraSmall('Très petite', 0.031),
   small('Petite', 0.038),
   medium('Moyenne', 0.047),
   large('Grande', 0.058);
@@ -16,9 +17,10 @@ enum SubtitleSize {
   /// Taille du texte pour une image haute de [height].
   double fontSizeFor(double height) => height * heightFactor;
 
-  /// Taille enregistrée → valeur (inconnue ou absente : moyenne).
-  static SubtitleSize fromName(String? name) => values.firstWhere(
-    (size) => size.name == name,
-    orElse: () => SubtitleSize.medium,
-  );
+  /// Taille par défaut (la plus utilisée).
+  static const standard = SubtitleSize.small;
+
+  /// Taille enregistrée → valeur (inconnue ou absente : [standard]).
+  static SubtitleSize fromName(String? name) =>
+      values.firstWhere((size) => size.name == name, orElse: () => standard);
 }

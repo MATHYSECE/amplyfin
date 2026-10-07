@@ -141,7 +141,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
 
   /// Taille des sous-titres (retenue sur le téléphone).
   final _preferences = PlayerPreferences();
-  SubtitleSize _subtitleSize = SubtitleSize.medium;
+  SubtitleSize _subtitleSize = SubtitleSize.standard;
 
   /// Vrai quand les commandes sont affichées (les sous-titres remontent).
   final _controlsVisible = ValueNotifier<bool>(true);
