@@ -97,37 +97,81 @@ Future<PickerOption<T>?> showPicker<T>(
             title: Text(title, style: Theme.of(context).textTheme.titleMedium),
           ),
           for (final option in options)
-            ListTile(
-              enabled: option.enabled,
-              title: Text(option.label),
-              subtitle: option.description == null
-                  ? null
-                  : Text(option.description!),
-              trailing: option.value == selected
-                  ? const Icon(Icons.check)
+            _PickerRow(
+              // Télé : le choix actuel est sélectionné à l'ouverture
+              autofocus: option.value == selected,
+              onTap: option.enabled
+                  ? () => Navigator.of(context).pop(option)
                   : null,
-              onTap: () => Navigator.of(context).pop(option),
+              child: ListTile(
+                enabled: option.enabled,
+                title: Text(option.label),
+                subtitle: option.description == null
+                    ? null
+                    : Text(option.description!),
+                trailing: option.value == selected
+                    ? const Icon(Icons.check)
+                    : null,
+                onTap: () => Navigator.of(context).pop(option),
+              ),
             ),
           if (extra != null) ...[
             const Divider(),
-            ListTile(
-              leading: Icon(extra.icon),
-              title: Text(extra.label),
-              subtitle: Text(extra.value),
-              trailing: const Icon(
-                Icons.chevron_right_rounded,
-                color: AppColors.greyDark,
-              ),
+            _PickerRow(
               onTap: () {
                 Navigator.of(context).pop();
                 extra.onTap();
               },
+              child: ListTile(
+                leading: Icon(extra.icon),
+                title: Text(extra.label),
+                subtitle: Text(extra.value),
+                trailing: const Icon(
+                  Icons.chevron_right_rounded,
+                  color: AppColors.greyDark,
+                ),
+                onTap: () {
+                  Navigator.of(context).pop();
+                  extra.onTap();
+                },
+              ),
             ),
           ],
         ],
       ),
     ),
   );
+}
+
+/// Ligne d'une liste de choix. Télé : sélectionnable avec le contour blanc
+/// commun ([onTap] null : grisée, pas sélectionnable).
+class _PickerRow extends StatelessWidget {
+  const _PickerRow({
+    required this.onTap,
+    required this.child,
+    this.autofocus = false,
+  });
+
+  final VoidCallback? onTap;
+  final Widget child;
+  final bool autofocus;
+
+  @override
+  Widget build(BuildContext context) {
+    if (!DeviceCapabilities.isTv) return child;
+    final row = ExcludeFocus(child: child);
+    if (onTap == null) return row;
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 2),
+      child: TvFocusable(
+        autofocus: autofocus,
+        onTap: onTap,
+        radius: AppRadius.card,
+        scale: 1.01,
+        child: row,
+      ),
+    );
+  }
 }
 
 /// Ligne « Audio / Français · E-AC3 5.1 › » d'une fiche, qui ouvre la liste

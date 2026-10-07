@@ -5,6 +5,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 import '../models/next_episode.dart';
+import '../services/device_capabilities.dart';
 import '../theme/app_theme.dart';
 
 /// Carte « Épisode suivant » en bas à droite du lecteur, pendant le
@@ -130,6 +131,8 @@ class _NextEpisodeCardState extends State<NextEpisodeCard>
               children: [
                 Expanded(
                   child: FilledButton(
+                    // Télé : sélectionné dès que la carte apparaît
+                    autofocus: DeviceCapabilities.isTv,
                     onPressed: widget.onPlayNow,
                     child: AnimatedBuilder(
                       animation: _countdown,
@@ -287,6 +290,7 @@ class StillWatchingOverlay extends StatelessWidget {
                   ),
                   const SizedBox(width: 12),
                   FilledButton.icon(
+                    autofocus: DeviceCapabilities.isTv,
                     onPressed: onContinue,
                     icon: const Icon(Icons.play_arrow_rounded),
                     label: const Text('Continuer'),

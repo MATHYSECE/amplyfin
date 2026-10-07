@@ -2,12 +2,15 @@ import 'dart:async';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:media_kit/media_kit.dart';
 import 'package:screen_brightness/screen_brightness.dart';
 import 'package:volume_controller/volume_controller.dart';
 
 import '../models/durations.dart';
+import '../services/device_capabilities.dart';
 import '../theme/app_theme.dart';
+import 'tv_focus.dart';
 import 'ui.dart';
 
 /// Ce qu'on règle en glissant le doigt de haut en bas.
@@ -19,6 +22,14 @@ enum _Level { brightness, volume }
 /// - double appui à gauche / à droite : recule / avance de 10 s ;
 /// - glisser de haut en bas sur la moitié gauche : luminosité,
 ///   sur la moitié droite : volume du téléphone.
+///
+/// Sur une télé, à la télécommande :
+/// - commandes masquées : OK = lecture / pause, gauche / droite = recule /
+///   avance (10 s, puis 30 s en maintenant la touche), haut / bas / Menu =
+///   affiche les commandes ;
+/// - commandes affichées : les flèches passent d'un bouton à l'autre ;
+/// - Retour cache les commandes ([PlayerControlsState.handleBack]) ;
+/// - les touches lecture / pause / avance / retour rapide marchent toujours.
 class PlayerControls extends StatefulWidget {
   const PlayerControls({
     super.key,
@@ -31,6 +42,7 @@ class PlayerControls extends StatefulWidget {
     required this.onSubtitles,
     required this.onQuality,
     this.onVisibleChanged,
+    this.onKeyActivity,
   });
 
   final Player player;
@@ -45,19 +57,24 @@ class PlayerControls extends StatefulWidget {
   final ValueListenable<String?> sourceLabel;
 
   final VoidCallback onBack;
-  final VoidCallback onAudio;
-  final VoidCallback onSubtitles;
-  final VoidCallback onQuality;
+
+  /// Menus Audio, Sous-titres et Qualité (terminés quand le menu se ferme).
+  final Future<void> Function() onAudio;
+  final Future<void> Function() onSubtitles;
+  final Future<void> Function() onQuality;
 
   /// Prévenu quand les commandes s'affichent ou se masquent
   /// (les sous-titres remontent au-dessus de la barre de progression).
   final ValueChanged<bool>? onVisibleChanged;
 
+  /// Télé : une touche de la télécommande a été pressée (on regarde bien).
+  final VoidCallback? onKeyActivity;
+
   @override
-  State<PlayerControls> createState() => _PlayerControlsState();
+  State<PlayerControls> createState() => PlayerControlsState();
 }
 
-class _PlayerControlsState extends State<PlayerControls> {
+class PlayerControlsState extends State<PlayerControls> {
   static const _hideDelay = Duration(seconds: 3);
   static const _seekStep = Duration(seconds: 10);
 
@@ -78,6 +95,12 @@ class _PlayerControlsState extends State<PlayerControls> {
   Timer? _seekFeedbackTimer;
   Offset? _doubleTapPosition;
 
+  // Télé : le lecteur reçoit les touches quand les commandes sont masquées,
+  // le bouton lecture / pause est sélectionné quand elles s'affichent
+  final _rootFocus = FocusNode(debugLabel: 'Lecteur');
+  final _playFocus = FocusNode(debugLabel: 'Lecture / pause');
+  bool get _tv => DeviceCapabilities.isTv;
+
   @override
   void initState() {
     super.initState();
@@ -91,7 +114,8 @@ class _PlayerControlsState extends State<PlayerControls> {
         if (mounted) _setVisible(true);
       }
     });
-    _readLevels();
+    // Télé : pas de luminosité ni de volume à régler (la télé les gère)
+    if (!_tv) _readLevels();
   }
 
   /// Lit la luminosité et le volume actuels (point de départ des réglages).
@@ -117,6 +141,12 @@ class _PlayerControlsState extends State<PlayerControls> {
     _levelTimer?.cancel();
     _seekFeedbackTimer?.cancel();
     _playingSubscription?.cancel();
+    _rootFocus.dispose();
+    _playFocus.dispose();
+    if (_tv) {
+      super.dispose();
+      return;
+    }
     VolumeController.instance.removeListener();
     VolumeController.instance.showSystemUI = true;
     // On rend au téléphone sa luminosité habituelle
@@ -126,10 +156,26 @@ class _PlayerControlsState extends State<PlayerControls> {
     super.dispose();
   }
 
+  /// Vrai pendant qu'un menu (audio, sous-titres, qualité) est ouvert : les
+  /// commandes restent affichées dessous.
+  bool _menuOpen = false;
+
+  /// Ouvre un menu ; à sa fermeture, les commandes restent un moment.
+  Future<void> _openMenu(Future<void> Function() open) async {
+    _hideTimer?.cancel();
+    _menuOpen = true;
+    try {
+      await open();
+    } finally {
+      _menuOpen = false;
+      if (mounted) _interacted();
+    }
+  }
+
   /// Relance le compte à rebours avant de masquer les commandes.
   void _scheduleHide() {
     _hideTimer?.cancel();
-    if (!_player.state.playing) return;
+    if (!_player.state.playing || _menuOpen) return;
     _hideTimer = Timer(_hideDelay, () {
       if (mounted) _setVisible(false);
     });
@@ -138,8 +184,94 @@ class _PlayerControlsState extends State<PlayerControls> {
   /// Affiche ou masque les commandes, et prévient le lecteur.
   void _setVisible(bool visible) {
     if (_visible == visible) return;
+    // Télé : en masquant, le lecteur reprend les touches (seulement si la
+    // sélection était sur ses boutons, pas dans un menu ou une fenêtre)
+    if (_tv && !visible && _rootFocus.hasFocus) _rootFocus.requestFocus();
     setState(() => _visible = visible);
     widget.onVisibleChanged?.call(visible);
+  }
+
+  /// Télé : affiche les commandes, bouton lecture / pause sélectionné.
+  void _showWithFocus() {
+    _setVisible(true);
+    _scheduleHide();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _playFocus.requestFocus();
+    });
+  }
+
+  /// Télé : bouton Retour. Commandes affichées : on les masque (et le
+  /// lecteur reste ouvert) ; renvoie faux si elles l'étaient déjà.
+  bool handleBack() {
+    if (!_tv || !_visible) return false;
+    _hideTimer?.cancel();
+    _setVisible(false);
+    return true;
+  }
+
+  /// Télé : touches de la télécommande.
+  KeyEventResult _onKey(FocusNode node, KeyEvent event) {
+    if (event is KeyUpEvent) return KeyEventResult.ignored;
+    widget.onKeyActivity?.call();
+    final key = event.logicalKey;
+    final repeat = event is KeyRepeatEvent;
+
+    // Touches de lecture : toujours
+    if (key == LogicalKeyboardKey.mediaPlayPause ||
+        key == LogicalKeyboardKey.mediaPlay ||
+        key == LogicalKeyboardKey.mediaPause) {
+      if (!repeat) _playOrPause();
+      return KeyEventResult.handled;
+    }
+    if (key == LogicalKeyboardKey.mediaFastForward ||
+        key == LogicalKeyboardKey.mediaRewind) {
+      _seekWithFeedback(
+        key == LogicalKeyboardKey.mediaFastForward ? 1 : -1,
+        repeat: repeat,
+      );
+      return KeyEventResult.handled;
+    }
+
+    // Commandes affichées : les flèches et OK vont aux boutons
+    if (_visible) {
+      _scheduleHide();
+      return KeyEventResult.ignored;
+    }
+
+    // Commandes masquées
+    if (key == LogicalKeyboardKey.select ||
+        key == LogicalKeyboardKey.enter ||
+        key == LogicalKeyboardKey.numpadEnter ||
+        key == LogicalKeyboardKey.gameButtonA) {
+      if (!repeat) {
+        _player.playOrPause();
+        _showWithFocus();
+      }
+      return KeyEventResult.handled;
+    }
+    if (key == LogicalKeyboardKey.arrowLeft ||
+        key == LogicalKeyboardKey.arrowRight) {
+      _seekWithFeedback(
+        key == LogicalKeyboardKey.arrowRight ? 1 : -1,
+        repeat: repeat,
+      );
+      return KeyEventResult.handled;
+    }
+    if (key == LogicalKeyboardKey.arrowUp ||
+        key == LogicalKeyboardKey.arrowDown ||
+        key == LogicalKeyboardKey.contextMenu) {
+      if (!repeat) _showWithFocus();
+      return KeyEventResult.handled;
+    }
+    return KeyEventResult.ignored;
+  }
+
+  /// Télé : recule ou avance ([direction] -1 / 1) de 10 s, ou de 30 s quand
+  /// la touche reste enfoncée, avec la bulle « +10 s · 12:34 ».
+  void _seekWithFeedback(int direction, {required bool repeat}) {
+    final step = Duration(seconds: repeat ? 30 : 10);
+    _seekBy(direction > 0 ? step : -step);
+    _showSeekFeedback(direction, seconds: step.inSeconds);
   }
 
   void _toggleVisible() {
@@ -181,8 +313,14 @@ class _PlayerControlsState extends State<PlayerControls> {
     }
   }
 
-  void _showSeekFeedback(int direction) {
-    setState(() => _seekFeedback = direction);
+  /// Durée du dernier saut (pour la bulle) et position visée.
+  int _seekSeconds = 10;
+
+  void _showSeekFeedback(int direction, {int seconds = 10}) {
+    setState(() {
+      _seekFeedback = direction;
+      _seekSeconds = seconds;
+    });
     _seekFeedbackTimer?.cancel();
     _seekFeedbackTimer = Timer(const Duration(milliseconds: 600), () {
       if (mounted) setState(() => _seekFeedback = 0);
@@ -224,6 +362,26 @@ class _PlayerControlsState extends State<PlayerControls> {
 
   @override
   Widget build(BuildContext context) {
+    final controls = _buildLayout();
+    if (!_tv) return controls;
+    // Télé : le lecteur écoute la télécommande
+    return Focus(
+      focusNode: _rootFocus,
+      autofocus: true,
+      onKeyEvent: _onKey,
+      child: controls,
+    );
+  }
+
+  /// Bulle du saut : « −10 s », et sur télé la position visée.
+  String _seekLabel(int direction) {
+    final sign = direction < 0 ? '−' : '+';
+    final label = '$sign$_seekSeconds s';
+    if (!_tv) return label;
+    return '$label · ${formatPosition(_player.state.position)}';
+  }
+
+  Widget _buildLayout() {
     return LayoutBuilder(
       builder: (context, constraints) {
         final width = constraints.maxWidth;
@@ -248,7 +406,11 @@ class _PlayerControlsState extends State<PlayerControls> {
               child: AnimatedOpacity(
                 opacity: _visible ? 1 : 0,
                 duration: AppDurations.medium,
-                child: _buildControls(context),
+                // Télé : boutons masqués impossibles à sélectionner
+                child: ExcludeFocus(
+                  excluding: _tv && !_visible,
+                  child: _buildControls(context),
+                ),
               ),
             ),
             // Jauges de luminosité (à gauche) et de volume (à droite)
@@ -286,7 +448,10 @@ class _PlayerControlsState extends State<PlayerControls> {
               top: 0,
               bottom: 0,
               child: Center(
-                child: _SeekBubble(visible: _seekFeedback < 0, label: '−10 s'),
+                child: _SeekBubble(
+                  visible: _seekFeedback < 0,
+                  label: _seekLabel(-1),
+                ),
               ),
             ),
             Positioned(
@@ -294,7 +459,10 @@ class _PlayerControlsState extends State<PlayerControls> {
               top: 0,
               bottom: 0,
               child: Center(
-                child: _SeekBubble(visible: _seekFeedback > 0, label: '+10 s'),
+                child: _SeekBubble(
+                  visible: _seekFeedback > 0,
+                  label: _seekLabel(1),
+                ),
               ),
             ),
             // Roue quand la vidéo charge (même commandes masquées)
@@ -388,28 +556,19 @@ class _PlayerControlsState extends State<PlayerControls> {
                     GlassCircleButton(
                       icon: Icons.volume_up_outlined,
                       tooltip: 'Audio',
-                      onPressed: () {
-                        _interacted();
-                        widget.onAudio();
-                      },
+                      onPressed: () => _openMenu(widget.onAudio),
                     ),
                     const SizedBox(width: 10),
                     GlassCircleButton(
                       icon: Icons.subtitles_outlined,
                       tooltip: 'Sous-titres',
-                      onPressed: () {
-                        _interacted();
-                        widget.onSubtitles();
-                      },
+                      onPressed: () => _openMenu(widget.onSubtitles),
                     ),
                     const SizedBox(width: 10),
                     GlassCircleButton(
                       icon: Icons.tune_rounded,
                       tooltip: 'Qualité',
-                      onPressed: () {
-                        _interacted();
-                        widget.onQuality();
-                      },
+                      onPressed: () => _openMenu(widget.onQuality),
                     ),
                   ],
                 ),
@@ -439,6 +598,7 @@ class _PlayerControlsState extends State<PlayerControls> {
                           tooltip: playing ? 'Pause' : 'Lecture',
                           size: 76,
                           filled: true,
+                          focusNode: _playFocus,
                           onPressed: _playOrPause,
                         );
                       },
@@ -455,8 +615,12 @@ class _PlayerControlsState extends State<PlayerControls> {
                   ],
                 ),
                 const Spacer(),
-                // Bas : barre de progression et temps
-                _SeekBar(player: _player, onInteraction: _interacted),
+                // Bas : barre de progression et temps (télé : avec les
+                // boutons ±10 s plutôt que sélectionnable)
+                ExcludeFocus(
+                  excluding: _tv,
+                  child: _SeekBar(player: _player, onInteraction: _interacted),
+                ),
               ],
             ),
           ),
@@ -474,6 +638,7 @@ class _RoundButton extends StatelessWidget {
     required this.onPressed,
     this.size = 56,
     this.filled = false,
+    this.focusNode,
   });
 
   final IconData icon;
@@ -481,9 +646,21 @@ class _RoundButton extends StatelessWidget {
   final VoidCallback onPressed;
   final double size;
   final bool filled;
+  final FocusNode? focusNode;
 
   @override
   Widget build(BuildContext context) {
+    // Télé : sélection ronde avec le contour blanc commun
+    return TvFocusable(
+      onTap: onPressed,
+      focusNode: focusNode,
+      radius: size / 2,
+      scale: 1.12,
+      child: _buildButton(),
+    );
+  }
+
+  Widget _buildButton() {
     return Tooltip(
       message: tooltip,
       child: Material(
@@ -492,6 +669,7 @@ class _RoundButton extends StatelessWidget {
         clipBehavior: Clip.antiAlias,
         child: InkWell(
           onTap: onPressed,
+          canRequestFocus: !DeviceCapabilities.isTv,
           child: SizedBox(
             width: size,
             height: size,

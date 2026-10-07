@@ -249,7 +249,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 ),
               ],
             ),
-            if (settings?.isAdmin ?? false) ...[
+            // Administration : depuis le téléphone seulement (choix de
+            // l'utilisateur : rien de tout ça sur la télé)
+            if ((settings?.isAdmin ?? false) && !DeviceCapabilities.isTv) ...[
               const SizedBox(height: 22),
               const SettingsSectionTitle('Administration'),
               SettingsPanel(

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../models/transcode_reasons.dart';
+import '../services/device_capabilities.dart';
 import '../theme/app_theme.dart';
 import 'error_details.dart';
 
@@ -125,6 +126,7 @@ class _TranscodeDialog extends StatelessWidget {
                   ),
                 const SizedBox(height: 10),
                 FilledButton(
+                  autofocus: DeviceCapabilities.isTv,
                   onPressed: () => Navigator.of(context).pop(true),
                   child: const Text('Convertir et lire'),
                 ),

@@ -185,6 +185,9 @@ class _PlayerScreenState extends State<PlayerScreen> {
   /// Vrai quand la vidéo avance (le compte à rebours de la carte aussi).
   final _playing = ValueNotifier<bool>(false);
 
+  /// Commandes du lecteur (télé : Retour les cache d'abord).
+  final _controlsKey = GlobalKey<PlayerControlsState>();
+
   /// Évite de fermer deux fois le lecteur.
   bool _closing = false;
 
@@ -964,7 +967,11 @@ class _PlayerScreenState extends State<PlayerScreen> {
       // Retour du téléphone : on passe par _close (renvoie l'élément lu)
       canPop: false,
       onPopInvokedWithResult: (didPop, _) {
-        if (!didPop) _close();
+        // Télé : Retour cache d'abord les commandes
+        if (didPop || (_controlsKey.currentState?.handleBack() ?? false)) {
+          return;
+        }
+        _close();
       },
       child: Scaffold(
         backgroundColor: AppColors.black,
@@ -992,6 +999,9 @@ class _PlayerScreenState extends State<PlayerScreen> {
                 ),
                 // Nos commandes, dessinées comme sur la maquette
                 PlayerControls(
+                  key: _controlsKey,
+                  // Télé : une touche = on regarde bien
+                  onKeyActivity: () => _autoPlays = 0,
                   player: _player,
                   title: _title,
                   subtitle: _subtitle,
@@ -1129,6 +1139,7 @@ class _ErrorOverlay extends StatelessWidget {
                   ),
                   const SizedBox(width: 12),
                   FilledButton(
+                    autofocus: DeviceCapabilities.isTv,
                     onPressed: onRetry,
                     child: const Text('Réessayer'),
                   ),
