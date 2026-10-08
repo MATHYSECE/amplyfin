@@ -91,4 +91,30 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('Qui regarde ?'), findsOneWidget);
   });
+
+  testWidgets('appui long : retirer un profil, les autres restent', (
+    tester,
+  ) async {
+    final store = SessionStore();
+    await store.save(_session('moi', 'Mathys'));
+    await store.save(_session('maman', 'Sophie Martin'));
+
+    await tester.pumpWidget(const MaterialApp(home: ProfilesScreen()));
+    await tester.pumpAndSettle();
+
+    await tester.longPress(find.text('Sophie Martin'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Retirer ce profil'));
+    await tester.pumpAndSettle();
+    // Confirmation, puis le serveur (absent en test) ne bloque pas le retrait
+    await tester.runAsync(() async {
+      await tester.tap(find.text('Retirer'));
+      await Future<void>.delayed(const Duration(milliseconds: 200));
+    });
+    await tester.pumpAndSettle();
+
+    expect(find.text('Sophie Martin'), findsNothing);
+    expect(find.text('Mathys'), findsOneWidget);
+    expect((await store.profiles()).map((s) => s.userId), ['moi']);
+  });
 }

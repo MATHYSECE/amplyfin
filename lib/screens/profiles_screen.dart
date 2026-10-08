@@ -82,6 +82,25 @@ Future<void> _refreshProfile(
   }
 }
 
+/// Retire le profil [session] de l'appareil. Le serveur est prévenu d'abord
+/// (son jeton ne servira plus) ; s'il ne répond pas, le profil est retiré
+/// quand même.
+Future<void> removeProfile(Session session, {required String deviceId}) async {
+  final api = JellyfinApi(
+    serverUrl: session.serverUrl,
+    deviceId: deviceId,
+    token: session.accessToken,
+  );
+  try {
+    await api.logout().timeout(const Duration(seconds: 4));
+  } on JellyfinException {
+    // Jeton déjà refusé ou serveur injoignable : rien à faire
+  } on TimeoutException {
+    // Serveur trop lent : tant pis
+  }
+  await SessionStore().remove(session);
+}
+
 /// Remplace tous les écrans par [screen], en fondu.
 void showOnly(BuildContext context, Widget screen) {
   Navigator.of(context).pushAndRemoveUntil(
@@ -147,6 +166,46 @@ class _ProfilesScreenState extends State<ProfilesScreen> {
     showOnly(context, screen);
   }
 
+  /// Appui long sur une vignette : « Retirer ce profil » (après
+  /// confirmation).
+  Future<void> _showOptions(Session session) async {
+    final remove = await showModalBottomSheet<bool>(
+      context: context,
+      builder: (context) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(
+              title: Text(
+                session.userName,
+                style: Theme.of(context).textTheme.titleMedium,
+              ),
+            ),
+            const Divider(),
+            ListTile(
+              leading: const Icon(Icons.person_remove_outlined),
+              title: const Text('Retirer ce profil'),
+              subtitle: const Text('De cet appareil seulement'),
+              onTap: () => Navigator.of(context).pop(true),
+            ),
+          ],
+        ),
+      ),
+    );
+    if (remove != true || !mounted) return;
+    final confirmed = await showConfirmDialog(
+      context,
+      title: 'Retirer ce profil ?',
+      message:
+          'Le profil de ${session.userName} sera retiré de cet appareil. '
+          'Il faudra saisir à nouveau son mot de passe pour le remettre.',
+      action: 'Retirer',
+    );
+    if (!confirmed) return;
+    await removeProfile(session, deviceId: await _store.deviceId());
+    await _load();
+  }
+
   void _addProfile() {
     Navigator.of(context)
         .push(MaterialPageRoute<void>(builder: (_) => const LoginScreen()));
@@ -183,6 +242,7 @@ class _ProfilesScreenState extends State<ProfilesScreen> {
                                 autofocus: session.userId == _lastUserId,
                                 loading: identical(session, _opening),
                                 onTap: () => _open(session),
+                                onLongPress: () => _showOptions(session),
                                 avatar: ProfileAvatar(
                                   session: session,
                                   deviceId: _deviceId,
@@ -214,6 +274,7 @@ class _ProfileTile extends StatelessWidget {
     required this.label,
     required this.avatar,
     required this.onTap,
+    this.onLongPress,
     this.autofocus = false,
     this.loading = false,
   });
@@ -221,6 +282,9 @@ class _ProfileTile extends StatelessWidget {
   final String label;
   final Widget avatar;
   final VoidCallback onTap;
+
+  /// Appui long (télé : OK maintenu) : options du profil.
+  final VoidCallback? onLongPress;
   final bool autofocus;
   final bool loading;
 
@@ -230,6 +294,7 @@ class _ProfileTile extends StatelessWidget {
     return GestureDetector(
       behavior: HitTestBehavior.opaque,
       onTap: onTap,
+      onLongPress: onLongPress,
       child: SizedBox(
         width: _avatarSize + 24,
         child: Column(
@@ -238,6 +303,7 @@ class _ProfileTile extends StatelessWidget {
             TvFocusable(
               autofocus: autofocus,
               onTap: onTap,
+              onMenu: onLongPress,
               radius: _avatarSize / 2,
               scale: 1.08,
               child: Stack(
