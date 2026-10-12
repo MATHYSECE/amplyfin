@@ -1,15 +1,21 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/widgets.dart';
 
 import '../models/media_track.dart';
+import 'exo_engine.dart';
 import 'mpv_engine.dart';
 
 /// Moteur vidéo : ce dont le lecteur a besoin, quel que soit l'appareil.
 /// Chaque appareil branche le meilleur moteur pour lui derrière cette même
-/// façade (mpv pour l'instant) ; le lecteur, ses commandes et ses
-/// sous-titres ne parlent qu'à elle.
+/// façade ; le lecteur, ses commandes et ses sous-titres ne parlent qu'à
+/// elle.
 abstract class VideoEngine {
-  /// Le meilleur moteur pour cet appareil.
-  factory VideoEngine.forDevice() => MpvEngine();
+  /// Le meilleur moteur pour cet appareil : ExoPlayer sur Android (télé,
+  /// téléphone, tablette), mpv ailleurs (iPhone, iPad, PC).
+  factory VideoEngine.forDevice() =>
+      defaultTargetPlatform == TargetPlatform.android
+      ? ExoEngine()
+      : MpvEngine();
 
   /// Prépare l'affichage. [refreshRate] : fréquence de l'écran (images par
   /// seconde), utile au lissage des films sur PC.
