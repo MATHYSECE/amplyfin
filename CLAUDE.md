@@ -20,8 +20,11 @@ Ce qui reste à faire, dans l'ordre :
    pas de réglage « données mobiles » ni de demande de notifications,
    « PC » au lieu de « téléphone » dans les textes. Repère :
    `DeviceCapabilities.isDesktop` (réglé au démarrage, faux dans les tests).
-   À vérifier en vrai : fluidité de la HEVC 10 bits et de la 4K ; le PC ne
-   dit pas ce qu'il sait décoder (tous les formats sont essayés en direct).
+   Mouvement saccadé des films à 24 images/s sur écran 60 Hz : corrigé par
+   le lissage de mpv (`_smoothMotion` dans `player_screen.dart`). Vérifié
+   sur une 4K HEVC 10 bits (portable Ryzen 5 5500U) : `d3d11va-copy`, peu
+   d'images perdues. Le PC ne dit pas ce qu'il sait décoder (tous les
+   formats sont essayés en direct).
 3. Rendre l'appli agréable à la souris et au clavier : plein écran (F11,
    double-clic), espace = pause, flèches = avancer/reculer, molette = volume,
    curseur caché pendant la lecture, survols, taille minimale de fenêtre. La

@@ -273,6 +273,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
     );
     if (!mounted) return;
     setState(() => _controller = controller);
+    if (defaultTargetPlatform == TargetPlatform.windows) await _smoothMotion();
     await _open(
       PlaybackQuality.original,
       start: widget.start,
@@ -282,13 +283,36 @@ class _PlayerScreenState extends State<PlayerScreen> {
     _loadSegments();
   }
 
+  /// Windows : un film à 24 images/s sur un écran à 60 Hz montre ses images
+  /// tour à tour 3 puis 2 fois, d'où un mouvement saccadé. Le lecteur se
+  /// cale sur l'écran et fond deux images voisines aux changements d'image.
+  /// Il dessine dans la fenêtre de l'appli : on lui donne la fréquence de
+  /// l'écran, qu'il ne connaît pas.
+  Future<void> _smoothMotion() async {
+    final platform = _player.platform;
+    if (platform is! NativePlayer) return;
+    final refreshRate = View.of(context).display.refreshRate;
+    try {
+      await platform.setProperty(
+        'display-fps-override',
+        (refreshRate > 0 ? refreshRate : 60).toStringAsFixed(3),
+      );
+      await platform.setProperty('video-sync', 'display-resample');
+      await platform.setProperty('interpolation', 'yes');
+      await platform.setProperty('tscale', 'oversample');
+    } on Object {
+      // Réglage refusé : lecture normale, sans lissage
+    }
+  }
+
   /// Réglage de l'affichage vidéo. Sur Android, la puce vidéo décode l'image
   /// et l'affiche elle-même à l'écran (comme les lecteurs natifs) : c'est le
   /// seul moyen de lire la HEVC 10 bits ou la 4K de façon fluide. Avec le
   /// réglage par défaut de media_kit, la puce n'a pas accès à l'écran et le
   /// processeur, trop lent, prend le relais (et l'émulateur reste noir).
-  /// Sur Windows, la carte graphique décode (D3D11, sinon DXVA2) et l'image
-  /// reste dans sa mémoire jusqu'à l'écran, sans copie par le processeur.
+  /// Sur Windows, la carte graphique décode (D3D11, sinon DXVA2) ; l'image
+  /// est recopiée pour la fenêtre de l'appli (« d3d11va-copy »), ce qui
+  /// suffit pour la 4K HEVC 10 bits.
   VideoControllerConfiguration _videoConfiguration() {
     if (defaultTargetPlatform == TargetPlatform.android) {
       return const VideoControllerConfiguration(
