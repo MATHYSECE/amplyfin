@@ -215,8 +215,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 ),
               ],
             ),
-            // Télé : pas de téléchargements
-            if (!DeviceCapabilities.isTv) ...[
+            // Télé : pas de téléchargements ; PC : pas de données mobiles
+            if (!DeviceCapabilities.isTv && !DeviceCapabilities.isDesktop) ...[
               const SizedBox(height: 22),
               const SettingsSectionTitle('Téléchargements'),
               ListenableBuilder(

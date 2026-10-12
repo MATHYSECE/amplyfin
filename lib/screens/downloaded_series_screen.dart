@@ -5,6 +5,7 @@ import '../models/download_info.dart';
 import '../models/file_size.dart';
 import '../models/session.dart';
 import '../services/connection_monitor.dart';
+import '../services/device_capabilities.dart';
 import '../services/download_groups.dart';
 import '../services/download_manager.dart';
 import '../services/offline_progress.dart';
@@ -103,7 +104,8 @@ class _DownloadedSeriesScreenState extends State<DownloadedSeriesScreen>
       message:
           '${done.length} épisode${done.length > 1 ? 's' : ''} '
           'téléchargé${done.length > 1 ? 's' : ''} seront effacés du '
-          'téléphone. Ils restent disponibles sur le serveur.',
+          '${DeviceCapabilities.deviceWord}. Ils restent disponibles sur le '
+          'serveur.',
       action: 'Supprimer',
     )) {
       deleteWithUndo(

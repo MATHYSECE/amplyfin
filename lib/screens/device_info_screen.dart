@@ -77,11 +77,11 @@ class DeviceInfoScreen extends StatelessWidget {
     return [
       const _SectionTitle('Formats vidéo'),
       if (codecs == null)
-        const _InfoPanel(
+        _InfoPanel(
           children: [
             _InfoRow(
               icon: Icons.help_outline_rounded,
-              title: 'Réponse du téléphone impossible',
+              title: 'Réponse du ${DeviceCapabilities.deviceWord} impossible',
               detail:
                   'Tous les formats sont essayés en lecture directe, comme '
                   'avant.',

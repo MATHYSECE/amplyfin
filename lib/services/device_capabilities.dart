@@ -24,6 +24,19 @@ class DeviceCapabilities {
   /// pas de téléchargements. Connu dès le démarrage ([detectTv]).
   static bool isTv = false;
 
+  /// Vrai sur un ordinateur (Windows) : souris et clavier, fenêtre, pas de
+  /// luminosité ni de données mobiles. Connu dès le démarrage
+  /// ([detectDesktop]) ; reste faux dans les tests.
+  static bool isDesktop = false;
+
+  /// Nom de l'appareil dans les textes de l'appli (« effacé du PC »).
+  static String get deviceWord => isDesktop ? 'PC' : 'téléphone';
+
+  /// Repère si l'appli tourne sur un ordinateur (au démarrage).
+  static void detectDesktop() {
+    isDesktop = Platform.isWindows;
+  }
+
   /// Demande au téléphone s'il est une télé (une seule fois, au démarrage).
   static Future<void> detectTv() async {
     if (!Platform.isAndroid) return;

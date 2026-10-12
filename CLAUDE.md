@@ -14,19 +14,14 @@ Ce qui reste à faire, dans l'ordre :
 
 1. ~~Ajouter la plateforme Windows~~ (fait : dossier `windows/`, nom
    « Amplyfin », icône générée depuis `assets/icon/icon.png`).
-2. Adapter le code qui suppose un téléphone :
-   - `lib/api/jellyfin_api.dart` : l'en-tête `Device=` envoie « Android » hors
-     iPhone → envoyer « Windows ».
-   - `lib/screens/player_screen.dart` (`_videoConfiguration`) : décodage
-     matériel réglé seulement pour Android → `hwdec` adapté à Windows
-     (d3d11va) pour la HEVC 10 bits et la 4K.
-   - `lib/widgets/player_controls.dart` : luminosité et volume réglés par
-     glissement du doigt → pas de luminosité sur PC, volume propre au lecteur.
-   - `lib/services/device_capabilities.dart` : le canal `amplyfin/device`
-     n'existe que sur Android et iPhone (tout est accepté par défaut) ;
-     vérifier ce que le PC sait lire sans conversion.
-   - `lib/services/download_manager.dart` : pas de demande d'autorisation pour
-     les notifications ; vérifier le dossier des téléchargements.
+2. ~~Adapter le code qui suppose un téléphone~~ (fait) : appareil
+   « Windows » pour le serveur, décodage par la carte graphique
+   (`d3d11va`), volume du lecteur à la molette (retenu), pas de luminosité,
+   pas de réglage « données mobiles » ni de demande de notifications,
+   « PC » au lieu de « téléphone » dans les textes. Repère :
+   `DeviceCapabilities.isDesktop` (réglé au démarrage, faux dans les tests).
+   À vérifier en vrai : fluidité de la HEVC 10 bits et de la 4K ; le PC ne
+   dit pas ce qu'il sait décoder (tous les formats sont essayés en direct).
 3. Rendre l'appli agréable à la souris et au clavier : plein écran (F11,
    double-clic), espace = pause, flèches = avancer/reculer, molette = volume,
    curseur caché pendant la lecture, survols, taille minimale de fenêtre. La

@@ -287,12 +287,17 @@ class _PlayerScreenState extends State<PlayerScreen> {
   /// seul moyen de lire la HEVC 10 bits ou la 4K de façon fluide. Avec le
   /// réglage par défaut de media_kit, la puce n'a pas accès à l'écran et le
   /// processeur, trop lent, prend le relais (et l'émulateur reste noir).
+  /// Sur Windows, la carte graphique décode (D3D11, sinon DXVA2) et l'image
+  /// reste dans sa mémoire jusqu'à l'écran, sans copie par le processeur.
   VideoControllerConfiguration _videoConfiguration() {
     if (defaultTargetPlatform == TargetPlatform.android) {
       return const VideoControllerConfiguration(
         vo: 'mediacodec_embed',
         hwdec: 'mediacodec',
       );
+    }
+    if (defaultTargetPlatform == TargetPlatform.windows) {
+      return const VideoControllerConfiguration(hwdec: 'd3d11va,dxva2,auto');
     }
     return const VideoControllerConfiguration();
   }

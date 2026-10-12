@@ -10,6 +10,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../api/jellyfin_api.dart';
 import '../models/download_info.dart';
 import '../models/playback_info.dart';
+import 'device_capabilities.dart';
 
 /// Où en est le téléchargement d'un film ou d'un épisode.
 enum DownloadPhase { none, waiting, running, paused, complete, failed }
@@ -626,6 +627,8 @@ class DownloadManager extends ChangeNotifier {
 
   /// Demande (une fois) le droit d'afficher la progression en notification.
   static Future<void> _askNotificationPermission() async {
+    // PC : pas de notification de progression, rien à demander
+    if (DeviceCapabilities.isDesktop) return;
     final permissions = FileDownloader().permissions;
     const type = PermissionType.notifications;
     try {

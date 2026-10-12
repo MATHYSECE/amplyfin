@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/foundation.dart';
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:media_kit/media_kit.dart';
@@ -8,6 +9,7 @@ import 'package:screen_brightness/screen_brightness.dart';
 import 'package:volume_controller/volume_controller.dart';
 
 import '../services/device_capabilities.dart';
+import '../services/player_preferences.dart';
 import '../theme/app_theme.dart';
 import 'seek_bar.dart';
 import 'tv_focus.dart';
@@ -109,6 +111,10 @@ class PlayerControlsState extends State<PlayerControls> {
   final _seekFocus = FocusNode(debugLabel: 'Barre de progression');
   bool get _tv => DeviceCapabilities.isTv;
 
+  /// PC : pas de luminosité, volume propre au lecteur (molette de la souris).
+  bool get _desktop => DeviceCapabilities.isDesktop;
+  final _preferences = PlayerPreferences();
+
   /// Télé : repère déplacé aux flèches sur la barre.
   late final _scrubber = TvScrubber(
     position: () => _player.state.position,
@@ -137,6 +143,11 @@ class PlayerControlsState extends State<PlayerControls> {
 
   /// Lit la luminosité et le volume actuels (point de départ des réglages).
   Future<void> _readLevels() async {
+    if (_desktop) {
+      _volume = await _preferences.loadVolume();
+      await _player.setVolume(_volume * 100);
+      return;
+    }
     // Pas de fenêtre de volume d'Android par-dessus la vidéo
     VolumeController.instance.showSystemUI = false;
     try {
@@ -162,7 +173,7 @@ class PlayerControlsState extends State<PlayerControls> {
     _playFocus.dispose();
     _seekFocus.dispose();
     _scrubber.dispose();
-    if (_tv) {
+    if (_tv || _desktop) {
       super.dispose();
       return;
     }
@@ -418,6 +429,23 @@ class PlayerControlsState extends State<PlayerControls> {
     });
   }
 
+  /// PC : la molette règle le volume du lecteur (5 % par cran).
+  void _onPointerSignal(PointerSignalEvent event) {
+    if (event is! PointerScrollEvent) return;
+    final dy = event.scrollDelta.dy;
+    if (dy == 0) return;
+    _levelTimer?.cancel();
+    setState(() {
+      _level = _Level.volume;
+      _volume = (_volume + (dy < 0 ? 0.05 : -0.05)).clamp(0.0, 1.0);
+    });
+    _player.setVolume(_volume * 100);
+    _levelTimer = Timer(const Duration(milliseconds: 700), () {
+      if (mounted) setState(() => _level = null);
+      _preferences.saveVolume(_volume);
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     final controls = _buildLayout();
@@ -439,16 +467,24 @@ class PlayerControlsState extends State<PlayerControls> {
         return Stack(
           fit: StackFit.expand,
           children: [
-            // Zone des gestes, sur toute la vidéo
-            GestureDetector(
-              behavior: HitTestBehavior.opaque,
-              onTap: _toggleVisible,
-              onDoubleTapDown: (details) =>
-                  _doubleTapPosition = details.localPosition,
-              onDoubleTap: () => _onDoubleTap(width),
-              onVerticalDragStart: (d) => _onLevelDragStart(d, width),
-              onVerticalDragUpdate: (d) => _onLevelDragUpdate(d, height),
-              onVerticalDragEnd: _onLevelDragEnd,
+            // Zone des gestes, sur toute la vidéo (PC : molette pour le
+            // volume, pas de glissement)
+            Listener(
+              onPointerSignal: _desktop ? _onPointerSignal : null,
+              child: GestureDetector(
+                behavior: HitTestBehavior.opaque,
+                onTap: _toggleVisible,
+                onDoubleTapDown: (details) =>
+                    _doubleTapPosition = details.localPosition,
+                onDoubleTap: () => _onDoubleTap(width),
+                onVerticalDragStart: _desktop
+                    ? null
+                    : (d) => _onLevelDragStart(d, width),
+                onVerticalDragUpdate: _desktop
+                    ? null
+                    : (d) => _onLevelDragUpdate(d, height),
+                onVerticalDragEnd: _desktop ? null : _onLevelDragEnd,
+              ),
             ),
             // Commandes (en fondu)
             IgnorePointer(

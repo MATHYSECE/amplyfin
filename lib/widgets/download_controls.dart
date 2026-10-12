@@ -31,7 +31,9 @@ Future<void> confirmCancelDownload(BuildContext context, String itemId) async {
   if (await showConfirmDialog(
     context,
     title: 'Annuler le téléchargement ?',
-    message: 'La partie déjà téléchargée sera effacée du téléphone.',
+    message:
+        'La partie déjà téléchargée sera effacée du '
+        '${DeviceCapabilities.deviceWord}.',
     action: 'Annuler le téléchargement',
   )) {
     await DownloadManager.instance.remove(itemId);
@@ -44,8 +46,8 @@ Future<void> confirmDeleteDownload(BuildContext context, String itemId) async {
     context,
     title: 'Supprimer le téléchargement ?',
     message:
-        'Le fichier sera effacé du téléphone. Il reste disponible sur '
-        'le serveur.',
+        'Le fichier sera effacé du ${DeviceCapabilities.deviceWord}. Il '
+        'reste disponible sur le serveur.',
     action: 'Supprimer',
   )) {
     await DownloadManager.instance.remove(itemId);
@@ -333,7 +335,7 @@ class OfflineNote extends StatelessWidget {
                         Expanded(
                           child: Text(
                             'Fiche, affiche et sous-titres gardés sur le '
-                            'téléphone',
+                            '${DeviceCapabilities.deviceWord}',
                             style: Theme.of(context).textTheme.bodySmall
                                 ?.copyWith(
                                   color: AppColors.grey,
@@ -508,9 +510,8 @@ class SeasonDownloadButton extends StatelessWidget {
       title: 'Télécharger « $seasonName » ?',
       message:
           '$count épisode${count > 1 ? 's' : ''}'
-          '${size == null ? '' : ', environ $size'}.$kept Le téléchargement '
-          'se fait ${DownloadManager.instance.allowsMobileData ? 'en Wi-Fi ou en données mobiles' : 'en Wi-Fi'}, '
-          'deux épisodes à la fois.',
+          '${size == null ? '' : ', environ $size'}.$kept '
+          '${_networkRule()}',
       action: 'Télécharger',
       cancel: 'Plus tard',
     );
@@ -539,10 +540,10 @@ class SeasonDownloadButton extends StatelessWidget {
   Future<void> _delete(BuildContext context, SeasonDownloadSummary s) async {
     if (await showConfirmDialog(
       context,
-      title: 'Supprimer « $seasonName » du téléphone ?',
+      title: 'Supprimer « $seasonName » du ${DeviceCapabilities.deviceWord} ?',
       message:
-          'Les épisodes seront effacés du téléphone. Ils restent '
-          'disponibles sur le serveur.',
+          'Les épisodes seront effacés du ${DeviceCapabilities.deviceWord}. '
+          'Ils restent disponibles sur le serveur.',
       action: 'Supprimer',
     )) {
       await DownloadManager.instance.removeAll(s.completeIds);
@@ -597,7 +598,8 @@ class SeasonDownloadButton extends StatelessWidget {
               const SizedBox(width: 10),
               GlassCircleButton(
                 icon: Icons.delete_outline_rounded,
-                tooltip: 'Supprimer la saison du téléphone',
+                tooltip:
+                    'Supprimer la saison du ${DeviceCapabilities.deviceWord}',
                 size: 48,
                 onPressed: () => _delete(context, s),
               ),
@@ -815,4 +817,16 @@ class _DownloadedMarkState extends State<DownloadedMark> {
       ),
     );
   }
+}
+
+/// Comment se fait le téléchargement, dans le message de confirmation
+/// (pas de données mobiles sur PC).
+String _networkRule() {
+  if (DeviceCapabilities.isDesktop) {
+    return 'Deux épisodes sont téléchargés à la fois.';
+  }
+  final network = DownloadManager.instance.allowsMobileData
+      ? 'en Wi-Fi ou en données mobiles'
+      : 'en Wi-Fi';
+  return 'Le téléchargement se fait $network, deux épisodes à la fois.';
 }

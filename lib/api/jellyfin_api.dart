@@ -77,13 +77,20 @@ class JellyfinApi {
 
   final http.Client _client = http.Client();
 
+  /// Type d'appareil affiché dans le tableau de bord du serveur.
+  static String get _deviceName {
+    if (Platform.isIOS) return 'iPhone';
+    if (Platform.isWindows) return 'Windows';
+    return 'Android';
+  }
+
   /// En-tête d'identification attendu par Jellyfin :
   /// MediaBrowser Client="…", Device="…", DeviceId="…", Version="…", Token="…"
   String get _authorizationHeader {
     String quote(String value) => '"${Uri.encodeComponent(value)}"';
     final parts = [
       'Client=${quote(clientName)}',
-      'Device=${quote(Platform.isIOS ? 'iPhone' : 'Android')}',
+      'Device=${quote(_deviceName)}',
       'DeviceId=${quote(deviceId)}',
       'Version=${quote(clientVersion)}',
       if (token != null) 'Token=${quote(token!)}',
