@@ -77,6 +77,41 @@ void main() {
       ]);
     });
 
+    test('ExoPlayer : sons et fichiers d\'après les décodeurs d\'Android', () {
+      final player = PlayerCodecs.android([
+        'video/hevc',
+        'audio/mp4a-latm',
+        'audio/eac3-joc',
+        'audio/vnd.dts.hd',
+        'audio/raw',
+        'video/mp4v-es',
+      ]);
+      final exo = buildDeviceProfile(
+        maxBitrate: originalMaxBitrate,
+        decoders: DeviceDecoders(player: player),
+      );
+      final direct = (exo['DirectPlayProfiles'] as List).first as Map;
+      expect(
+        (direct['AudioCodec'] as String).split(','),
+        containsAll(['aac', 'eac3', 'dts', 'pcm_s16le']),
+      );
+      final audio = (direct['AudioCodec'] as String).split(',');
+      expect(audio, isNot(contains('ac3')));
+      expect(audio, isNot(contains('truehd')));
+      expect(direct['VideoCodec'], contains('mpeg4'));
+      expect(direct['Container'], isNot(contains('wmv')));
+      expect(direct['Container'], isNot(contains('m2ts')));
+      // Son converti : jamais vers un format sans décodeur (AC3 ici)
+      final transcoding = (exo['TranscodingProfiles'] as List).first as Map;
+      expect(transcoding['AudioCodec'], 'aac,eac3');
+    });
+
+    test('ExoPlayer sans réponse de l\'appareil : sons communs à tous', () {
+      final player = PlayerCodecs.android(null);
+      expect(player.audioCodecs, ['aac', 'flac', 'opus', 'mp3']);
+      expect(player.fileSubtitles, isFalse);
+    });
+
     test('reprend le débit maximum demandé', () {
       final low = buildDeviceProfile(maxBitrate: 3000000);
       expect(low['MaxStreamingBitrate'], 3000000);

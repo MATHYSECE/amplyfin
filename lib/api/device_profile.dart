@@ -117,7 +117,7 @@ Map<String, dynamic> buildDeviceProfile({
     'DirectPlayProfiles': [
       {
         'Type': 'Video',
-        'Container': _directPlayContainers.join(','),
+        'Container': (player.containers ?? _directPlayContainers).join(','),
         'VideoCodec': [
           ...heavyVideoCodecs,
           ..._lightVideoCodecs.where(player.decodes),
@@ -133,7 +133,11 @@ Map<String, dynamic> buildDeviceProfile({
         'Protocol': 'hls',
         'Context': 'Streaming',
         'VideoCodec': transcodeVideoCodecs(decoders).join(','),
-        'AudioCodec': 'aac,mp3,ac3,eac3',
+        // Son converti : seulement vers un format que le lecteur lit
+        'AudioCodec': [
+          'aac',
+          ...['mp3', 'ac3', 'eac3'].where(player.decodes),
+        ].join(','),
         'MinSegments': 1,
       },
     ],

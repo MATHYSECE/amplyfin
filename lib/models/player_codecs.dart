@@ -1,9 +1,10 @@
-/// Ce que le lecteur (media_kit) sait décoder lui-même.
+/// Ce que le lecteur sait décoder.
 ///
-/// Le son et les sous-titres ne passent jamais par la puce du téléphone :
-/// le lecteur embarque ses propres décodeurs (ffmpeg). Ce qui manque à cette
-/// liste (le son TrueHD, les sous-titres PGS…) ne peut donc pas être lu tel
-/// quel, quel que soit l'appareil.
+/// mpv (iPhone, iPad, PC) embarque ses propres décodeurs (ffmpeg) pour le
+/// son et les sous-titres : ce qui manque à sa liste (le son TrueHD, les
+/// sous-titres PGS…) ne peut pas être lu tel quel. ExoPlayer (Android)
+/// passe uniquement par les décodeurs d'Android : sa liste vient de
+/// l'appareil lui-même.
 library;
 
 import 'dart:convert';
@@ -117,12 +118,66 @@ const _playerNames = {
 /// que le lecteur sache les dessiner.
 const _imageSubtitles = {'hdmv_pgs_subtitle', 'dvd_subtitle', 'dvb_subtitle'};
 
+/// Formats d'Android (types MIME de ses décodeurs) → noms du serveur.
+const _androidTypes = {
+  'audio/mp4a-latm': ['aac'],
+  'audio/ac3': ['ac3'],
+  'audio/eac3': ['eac3'],
+  'audio/eac3-joc': ['eac3'],
+  'audio/true-hd': ['truehd'],
+  'audio/vnd.dts': ['dts'],
+  'audio/vnd.dts.hd': ['dts'],
+  'audio/flac': ['flac'],
+  'audio/alac': ['alac'],
+  'audio/opus': ['opus'],
+  'audio/vorbis': ['vorbis'],
+  'audio/mpeg': ['mp3'],
+  'audio/mpeg-l2': ['mp2'],
+  // Son non compressé : lu directement par ExoPlayer
+  'audio/raw': ['pcm_s16le', 'pcm_s24le'],
+  'video/mpeg2': ['mpeg2video'],
+  'video/mp4v-es': ['mpeg4'],
+  'video/3gpp': ['h263'],
+  'video/x-vnd.on2.vp8': ['vp8'],
+};
+
+/// Formats de fichier qu'ExoPlayer sait ouvrir (pas de WMV / ASF, ni de
+/// M2TS des Blu-ray) : les autres sont convertis par le serveur.
+const exoContainers = [
+  'mkv',
+  'webm',
+  'mp4',
+  'm4v',
+  'mov',
+  'avi',
+  'ts',
+  'mpegts',
+  'flv',
+  '3gp',
+];
+
 class PlayerCodecs {
   const PlayerCodecs(
     this.names, {
     this.fromPlayer = false,
     this.fileSubtitles = true,
+    this.containers,
   });
+
+  /// ExoPlayer : formats d'après les décodeurs d'Android ([types] : leurs
+  /// types MIME). Sans réponse de l'appareil, les sons présents sur tous
+  /// les Android.
+  factory PlayerCodecs.android(List<Object?>? types) {
+    final known = types == null || types.isEmpty
+        ? const ['audio/mp4a-latm', 'audio/mpeg', 'audio/flac', 'audio/opus']
+        : types.whereType<String>().map((type) => type.toLowerCase());
+    return PlayerCodecs(
+      {for (final type in known) ...?_androidTypes[type]},
+      fromPlayer: types != null && types.isNotEmpty,
+      fileSubtitles: false,
+      containers: exoContainers,
+    );
+  }
 
   /// Lit la réponse du lecteur à « decoder-list » (liste JSON d'objets
   /// avec un champ « codec »). Null si la réponse est illisible.
@@ -159,9 +214,17 @@ class PlayerCodecs {
   /// Faux (ExoPlayer) : le serveur les envoie à part, en SRT.
   final bool fileSubtitles;
 
+  /// Formats de fichier ouverts par le lecteur (null : la liste par
+  /// défaut, celle de mpv).
+  final List<String>? containers;
+
   /// Même liste, pour un lecteur qui ne lit pas les sous-titres du fichier.
-  PlayerCodecs withoutFileSubtitles() =>
-      PlayerCodecs(names, fromPlayer: fromPlayer, fileSubtitles: false);
+  PlayerCodecs withoutFileSubtitles() => PlayerCodecs(
+    names,
+    fromPlayer: fromPlayer,
+    fileSubtitles: false,
+    containers: containers,
+  );
 
   /// Vrai si le lecteur décode ce format (nom du serveur ou du lecteur).
   bool decodes(String codec) {

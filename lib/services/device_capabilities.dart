@@ -70,24 +70,20 @@ class DeviceCapabilities {
 
   static Future<DeviceDecoders> _readDecoders() async {
     final emulator = await isAndroidEmulator();
-    var player = await _readPlayerCodecs();
-    // ExoPlayer ne lit pas les sous-titres du fichier : le serveur les
-    // envoie à part
-    if (usesExoPlayer) player = player.withoutFileSubtitles();
-    playerCodecs = player;
+    Map<Object?, Object?>? map;
     try {
-      final map = await _channel.invokeMapMethod<Object?, Object?>('decoders');
-      if (map != null) {
-        return DeviceDecoders.fromMap(
-          map,
-          allow10Bit: !emulator,
-          player: player,
-        );
-      }
+      map = await _channel.invokeMapMethod<Object?, Object?>('decoders');
     } on PlatformException {
       // Réponse impossible : tout accepté
     } on MissingPluginException {
       // Code natif absent (tests, autre système) : tout accepté
+    }
+    // ExoPlayer (Android) : les décodeurs d'Android ; mpv : les siens
+    final player = playerCodecs = usesExoPlayer
+        ? PlayerCodecs.android(map?['types'] as List<Object?>?)
+        : await _readPlayerCodecs();
+    if (map != null) {
+      return DeviceDecoders.fromMap(map, allow10Bit: !emulator, player: player);
     }
     return DeviceDecoders(allow10Bit: !emulator, player: player);
   }

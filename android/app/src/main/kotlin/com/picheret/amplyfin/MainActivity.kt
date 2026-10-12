@@ -108,10 +108,16 @@ class MainActivity : FlutterActivity() {
         val dolbyVision = infos.any { info ->
             info.supportedTypes.any { it.equals("video/dolby-vision", ignoreCase = true) }
         }
+        // Tous les formats décodés (son et vidéo), pour ExoPlayer qui passe
+        // uniquement par les décodeurs d'Android
+        val types = infos.flatMap { it.supportedTypes.asList() }
+            .map { it.lowercase() }
+            .distinct()
         return mapOf(
             "codecs" to codecs,
             "dolbyVision" to dolbyVision,
             "hdrScreen" to hdrScreen(),
+            "types" to types,
         )
     }
 

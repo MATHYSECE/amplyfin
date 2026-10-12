@@ -14,9 +14,11 @@ import 'video_engine.dart';
 
 /// Moteur vidéo ExoPlayer, le lecteur d'Android (paquet officiel
 /// video_player) : celui de Plex, Netflix ou YouTube. La puce décode et
-/// l'image va directement à l'écran par une vue native, sans passer par
-/// Flutter : c'est ce qui lit proprement les 4K que mpv abîmait sur la
-/// Fire TV.
+/// remet l'image à Flutter (texture) : c'est ce qui lit proprement les 4K
+/// que mpv abîmait sur la Fire TV.
+/// Pas de vue native superposée (« platformView ») : sur la Fire TV,
+/// Flutter ne rafraîchit plus ce qu'il dessine à côté de la vidéo (barre
+/// figée sous un film au format cinéma).
 class ExoEngine implements VideoEngine {
   /// Vidéo en cours (une nouvelle à chaque ouverture).
   final _current = ValueNotifier<VideoPlayerController?>(null);
@@ -115,12 +117,12 @@ class ExoEngine implements VideoEngine {
     final controller = uri == null || !uri.hasScheme
         ? VideoPlayerController.file(
             File(media.uri),
-            viewType: VideoViewType.platformView,
+            viewType: VideoViewType.textureView,
           )
         : VideoPlayerController.networkUrl(
             uri,
             httpHeaders: media.headers,
-            viewType: VideoViewType.platformView,
+            viewType: VideoViewType.textureView,
           );
     controller.addListener(() => _onChange(controller));
     _current.value = controller;
