@@ -6,6 +6,7 @@ import 'package:media_kit/media_kit.dart';
 
 import '../models/device_decoders.dart';
 import '../models/player_codecs.dart';
+import 'video_engine.dart';
 
 /// Ce que l'appareil sait faire (vérifié une seule fois, puis retenu).
 class DeviceCapabilities {
@@ -69,7 +70,11 @@ class DeviceCapabilities {
 
   static Future<DeviceDecoders> _readDecoders() async {
     final emulator = await isAndroidEmulator();
-    final player = playerCodecs = await _readPlayerCodecs();
+    var player = await _readPlayerCodecs();
+    // ExoPlayer ne lit pas les sous-titres du fichier : le serveur les
+    // envoie à part
+    if (usesExoPlayer) player = player.withoutFileSubtitles();
+    playerCodecs = player;
     try {
       final map = await _channel.invokeMapMethod<Object?, Object?>('decoders');
       if (map != null) {

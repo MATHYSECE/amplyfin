@@ -64,6 +64,19 @@ void main() {
       );
     });
 
+    test('lecteur sans sous-titres du fichier (ExoPlayer) : tout en SRT, '
+        'à part', () {
+      final exo = buildDeviceProfile(
+        maxBitrate: originalMaxBitrate,
+        decoders: DeviceDecoders(
+          player: PlayerCodecs.builtIn.withoutFileSubtitles(),
+        ),
+      );
+      expect(exo['SubtitleProfiles'], [
+        {'Format': 'srt', 'Method': 'External'},
+      ]);
+    });
+
     test('reprend le débit maximum demandé', () {
       final low = buildDeviceProfile(maxBitrate: 3000000);
       expect(low['MaxStreamingBitrate'], 3000000);

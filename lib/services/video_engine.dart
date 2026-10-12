@@ -5,6 +5,9 @@ import '../models/media_track.dart';
 import 'exo_engine.dart';
 import 'mpv_engine.dart';
 
+/// Vrai si cet appareil lit avec ExoPlayer (Android).
+bool get usesExoPlayer => defaultTargetPlatform == TargetPlatform.android;
+
 /// Moteur vidéo : ce dont le lecteur a besoin, quel que soit l'appareil.
 /// Chaque appareil branche le meilleur moteur pour lui derrière cette même
 /// façade ; le lecteur, ses commandes et ses sous-titres ne parlent qu'à
@@ -12,10 +15,7 @@ import 'mpv_engine.dart';
 abstract class VideoEngine {
   /// Le meilleur moteur pour cet appareil : ExoPlayer sur Android (télé,
   /// téléphone, tablette), mpv ailleurs (iPhone, iPad, PC).
-  factory VideoEngine.forDevice() =>
-      defaultTargetPlatform == TargetPlatform.android
-      ? ExoEngine()
-      : MpvEngine();
+  factory VideoEngine.forDevice() => usesExoPlayer ? ExoEngine() : MpvEngine();
 
   /// Prépare l'affichage. [refreshRate] : fréquence de l'écran (images par
   /// seconde), utile au lissage des films sur PC.

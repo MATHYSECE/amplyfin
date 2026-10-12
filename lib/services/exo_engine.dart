@@ -1,11 +1,15 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/widgets.dart';
+import 'package:http/http.dart' as http;
 import 'package:video_player/video_player.dart';
 
 import '../models/media_track.dart';
 import '../models/player_message.dart';
+import '../models/srt_subtitles.dart';
 import 'video_engine.dart';
 
 /// Moteur vidéo ExoPlayer, le lecteur d'Android (paquet officiel
@@ -36,6 +40,18 @@ class ExoEngine implements VideoEngine {
   /// Vrai une fois le moteur libéré (plus rien n'est transmis).
   bool _disposed = false;
 
+  /// En-têtes de connexion de la vidéo en cours (aussi pour les
+  /// sous-titres, sur le même serveur).
+  Map<String, String> _headers = const {};
+
+  /// Sous-titres en cours (null : aucun), et lignes affichées.
+  SrtSubtitles? _srt;
+  List<String> _lines = const [];
+
+  /// Numéro de la demande de sous-titres : une réponse arrivée après un
+  /// autre choix est ignorée.
+  int _subtitleRequest = 0;
+
   @override
   late final EngineStreams stream = EngineStreams(
     position: _position.stream,
@@ -58,6 +74,7 @@ class ExoEngine implements VideoEngine {
       buffer: value.buffered.isEmpty ? Duration.zero : value.buffered.last.end,
       playing: value.isPlaying,
       buffering: value.isBuffering,
+      subtitle: _lines,
     );
   }
 
@@ -92,6 +109,7 @@ class ExoEngine implements VideoEngine {
   @override
   Future<void> open(EngineMedia media) async {
     await _release();
+    _headers = media.headers;
     final uri = Uri.tryParse(media.uri);
     // Fichier téléchargé (chemin) ou adresse du serveur
     final controller = uri == null || !uri.hasScheme
@@ -124,6 +142,7 @@ class ExoEngine implements VideoEngine {
     if (_disposed || _current.value != controller) return;
     final value = controller.value;
     _position.add(value.position);
+    _showSubtitlesAt(value.position);
     if (value.isPlaying != _wasPlaying) {
       _wasPlaying = value.isPlaying;
       _playing.add(value.isPlaying);
@@ -151,14 +170,58 @@ class ExoEngine implements VideoEngine {
     // Les pistes sont connues dès l'ouverture
   }
 
+  /// ExoPlayer liste les pistes audio du fichier dans l'ordre du fichier,
+  /// comme mpv : la n-ième piste audio du serveur est la n-ième ici.
   @override
   Future<void> selectAudio(List<MediaTrack> all, MediaTrack track) async {
-    // Étape suivante : pour l'instant, la piste par défaut du fichier
+    final controller = _current.value;
+    if (controller == null || !controller.isAudioTrackSupportAvailable()) {
+      return;
+    }
+    final number = playerTrackId(all, track);
+    final tracks = await controller.getAudioTracks();
+    if (number == null || number > tracks.length) return;
+    final chosen = tracks[number - 1];
+    if (!chosen.isSelected) await controller.selectAudioTrack(chosen.id);
   }
 
+  /// Seuls les sous-titres à part (SRT envoyé par le serveur) sont
+  /// affichés : ExoPlayer ne donne pas ceux du fichier.
   @override
   Future<void> selectSubtitles(SubtitleSource source) async {
-    // Étape suivante : pour l'instant, pas de sous-titres
+    final request = ++_subtitleRequest;
+    _srt = null;
+    _showSubtitlesAt(state.position);
+    if (source is! ExternalSubtitles) return;
+    try {
+      final response = await http
+          .get(Uri.parse(source.url), headers: _headers)
+          .timeout(const Duration(seconds: 20));
+      if (response.statusCode != 200) {
+        throw HttpException('Sous-titres : erreur ${response.statusCode}');
+      }
+      final srt = SrtSubtitles.parse(
+        utf8.decode(response.bodyBytes, allowMalformed: true),
+      );
+      if (_disposed || request != _subtitleRequest) return;
+      _srt = srt;
+      _showSubtitlesAt(state.position);
+    } on Object catch (e) {
+      // Le lecteur réessaie un peu plus tard (serveur occupé)
+      if (_disposed || request != _subtitleRequest) return;
+      if (kDebugMode) debugPrint('Sous-titres : $e');
+      _errors.add(
+        EngineError(detail: cleanPlayerMessage('$e'), subtitles: true),
+      );
+    }
+  }
+
+  /// Met à jour les lignes affichées pour la position [position].
+  void _showSubtitlesAt(Duration position) {
+    final lines = _srt?.linesAt(position) ?? const <String>[];
+    if (listEquals(lines, _lines)) return;
+    _lines = lines;
+    _subtitle.add(lines);
   }
 
   @override
@@ -199,6 +262,10 @@ class ExoEngine implements VideoEngine {
     _wasBuffering = false;
     _wasCompleted = false;
     _lastError = null;
+    // Les sous-titres sont choisis à nouveau pour chaque vidéo
+    _subtitleRequest++;
+    _srt = null;
+    _showSubtitlesAt(Duration.zero);
     await controller?.dispose();
   }
 

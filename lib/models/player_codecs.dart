@@ -118,7 +118,11 @@ const _playerNames = {
 const _imageSubtitles = {'hdmv_pgs_subtitle', 'dvd_subtitle', 'dvb_subtitle'};
 
 class PlayerCodecs {
-  const PlayerCodecs(this.names, {this.fromPlayer = false});
+  const PlayerCodecs(
+    this.names, {
+    this.fromPlayer = false,
+    this.fileSubtitles = true,
+  });
 
   /// Lit la réponse du lecteur à « decoder-list » (liste JSON d'objets
   /// avec un champ « codec »). Null si la réponse est illisible.
@@ -150,6 +154,14 @@ class PlayerCodecs {
 
   /// Vrai si la liste vient du lecteur lui-même (sinon : [builtIn]).
   final bool fromPlayer;
+
+  /// Vrai si le lecteur affiche les sous-titres intégrés au fichier vidéo.
+  /// Faux (ExoPlayer) : le serveur les envoie à part, en SRT.
+  final bool fileSubtitles;
+
+  /// Même liste, pour un lecteur qui ne lit pas les sous-titres du fichier.
+  PlayerCodecs withoutFileSubtitles() =>
+      PlayerCodecs(names, fromPlayer: fromPlayer, fileSubtitles: false);
 
   /// Vrai si le lecteur décode ce format (nom du serveur ou du lecteur).
   bool decodes(String codec) {

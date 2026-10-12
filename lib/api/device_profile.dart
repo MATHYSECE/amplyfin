@@ -153,9 +153,12 @@ Map<String, dynamic> buildDeviceProfile({
           },
     ],
     'SubtitleProfiles': [
-      for (final format in _embeddedSubtitles.where(player.decodes))
-        {'Format': format, 'Method': 'Embed'},
-      for (final format in _externalSubtitles)
+      if (player.fileSubtitles)
+        for (final format in _embeddedSubtitles.where(player.decodes))
+          {'Format': format, 'Method': 'Embed'},
+      // Lecteur sans sous-titres du fichier : tout en SRT, à part (le
+      // serveur extrait et convertit les sous-titres en texte)
+      for (final format in player.fileSubtitles ? _externalSubtitles : ['srt'])
         {'Format': format, 'Method': 'External'},
     ],
   };
