@@ -7,14 +7,13 @@ Sideloadly).
 
 ## Objectif en cours : l'appli Windows
 
-Je veux une version Windows d'Amplyfin, d'abord pour mon PC portable. Il n'y a
-pas encore de dossier `windows/` : il se crée avec
-`flutter create --platforms=windows .`.
+Je veux une version Windows d'Amplyfin, d'abord pour mon PC portable. Le travail se
+fait sur la branche `windows`.
 
 Ce qui reste à faire, dans l'ordre :
 
-1. Ajouter la plateforme Windows (dossier `windows/`, nom « Amplyfin »,
-   icône à partir de `assets/icon/`).
+1. ~~Ajouter la plateforme Windows~~ (fait : dossier `windows/`, nom
+   « Amplyfin », icône générée depuis `assets/icon/icon.png`).
 2. Adapter le code qui suppose un téléphone :
    - `lib/api/jellyfin_api.dart` : l'en-tête `Device=` envoie « Android » hors
      iPhone → envoyer « Windows ».
@@ -44,10 +43,19 @@ au lieu de modifier le comportement existant.
 
 Ce PC ne sert qu'au développement de l'appli Windows. Seuls Flutter (même
 version que sur le PC fixe, 3.47.5, dans `%USERPROFILE%\dev\flutter`) et
-Visual Studio 2022 Build Tools (C++) y sont installés. Flutter est réglé pour
+Visual Studio 2022 Build Tools (C++, avec le composant ATL demandé par
+`flutter_secure_storage`) y sont installés. Le mode développeur de Windows
+est activé (liens symboliques des extensions). Flutter est réglé pour
 Windows uniquement (Android, iOS, web désactivés avec `flutter config`).
 On ne travaille pas ici sur Android, iPhone ou Fire TV, sauf si c'est
 nécessaire ; ces plateformes se fabriquent sur le PC fixe ou sur Codemagic.
+
+Pièges connus :
+
+- `dart run flutter_launcher_icons` régénère aussi les icônes Android et
+  iPhone : annuler ces changements-là (`git checkout android ios`).
+- Garder le `pubspec.lock` du PC fixe (`flutter pub get --enforce-lockfile`)
+  pour avoir les mêmes versions des bibliothèques partout.
 
 Commandes utiles :
 

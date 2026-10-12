@@ -75,6 +75,11 @@ flutter_launcher_icons:
   ios: true
   # Apple refuse la transparence
   remove_alpha_ios: true
+  # Windows : fichier .ico de la fenêtre et de la barre des tâches
+  windows:
+    generate: true
+    image_path: assets/icon/icon.png
+    icon_size: 256
 
 # For information on the generic Dart part of this file, see the
 # following page: https://dart.dev/tools/pub/pubspec
