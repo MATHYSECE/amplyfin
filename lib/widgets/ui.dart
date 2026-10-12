@@ -1,3 +1,5 @@
+import 'dart:ui' show ImageFilter;
+
 import 'package:flutter/material.dart';
 
 import '../services/device_capabilities.dart';
@@ -149,6 +151,26 @@ class GlassCircleButton extends StatelessWidget {
           ),
         ),
       ),
+    );
+  }
+}
+
+/// Verre dépoli : floute ce qui passe derrière [child] (dont la couleur
+/// fait le voile). PC : pas de flou, recalculé sur toute la largeur de la
+/// fenêtre à chaque image du défilement (trop lourd pour une puce graphique
+/// intégrée) ; le voile seul garde le texte lisible.
+class FrostedBlur extends StatelessWidget {
+  const FrostedBlur({super.key, required this.sigma, required this.child});
+
+  final double sigma;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    if (DeviceCapabilities.isDesktop) return child;
+    return BackdropFilter(
+      filter: ImageFilter.blur(sigmaX: sigma, sigmaY: sigma),
+      child: child,
     );
   }
 }

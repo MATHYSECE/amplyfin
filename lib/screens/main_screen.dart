@@ -1,5 +1,3 @@
-import 'dart:ui' show ImageFilter;
-
 import 'package:flutter/material.dart';
 
 import '../api/jellyfin_api.dart';
@@ -427,8 +425,8 @@ class _Header extends StatelessWidget {
       tween: Tween(end: solid ? 1 : 0),
       duration: AppDurations.medium,
       builder: (context, t, child) => ClipRect(
-        child: BackdropFilter(
-          filter: ImageFilter.blur(sigmaX: 18 * t, sigmaY: 18 * t),
+        child: FrostedBlur(
+          sigma: 18 * t,
           child: Container(
             height: height,
             decoration: BoxDecoration(
@@ -561,8 +559,8 @@ class _BottomBar extends StatelessWidget {
         child: Center(
           child: ClipRRect(
             borderRadius: BorderRadius.circular(AppRadius.pill),
-            child: BackdropFilter(
-              filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
+            child: FrostedBlur(
+              sigma: 20,
               child: Container(
                 width: 480,
                 height: 60,
@@ -580,8 +578,8 @@ class _BottomBar extends StatelessWidget {
       );
     }
     return ClipRect(
-      child: BackdropFilter(
-        filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
+      child: FrostedBlur(
+        sigma: 20,
         child: Container(
           height: 64 + bottomInset,
           padding: EdgeInsets.only(bottom: bottomInset),

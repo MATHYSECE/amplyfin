@@ -56,6 +56,12 @@ Pièges connus :
 - Garder le `pubspec.lock` du PC fixe (`flutter pub get --enforce-lockfile`)
   pour avoir les mêmes versions des bibliothèques partout.
 
+- Fluidité sur le portable (puce graphique intégrée) : pas de flou en
+  arrière-plan sur PC (`FrostedBlur` dans `lib/widgets/ui.dart`, voile seul).
+  Impeller essayé (`set_impeller_switch` dans `windows/runner/main.cpp`) :
+  défilement à peine meilleur mais vidéo 4K saccadée (20 à 40 ms par
+  image) → on garde Skia, le moteur par défaut.
+
 Commandes utiles :
 
 - `flutter run -d windows` : lancer l'appli

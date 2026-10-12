@@ -215,8 +215,8 @@ class _DetailsPageState extends State<DetailsPage> {
                   opacity: _showBar ? 1 : 0,
                   duration: AppDurations.fast,
                   child: ClipRect(
-                    child: BackdropFilter(
-                      filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
+                    child: FrostedBlur(
+                      sigma: 20,
                       child: Container(
                         height: topInset + 60,
                         padding: EdgeInsets.fromLTRB(76, topInset, 20, 0),

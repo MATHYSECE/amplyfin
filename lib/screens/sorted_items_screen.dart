@@ -1,5 +1,3 @@
-import 'dart:ui' show ImageFilter;
-
 import 'package:flutter/material.dart';
 
 import '../api/jellyfin_api.dart';
@@ -77,8 +75,8 @@ class SortedItemsScreen extends StatelessWidget {
               left: 0,
               right: 0,
               child: ClipRect(
-                child: BackdropFilter(
-                  filter: ImageFilter.blur(sigmaX: 18, sigmaY: 18),
+                child: FrostedBlur(
+                  sigma: 18,
                   child: Container(
                     height: headerHeight,
                     color: AppColors.scrim55,
