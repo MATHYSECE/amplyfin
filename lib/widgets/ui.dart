@@ -443,6 +443,8 @@ class _EntranceAnimationState extends State<EntranceAnimation>
 
 /// Rétrécit un peu [child] pendant qu'on appuie dessus (comme sur iPhone),
 /// puis lance [onTap] (ou [onLongPress] pour un appui long).
+/// PC : grossit un peu au survol de la souris (curseur en main), clic
+/// droit = appui long.
 class PressableScale extends StatefulWidget {
   const PressableScale({
     super.key,
@@ -461,6 +463,7 @@ class PressableScale extends StatefulWidget {
 
 class _PressableScaleState extends State<PressableScale> {
   bool _pressed = false;
+  bool _hovered = false;
 
   void _press(bool pressed) {
     if (pressed != _pressed) setState(() => _pressed = pressed);
@@ -478,7 +481,7 @@ class _PressableScaleState extends State<PressableScale> {
   }
 
   Widget _buildTouch() {
-    return GestureDetector(
+    final touch = GestureDetector(
       behavior: HitTestBehavior.opaque,
       onTapDown: (_) => _press(true),
       onTapUp: (_) => _press(false),
@@ -490,12 +493,20 @@ class _PressableScaleState extends State<PressableScale> {
               _press(false);
               widget.onLongPress!();
             },
+      onSecondaryTap: DeviceCapabilities.isDesktop ? widget.onLongPress : null,
       child: AnimatedScale(
-        scale: _pressed ? 0.95 : 1,
+        scale: _pressed ? 0.95 : (_hovered ? 1.04 : 1),
         duration: AppDurations.fast,
         curve: Curves.easeOutCubic,
         child: widget.child,
       ),
+    );
+    if (!DeviceCapabilities.isDesktop || widget.onTap == null) return touch;
+    return MouseRegion(
+      cursor: SystemMouseCursors.click,
+      onEnter: (_) => setState(() => _hovered = true),
+      onExit: (_) => setState(() => _hovered = false),
+      child: touch,
     );
   }
 }

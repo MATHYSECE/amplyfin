@@ -18,6 +18,7 @@ import '../models/playback_quality.dart';
 import '../models/session.dart';
 import '../models/subtitle_size.dart';
 import '../models/track_choice.dart';
+import '../services/app_window.dart';
 import '../services/device_capabilities.dart';
 import '../services/download_manager.dart';
 import '../services/next_episode_finder.dart';
@@ -366,7 +367,8 @@ class _PlayerScreenState extends State<PlayerScreen> {
     _controlsVisible.dispose();
     _playing.dispose();
 
-    // Retour à l'affichage normal
+    // Retour à l'affichage normal (PC : fenêtre d'avant le plein écran)
+    AppWindow.setFullScreen(false);
     SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
     SystemChrome.setPreferredOrientations([]);
     super.dispose();

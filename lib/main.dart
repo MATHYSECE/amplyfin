@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/foundation.dart';
+import 'package:flutter/gestures.dart' show kBackMouseButton;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:media_kit/media_kit.dart';
@@ -48,17 +49,48 @@ Future<void> main() async {
 class AmplyfinApp extends StatelessWidget {
   const AmplyfinApp({super.key});
 
+  static final _navigatorKey = GlobalKey<NavigatorState>();
+
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
       title: 'Amplyfin',
       debugShowCheckedModeBanner: false,
+      navigatorKey: _navigatorKey,
       theme: buildAppTheme(tv: DeviceCapabilities.isTv),
       // Télé : tout est réduit (vu de loin, l'écran paraît plus petit)
       builder: DeviceCapabilities.isTv
           ? (context, child) => TvScale(child: child!)
+          : DeviceCapabilities.isDesktop
+          ? (context, child) =>
+                _DesktopBack(navigator: _navigatorKey, child: child!)
           : null,
       home: const StartScreen(),
+    );
+  }
+}
+
+/// PC : bouton « précédent » de la souris et Échap reviennent à l'écran
+/// d'avant (comme la flèche Retour). Le lecteur garde Échap pour quitter
+/// le plein écran.
+class _DesktopBack extends StatelessWidget {
+  const _DesktopBack({required this.navigator, required this.child});
+
+  final GlobalKey<NavigatorState> navigator;
+  final Widget child;
+
+  void _back() => navigator.currentState?.maybePop();
+
+  @override
+  Widget build(BuildContext context) {
+    return Listener(
+      onPointerDown: (event) {
+        if (event.buttons & kBackMouseButton != 0) _back();
+      },
+      child: CallbackShortcuts(
+        bindings: {const SingleActivator(LogicalKeyboardKey.escape): _back},
+        child: child,
+      ),
     );
   }
 }

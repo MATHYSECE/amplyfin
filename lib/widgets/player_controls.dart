@@ -8,6 +8,7 @@ import 'package:media_kit/media_kit.dart';
 import 'package:screen_brightness/screen_brightness.dart';
 import 'package:volume_controller/volume_controller.dart';
 
+import '../services/app_window.dart';
 import '../services/device_capabilities.dart';
 import '../services/player_preferences.dart';
 import '../theme/app_theme.dart';
@@ -34,6 +35,13 @@ enum _Level { brightness, volume }
 ///   ([TvScrubber]) ;
 /// - Retour cache les commandes ([PlayerControlsState.handleBack]) ;
 /// - les touches lecture / pause / avance / retour rapide marchent toujours.
+///
+/// Sur PC, à la souris et au clavier :
+/// - bouger la souris affiche les commandes (et le curseur, caché avec
+///   elles) ; un clic = lecture / pause, double clic = plein écran ;
+/// - molette ou haut / bas : volume ; M : couper le son ;
+/// - espace ou K : lecture / pause ; gauche / droite : -10 s / +10 s ;
+/// - F ou F11 : plein écran ; Échap : en sortir.
 class PlayerControls extends StatefulWidget {
   const PlayerControls({
     super.key,
@@ -114,6 +122,9 @@ class PlayerControlsState extends State<PlayerControls> {
   /// PC : pas de luminosité, volume propre au lecteur (molette de la souris).
   bool get _desktop => DeviceCapabilities.isDesktop;
   final _preferences = PlayerPreferences();
+
+  /// PC : volume d'avant la coupure du son (touche M).
+  double? _volumeBeforeMute;
 
   /// Télé : repère déplacé aux flèches sur la barre.
   late final _scrubber = TvScrubber(
@@ -358,6 +369,11 @@ class PlayerControlsState extends State<PlayerControls> {
   void _interacted() {
     _setVisible(true);
     _scheduleHide();
+    // PC : après un clic sur un bouton, les touches reviennent au lecteur
+    // (sinon espace appuierait encore sur ce bouton)
+    if (_desktop && !_menuOpen && !_rootFocus.hasPrimaryFocus) {
+      _rootFocus.requestFocus();
+    }
   }
 
   void _seekBy(Duration step) {
@@ -434,10 +450,15 @@ class PlayerControlsState extends State<PlayerControls> {
     if (event is! PointerScrollEvent) return;
     final dy = event.scrollDelta.dy;
     if (dy == 0) return;
+    _changeVolume(dy < 0 ? 0.05 : -0.05);
+  }
+
+  /// PC : règle le volume du lecteur et montre la jauge un instant.
+  void _setDesktopVolume(double volume) {
     _levelTimer?.cancel();
     setState(() {
       _level = _Level.volume;
-      _volume = (_volume + (dy < 0 ? 0.05 : -0.05)).clamp(0.0, 1.0);
+      _volume = volume.clamp(0.0, 1.0);
     });
     _player.setVolume(_volume * 100);
     _levelTimer = Timer(const Duration(milliseconds: 700), () {
@@ -446,9 +467,80 @@ class PlayerControlsState extends State<PlayerControls> {
     });
   }
 
+  void _changeVolume(double change) {
+    _volumeBeforeMute = null;
+    _setDesktopVolume(_volume + change);
+  }
+
+  /// PC : coupe le son, ou le remet au niveau d'avant.
+  void _toggleMute() {
+    final before = _volumeBeforeMute;
+    if (_volume > 0) {
+      _volumeBeforeMute = _volume;
+      _setDesktopVolume(0);
+    } else {
+      _volumeBeforeMute = null;
+      _setDesktopVolume(before ?? 0.5);
+    }
+  }
+
+  /// PC : touches du clavier (voir [PlayerControls]).
+  KeyEventResult _onDesktopKey(FocusNode node, KeyEvent event) {
+    if (event is KeyUpEvent) return KeyEventResult.ignored;
+    final key = event.logicalKey;
+    final repeat = event is KeyRepeatEvent;
+    if (key == LogicalKeyboardKey.space ||
+        key == LogicalKeyboardKey.keyK ||
+        key == LogicalKeyboardKey.mediaPlayPause) {
+      if (!repeat) _playOrPause();
+      return KeyEventResult.handled;
+    }
+    final direction = _seekDirection(key);
+    if (direction != 0) {
+      _seekBy(_seekStep * direction);
+      _showSeekFeedback(direction);
+      return KeyEventResult.handled;
+    }
+    if (key == LogicalKeyboardKey.arrowUp) {
+      _changeVolume(0.05);
+      return KeyEventResult.handled;
+    }
+    if (key == LogicalKeyboardKey.arrowDown) {
+      _changeVolume(-0.05);
+      return KeyEventResult.handled;
+    }
+    if (key == LogicalKeyboardKey.keyM) {
+      if (!repeat) _toggleMute();
+      return KeyEventResult.handled;
+    }
+    if (key == LogicalKeyboardKey.keyF || key == LogicalKeyboardKey.f11) {
+      if (!repeat) AppWindow.toggleFullScreen();
+      return KeyEventResult.handled;
+    }
+    // Échap quitte le plein écran, jamais le lecteur (flèche Retour pour ça)
+    if (key == LogicalKeyboardKey.escape) {
+      AppWindow.setFullScreen(false);
+      return KeyEventResult.handled;
+    }
+    return KeyEventResult.ignored;
+  }
+
   @override
   Widget build(BuildContext context) {
     final controls = _buildLayout();
+    if (_desktop) {
+      // PC : le lecteur écoute le clavier ; curseur caché avec les commandes
+      return Focus(
+        focusNode: _rootFocus,
+        autofocus: true,
+        onKeyEvent: _onDesktopKey,
+        child: MouseRegion(
+          cursor: _visible ? MouseCursor.defer : SystemMouseCursors.none,
+          onHover: (_) => _interacted(),
+          child: controls,
+        ),
+      );
+    }
     if (!_tv) return controls;
     // Télé : le lecteur écoute la télécommande
     return Focus(
@@ -473,10 +565,12 @@ class PlayerControlsState extends State<PlayerControls> {
               onPointerSignal: _desktop ? _onPointerSignal : null,
               child: GestureDetector(
                 behavior: HitTestBehavior.opaque,
-                onTap: _toggleVisible,
+                onTap: _desktop ? _playOrPause : _toggleVisible,
                 onDoubleTapDown: (details) =>
                     _doubleTapPosition = details.localPosition,
-                onDoubleTap: () => _onDoubleTap(width),
+                onDoubleTap: _desktop
+                    ? AppWindow.toggleFullScreen
+                    : () => _onDoubleTap(width),
                 onVerticalDragStart: _desktop
                     ? null
                     : (d) => _onLevelDragStart(d, width),
@@ -650,6 +744,24 @@ class PlayerControlsState extends State<PlayerControls> {
                       tooltip: 'Qualité',
                       onPressed: () => _openMenu(widget.onQuality),
                     ),
+                    if (_desktop) ...[
+                      const SizedBox(width: 10),
+                      ValueListenableBuilder(
+                        valueListenable: AppWindow.fullScreen,
+                        builder: (context, fullScreen, _) => GlassCircleButton(
+                          icon: fullScreen
+                              ? Icons.fullscreen_exit_rounded
+                              : Icons.fullscreen_rounded,
+                          tooltip: fullScreen
+                              ? 'Quitter le plein écran (Échap)'
+                              : 'Plein écran (F)',
+                          onPressed: () {
+                            AppWindow.toggleFullScreen();
+                            _interacted();
+                          },
+                        ),
+                      ),
+                    ],
                   ],
                 ),
                 const Spacer(),

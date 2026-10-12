@@ -3,6 +3,7 @@
 
 #include <flutter/dart_project.h>
 #include <flutter/flutter_view_controller.h>
+#include <flutter/method_channel.h>
 
 #include <memory>
 
@@ -28,6 +29,17 @@ class FlutterWindow : public Win32Window {
 
   // The Flutter instance hosted by this window.
   std::unique_ptr<flutter::FlutterViewController> flutter_controller_;
+
+  // Canal « amplyfin/window » : plein écran demandé par l'appli.
+  std::unique_ptr<flutter::MethodChannel<flutter::EncodableValue>>
+      window_channel_;
+
+  // Plein écran : sans bordure, sur tout l'écran où se trouve la fenêtre.
+  // Style et place d'avant gardés pour revenir à la fenêtre normale.
+  void SetFullScreen(bool full_screen);
+  bool full_screen_ = false;
+  LONG saved_style_ = 0;
+  WINDOWPLACEMENT saved_placement_ = {sizeof(WINDOWPLACEMENT)};
 };
 
 #endif  // RUNNER_FLUTTER_WINDOW_H_

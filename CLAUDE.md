@@ -25,11 +25,12 @@ Ce qui reste à faire, dans l'ordre :
    sur une 4K HEVC 10 bits (portable Ryzen 5 5500U) : `d3d11va-copy`, peu
    d'images perdues. Le PC ne dit pas ce qu'il sait décoder (tous les
    formats sont essayés en direct).
-3. Rendre l'appli agréable à la souris et au clavier : plein écran (F11,
-   double-clic), espace = pause, flèches = avancer/reculer, molette = volume,
-   curseur caché pendant la lecture, survols, taille minimale de fenêtre. La
-   navigation au clavier de la télé (`lib/widgets/tv_focus.dart`) peut servir
-   de base.
+3. ~~Souris et clavier~~ (fait) : dans le lecteur, clic = lecture / pause,
+   double clic / F / F11 = plein écran (canal natif `amplyfin/window`,
+   `lib/services/app_window.dart`), Échap en sort, espace / K, flèches,
+   molette, M ; curseur caché avec les commandes. Ailleurs : affiches qui
+   grossissent au survol, clic droit = options, Échap et bouton « précédent »
+   de la souris = retour. Fenêtre de 720 × 480 au minimum.
 4. Fabriquer la version finale : `flutter build windows --release`
    (dossier `build/windows/x64/runner/Release/`).
 
