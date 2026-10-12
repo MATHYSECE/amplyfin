@@ -1,18 +1,13 @@
 import 'dart:async';
 
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:media_kit/media_kit.dart';
-import 'package:media_kit_video/media_kit_video.dart';
 
 import '../api/device_profile.dart';
 import '../api/jellyfin_api.dart';
 import '../models/device_decoders.dart';
-import '../models/media_track.dart';
 import '../models/media_segments.dart';
 import '../models/next_episode.dart';
-import '../models/player_message.dart';
 import '../models/playback_info.dart';
 import '../models/playback_quality.dart';
 import '../models/session.dart';
@@ -25,6 +20,7 @@ import '../services/next_episode_finder.dart';
 import '../services/offline_progress.dart';
 import '../services/player_preferences.dart';
 import '../services/track_preferences.dart';
+import '../services/video_engine.dart';
 import '../theme/app_theme.dart';
 import '../widgets/error_details.dart';
 import '../widgets/next_episode_card.dart';
@@ -84,9 +80,6 @@ class _PlayerScreenState extends State<PlayerScreen> {
   /// Fréquence des signalements de position au serveur.
   static const _progressInterval = Duration(seconds: 10);
 
-  /// Mémoire tampon du lecteur : 64 Mo, confortable pour de la 4K.
-  static const _bufferSize = 64 * 1024 * 1024;
-
   /// Sous-titres à part : nouveaux essais avant d'abandonner (le serveur,
   /// occupé à préparer la vidéo, ne les fournit pas toujours du premier coup).
   static const _subtitleRetries = 3;
@@ -98,16 +91,11 @@ class _PlayerScreenState extends State<PlayerScreen> {
   static const _startupGrace = Duration(seconds: 6);
   static const _convertedStartupGrace = Duration(seconds: 20);
 
-  final _player = Player(
-    configuration: const PlayerConfiguration(
-      bufferSize: _bufferSize,
-      // En développement : messages détaillés du moteur vidéo
-      logLevel: kDebugMode ? MPVLogLevel.info : MPVLogLevel.error,
-    ),
-  );
+  /// Moteur vidéo, le meilleur pour cet appareil.
+  final _player = VideoEngine.forDevice();
 
-  /// Affichage de la vidéo (créé au démarrage, selon l'appareil).
-  VideoController? _controller;
+  /// Vrai une fois l'affichage de la vidéo prêt.
+  bool _engineReady = false;
 
   /// Ce que la puce vidéo sait décoder (envoyé au serveur).
   DeviceDecoders _decoders = const DeviceDecoders();
@@ -227,7 +215,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
     ]);
 
     _subscriptions
-      ..add(_player.stream.error.listen(_onPlayerError))
+      ..add(_player.stream.errors.listen(_onPlayerError))
       ..add(
         _player.stream.completed.listen((done) {
           if (!done || !mounted || _switching || _askingStillWatching) return;
@@ -244,13 +232,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
         _player.stream.playing.listen((playing) => _playing.value = playing),
       );
     _subscriptions.add(
-      _player.stream.log.listen((log) {
-        if (kDebugMode) {
-          // Messages du moteur vidéo dans la console (diagnostic)
-          debugPrint('mpv ${log.level} [${log.prefix}] ${log.text}');
-        }
-        _watchForDecodeProblem(log);
-      }),
+      _player.stream.decodeFailures.listen((_) => _onDecodeFailure()),
     );
     _progressTimer = Timer.periodic(
       _progressInterval,
@@ -268,13 +250,10 @@ class _PlayerScreenState extends State<PlayerScreen> {
   /// Prépare l'affichage puis lance le film.
   Future<void> _start() async {
     _decoders = await DeviceCapabilities.decoders();
-    final controller = VideoController(
-      _player,
-      configuration: _videoConfiguration(),
-    );
     if (!mounted) return;
-    setState(() => _controller = controller);
-    if (defaultTargetPlatform == TargetPlatform.windows) await _smoothMotion();
+    await _player.initialize(refreshRate: View.of(context).display.refreshRate);
+    if (!mounted) return;
+    setState(() => _engineReady = true);
     await _open(
       PlaybackQuality.original,
       start: widget.start,
@@ -282,49 +261,6 @@ class _PlayerScreenState extends State<PlayerScreen> {
     );
     _prepareNext();
     _loadSegments();
-  }
-
-  /// Windows : un film à 24 images/s sur un écran à 60 Hz montre ses images
-  /// tour à tour 3 puis 2 fois, d'où un mouvement saccadé. Le lecteur se
-  /// cale sur l'écran et fond deux images voisines aux changements d'image.
-  /// Il dessine dans la fenêtre de l'appli : on lui donne la fréquence de
-  /// l'écran, qu'il ne connaît pas.
-  Future<void> _smoothMotion() async {
-    final platform = _player.platform;
-    if (platform is! NativePlayer) return;
-    final refreshRate = View.of(context).display.refreshRate;
-    try {
-      await platform.setProperty(
-        'display-fps-override',
-        (refreshRate > 0 ? refreshRate : 60).toStringAsFixed(3),
-      );
-      await platform.setProperty('video-sync', 'display-resample');
-      await platform.setProperty('interpolation', 'yes');
-      await platform.setProperty('tscale', 'oversample');
-    } on Object {
-      // Réglage refusé : lecture normale, sans lissage
-    }
-  }
-
-  /// Réglage de l'affichage vidéo. Sur Android, la puce vidéo décode l'image
-  /// et l'affiche elle-même à l'écran (comme les lecteurs natifs) : c'est le
-  /// seul moyen de lire la HEVC 10 bits ou la 4K de façon fluide. Avec le
-  /// réglage par défaut de media_kit, la puce n'a pas accès à l'écran et le
-  /// processeur, trop lent, prend le relais (et l'émulateur reste noir).
-  /// Sur Windows, la carte graphique décode (D3D11, sinon DXVA2) ; l'image
-  /// est recopiée pour la fenêtre de l'appli (« d3d11va-copy »), ce qui
-  /// suffit pour la 4K HEVC 10 bits.
-  VideoControllerConfiguration _videoConfiguration() {
-    if (defaultTargetPlatform == TargetPlatform.android) {
-      return const VideoControllerConfiguration(
-        vo: 'mediacodec_embed',
-        hwdec: 'mediacodec',
-      );
-    }
-    if (defaultTargetPlatform == TargetPlatform.windows) {
-      return const VideoControllerConfiguration(hwdec: 'd3d11va,dxva2,auto');
-    }
-    return const VideoControllerConfiguration();
   }
 
   @override
@@ -361,7 +297,8 @@ class _PlayerScreenState extends State<PlayerScreen> {
         );
       }
     }
-    _disposePlayer();
+    // Le moteur arrête d'abord la lecture (sinon l'appli peut se bloquer)
+    _player.dispose();
     _info.dispose();
     _sourceLabel.dispose();
     _controlsVisible.dispose();
@@ -372,13 +309,6 @@ class _PlayerScreenState extends State<PlayerScreen> {
     SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
     SystemChrome.setPreferredOrientations([]);
     super.dispose();
-  }
-
-  /// Arrête d'abord la lecture (le décodeur vidéo libère l'écran),
-  /// puis libère le lecteur. Libérer directement peut bloquer l'appli.
-  Future<void> _disposePlayer() async {
-    await _player.stop();
-    await _player.dispose();
   }
 
   /// Demande au serveur comment lire le film dans la [quality] voulue,
@@ -434,10 +364,10 @@ class _PlayerScreenState extends State<PlayerScreen> {
       final localPath = info.localPath;
       await _player.open(
         localPath != null
-            ? Media(localPath, start: start)
-            : Media(
+            ? EngineMedia(localPath, start: start)
+            : EngineMedia(
                 widget.api.streamUrl(info),
-                httpHeaders: widget.api.streamHeaders,
+                headers: widget.api.streamHeaders,
                 start: start,
               ),
       );
@@ -464,20 +394,14 @@ class _PlayerScreenState extends State<PlayerScreen> {
   bool _convertsOnlyAudio(PlaybackInfo info) =>
       info.convertsOnlyAudio(transcodeVideoCodecs(_decoders));
 
-  /// Surveille les messages du moteur : en lecture directe, s'il n'arrive
-  /// pas à afficher l'image (décodeur ou affichage impossible), on propose
-  /// de convertir. Les autres erreurs, sans gravité, sont ignorées.
-  void _watchForDecodeProblem(PlayerLog log) {
+  /// Le moteur n'arrive pas à afficher l'image (décodeur ou affichage
+  /// impossible) : en lecture directe, on propose de convertir.
+  void _onDecodeFailure() {
     final info = _info.value;
     if (_decodeProblemShown || info == null || !info.directPlay) return;
-    if (!info.hasVideo || (log.level != 'fatal' && log.level != 'error')) {
-      return;
-    }
-    final text = log.text.toLowerCase();
-    if (text.contains('video chain') || text.contains('video_out')) {
-      _decodeProblemShown = true;
-      _offerTranscode();
-    }
+    if (!info.hasVideo) return;
+    _decodeProblemShown = true;
+    _offerTranscode();
   }
 
   /// Fenêtre « lecture directe impossible » pendant la lecture.
@@ -509,20 +433,14 @@ class _PlayerScreenState extends State<PlayerScreen> {
   /// Le moteur signale aussi des erreurs sans gravité (il essaie une autre
   /// méthode et la lecture continue) : on ne prévient que si la vidéo n'a
   /// toujours pas démarré quelques secondes plus tard.
-  void _onPlayerError(String message) {
+  void _onPlayerError(EngineError error) {
     if (!mounted || _error != null) return;
-    if (message.contains('/Subtitles/')) {
+    if (error.subtitles) {
       _onSubtitleError();
       return;
     }
-    // Décodeur refusé : le moteur essaie aussitôt une autre méthode.
-    // Si l'image ne peut vraiment pas s'afficher, _watchForDecodeProblem
-    // propose de convertir.
-    if (message.contains('Could not open codec')) return;
     if (_player.state.duration > Duration.zero) return;
-    // Jamais le message brut du moteur : il peut contenir l'adresse du
-    // serveur et la clé de connexion
-    _errorDetail = cleanPlayerMessage(message);
+    _errorDetail = error.detail;
     final converted = _info.value?.directPlay == false;
     _startupErrorTimer ??= Timer(
       converted ? _convertedStartupGrace : _startupGrace,
@@ -900,25 +818,10 @@ class _PlayerScreenState extends State<PlayerScreen> {
       audioIndex: _tracks.audioIndex ?? info.defaultAudioIndex,
       subtitleIndex: subtitleIndex,
     );
-    await _waitForTracks();
+    await _player.waitForTracks();
     if (!mounted) return;
     await _applyAudio(info, _tracks.audioIndex);
     await _applySubtitles(info, _tracks.subtitleIndex!);
-  }
-
-  /// Attend que le lecteur ait lu la liste des pistes du fichier.
-  Future<void> _waitForTracks() async {
-    // « auto » et « no » sont toujours dans la liste : il faut plus que ça
-    bool ready(Tracks tracks) =>
-        tracks.audio.length > 2 || tracks.video.length > 2;
-    if (ready(_player.state.tracks)) return;
-    try {
-      await _player.stream.tracks
-          .firstWhere(ready)
-          .timeout(const Duration(seconds: 15));
-    } on TimeoutException {
-      // Tant pis : le lecteur garde ses pistes par défaut
-    }
   }
 
   /// Piste audio. En flux converti, le serveur n'envoie que la piste
@@ -926,8 +829,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
   Future<void> _applyAudio(PlaybackInfo info, int? index) async {
     if (!info.directPlay) return;
     final track = info.track(index);
-    final id = track == null ? null : playerTrackId(info.tracks, track);
-    if (id != null) await _player.setAudioTrack(AudioTrack('$id', null, null));
+    if (track != null) await _player.selectAudio(info.tracks, track);
   }
 
   /// Sous-titres : aucun, fichier à part (téléchargé par son adresse),
@@ -939,30 +841,20 @@ class _PlayerScreenState extends State<PlayerScreen> {
   }) async {
     if (!retry) _subtitleAttempts = 0;
     final track = info.track(index);
-    if (track == null) {
-      await _player.setSubtitleTrack(SubtitleTrack.no());
-      return;
-    }
-    final url = track.deliveryUrl;
-    if (track.deliveryMethod == 'External' && url != null) {
-      await _player.setSubtitleTrack(
-        SubtitleTrack.uri(
+    final url = track?.deliveryUrl;
+    await _player.selectSubtitles(switch (track) {
+      null => const NoSubtitles(),
+      _ when track.deliveryMethod == 'External' && url != null =>
+        ExternalSubtitles(
           widget.api.absoluteUrl(url),
           title: track.label,
           language: track.language,
         ),
-      );
-    } else if (info.directPlay) {
-      final id = playerTrackId(info.tracks, track);
-      if (id != null) {
-        await _player.setSubtitleTrack(SubtitleTrack('$id', null, null));
-      }
-    } else if (track.deliveryMethod == 'Encode') {
+      _ when info.directPlay => EmbeddedSubtitles(info.tracks, track),
       // Flux converti : le serveur a incrusté les sous-titres dans l'image
-      await _player.setSubtitleTrack(SubtitleTrack.no());
-    } else {
-      await _player.setSubtitleTrack(SubtitleTrack.auto());
-    }
+      _ when track.deliveryMethod == 'Encode' => const NoSubtitles(),
+      _ => const AutoSubtitles(),
+    });
   }
 
   /// Menu « Audio ».
@@ -1078,7 +970,6 @@ class _PlayerScreenState extends State<PlayerScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final controller = _controller;
     final next = _next;
     final insets = MediaQuery.paddingOf(context);
 
@@ -1106,16 +997,9 @@ class _PlayerScreenState extends State<PlayerScreen> {
           child: Stack(
             fit: StackFit.expand,
             children: [
-              if (controller != null) ...[
-                // La vidéo seule (commandes et sous-titres de media_kit
-                // désactivés)
-                Video(
-                  controller: controller,
-                  controls: NoVideoControls,
-                  subtitleViewConfiguration: const SubtitleViewConfiguration(
-                    visible: false,
-                  ),
-                ),
+              if (_engineReady) ...[
+                // La vidéo seule, sans commandes ni sous-titres
+                _player.buildVideo(),
                 // Nos sous-titres, sous les commandes
                 SubtitleOverlay(
                   player: _player,

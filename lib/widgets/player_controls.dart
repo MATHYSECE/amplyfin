@@ -4,7 +4,9 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:media_kit/media_kit.dart';
+
+import '../services/video_engine.dart';
+
 import 'package:screen_brightness/screen_brightness.dart';
 import 'package:volume_controller/volume_controller.dart';
 
@@ -58,7 +60,7 @@ class PlayerControls extends StatefulWidget {
     this.onSelectOverride,
   });
 
-  final Player player;
+  final VideoEngine player;
 
   /// Titre en gras (le film, ou la série).
   final String title;
@@ -95,7 +97,7 @@ class PlayerControlsState extends State<PlayerControls> {
   static const _hideDelay = Duration(seconds: 3);
   static const _seekStep = Duration(seconds: 10);
 
-  Player get _player => widget.player;
+  VideoEngine get _player => widget.player;
 
   bool _visible = true;
   Timer? _hideTimer;
@@ -156,7 +158,7 @@ class PlayerControlsState extends State<PlayerControls> {
   Future<void> _readLevels() async {
     if (_desktop) {
       _volume = await _preferences.loadVolume();
-      await _player.setVolume(_volume * 100);
+      await _player.setVolume(_volume);
       return;
     }
     // Pas de fenêtre de volume d'Android par-dessus la vidéo
@@ -460,7 +462,7 @@ class PlayerControlsState extends State<PlayerControls> {
       _level = _Level.volume;
       _volume = volume.clamp(0.0, 1.0);
     });
-    _player.setVolume(_volume * 100);
+    _player.setVolume(_volume);
     _levelTimer = Timer(const Duration(milliseconds: 700), () {
       if (mounted) setState(() => _level = null);
       _preferences.saveVolume(_volume);

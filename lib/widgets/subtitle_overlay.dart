@@ -2,7 +2,8 @@ import 'dart:math';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
-import 'package:media_kit/media_kit.dart';
+
+import '../services/video_engine.dart';
 
 import '../models/subtitle_size.dart';
 import '../theme/app_theme.dart';
@@ -23,7 +24,7 @@ class SubtitleOverlay extends StatelessWidget {
   /// Hauteur réservée à la barre de progression quand elle est affichée.
   static const _raisedBottom = 96.0;
 
-  final Player player;
+  final VideoEngine player;
   final SubtitleSize size;
 
   /// Vrai quand les commandes du lecteur sont affichées.

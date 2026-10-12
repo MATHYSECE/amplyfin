@@ -2,7 +2,8 @@ import 'dart:async';
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
-import 'package:media_kit/media_kit.dart';
+
+import '../services/video_engine.dart';
 
 import '../models/durations.dart';
 import '../theme/app_theme.dart';
@@ -143,7 +144,7 @@ class SeekBar extends StatefulWidget {
     this.scrubber,
   });
 
-  final Player player;
+  final VideoEngine player;
   final VoidCallback onInteraction;
   final FocusNode? focusNode;
   final TvScrubber? scrubber;
@@ -159,7 +160,7 @@ class _SeekBarState extends State<SeekBar> {
   /// Télé : barre sélectionnée.
   bool _focused = false;
 
-  Player get _player => widget.player;
+  VideoEngine get _player => widget.player;
 
   double _valueAt(double dx, double width) => (dx / width).clamp(0.0, 1.0);
 
