@@ -31,8 +31,14 @@ Ce qui reste à faire, dans l'ordre :
    molette, M ; curseur caché avec les commandes. Ailleurs : affiches qui
    grossissent au survol, clic droit = options, Échap et bouton « précédent »
    de la souris = retour. Fenêtre de 720 × 480 au minimum.
-4. Fabriquer la version finale : `flutter build windows --release`
-   (dossier `build/windows/x64/runner/Release/`).
+4. ~~Installateur~~ (fait) : `windows\installer\build.ps1` fabrique l'appli
+   puis `dist\Amplyfin-<version>-installation.exe` (Inno Setup 6, script
+   `windows/installer/amplyfin.iss`). Installation pour la personne seule
+   (`%LOCALAPPDATA%\Programs\Amplyfin`, pas besoin d'être administrateur),
+   raccourci dans le menu Démarrer, bibliothèques C++ de Microsoft jointes.
+   Mise à jour : changer `version:` dans `pubspec.yaml`, relancer le script,
+   installer par-dessus (comptes, réglages et téléchargements gardés).
+   Ne jamais changer l'`AppId` du script.
 
 Les changements pour Windows ne doivent rien casser sur Android, iPhone et
 Fire TV : on teste la plateforme (`Platform.isWindows`, `defaultTargetPlatform`)
@@ -43,8 +49,9 @@ au lieu de modifier le comportement existant.
 Ce PC ne sert qu'au développement de l'appli Windows. Seuls Flutter (même
 version que sur le PC fixe, 3.47.5, dans `%USERPROFILE%\dev\flutter`) et
 Visual Studio 2022 Build Tools (C++, avec le composant ATL demandé par
-`flutter_secure_storage`) y sont installés. Le mode développeur de Windows
-est activé (liens symboliques des extensions). Flutter est réglé pour
+`flutter_secure_storage`) et Inno Setup 6 (installateur) y sont installés.
+Le mode développeur de Windows est activé (liens symboliques des
+extensions). Flutter est réglé pour
 Windows uniquement (Android, iOS, web désactivés avec `flutter config`).
 On ne travaille pas ici sur Android, iPhone ou Fire TV, sauf si c'est
 nécessaire ; ces plateformes se fabriquent sur le PC fixe ou sur Codemagic.
@@ -55,7 +62,6 @@ Pièges connus :
   iPhone : annuler ces changements-là (`git checkout android ios`).
 - Garder le `pubspec.lock` du PC fixe (`flutter pub get --enforce-lockfile`)
   pour avoir les mêmes versions des bibliothèques partout.
-
 - Fluidité sur le portable (puce graphique intégrée) : pas de flou en
   arrière-plan sur PC (`FrostedBlur` dans `lib/widgets/ui.dart`, voile seul).
   Impeller essayé (`set_impeller_switch` dans `windows/runner/main.cpp`) :
@@ -67,6 +73,8 @@ Commandes utiles :
 - `flutter run -d windows` : lancer l'appli
 - `flutter test` : tests (dossier `test/`)
 - `flutter analyze` : vérifications du code
+- `powershell -ExecutionPolicy Bypass -File windows\installer\build.ps1` :
+  installateur dans `dist\`
 
 ## Façon de travailler
 
