@@ -98,6 +98,11 @@ class DownloadManager extends ChangeNotifier {
   final Map<String, DownloadState> _states = {};
   Future<void>? _ready;
 
+  /// Vrai une fois les téléchargements déjà connus chargés : un signal du
+  /// téléchargeur pour un élément absent de la liste vient alors d'un
+  /// téléchargement arrêté ou supprimé, et il est ignoré.
+  bool _loaded = false;
+
   /// Chemin complet du dossier des téléchargements (connu après [init]).
   String? _directoryPath;
 
@@ -202,6 +207,7 @@ class DownloadManager extends ChangeNotifier {
         createdAt: record.task.creationTime,
       );
     }
+    _loaded = true;
     notifyListeners();
   }
 
@@ -328,6 +334,8 @@ class DownloadManager extends ChangeNotifier {
 
     // Un ancien essai raté ne doit pas gêner le nouveau
     await FileDownloader().database.deleteRecordWithId(itemId);
+    // Annulé pendant ce nettoyage
+    if (!_states.containsKey(itemId)) return;
     final task = DownloadTask(
       taskId: itemId,
       url: api.downloadUrl(itemId),
@@ -449,23 +457,29 @@ class DownloadManager extends ChangeNotifier {
     final removed = {for (final id in itemIds) id: _states.remove(id)?.info};
     notifyListeners();
 
-    final downloader = FileDownloader();
     for (final MapEntry(key: itemId, value: info) in removed.entries) {
-      await downloader.cancelTaskWithId(itemId);
-      await downloader.database.deleteRecordWithId(itemId);
-      final names = [
-        if (info != null) info.fileName,
-        _posterFile(itemId),
-        _backdropFile(itemId),
-        _thumbFile(itemId),
-        for (final track in info?.externalSubtitles ?? const []) ...[
-          _subtitleFile(itemId, track.index),
-        ],
-      ];
-      for (final name in names) {
-        await downloader.cancelTaskWithId(name);
-        await _deleteFile(name);
-      }
+      await FileDownloader().cancelTaskWithId(itemId);
+      await _forget(itemId, info);
+    }
+  }
+
+  /// Efface l'enregistrement et tous les fichiers d'un élément (vidéo,
+  /// même partielle, affiche, fond, vignette, sous-titres).
+  Future<void> _forget(String itemId, DownloadInfo? info) async {
+    final downloader = FileDownloader();
+    await downloader.database.deleteRecordWithId(itemId);
+    final names = [
+      if (info != null) info.fileName,
+      _posterFile(itemId),
+      _backdropFile(itemId),
+      _thumbFile(itemId),
+      for (final track in info?.externalSubtitles ?? const []) ...[
+        _subtitleFile(itemId, track.index),
+      ],
+    ];
+    for (final name in names) {
+      await downloader.cancelTaskWithId(name);
+      await _deleteFile(name);
     }
   }
 
@@ -527,12 +541,19 @@ class DownloadManager extends ChangeNotifier {
   void _onUpdate(TaskUpdate update) {
     final task = update.task;
     if (task.group != _mediaGroup) return;
+    // Arrêté ou supprimé dans l'appli : un dernier signal (« en cours »,
+    // « échec » à la coupure) ne doit pas le faire réapparaître
+    if (_loaded && !_states.containsKey(task.taskId)) return;
     final current = stateOf(task.taskId);
     final info = current.info ?? _infoOf(task);
     switch (update) {
       case TaskStatusUpdate(:final status, :final exception):
         if (status == TaskStatus.canceled) {
-          if (_states.remove(task.taskId) != null) notifyListeners();
+          // Arrêté depuis la notification : fichiers effacés aussi
+          if (_states.remove(task.taskId) != null) {
+            notifyListeners();
+            unawaited(_forget(task.taskId, info));
+          }
           return;
         }
         _update(
