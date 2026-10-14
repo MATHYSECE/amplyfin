@@ -2,12 +2,23 @@ import 'package:flutter/material.dart';
 
 import '../api/jellyfin_api.dart';
 import '../models/resume_entry.dart';
+import '../services/device_capabilities.dart';
+import '../services/download_manager.dart';
 import '../theme/app_theme.dart';
 import 'media_row.dart';
 import 'ui.dart';
 
 /// Choix du panneau ouvert par un appui long sur une affiche de la rangée.
-enum ResumeAction { resume, restart, openDetails, markPlayed, remove }
+enum ResumeAction { resume, restart, openDetails, markPlayed, download, remove }
+
+/// Façon de retirer une entrée de « Continuer à regarder ».
+enum ResumeRemoval {
+  /// Masquée sur cet appareil, la progression est gardée.
+  keepProgress,
+
+  /// Progression effacée sur le serveur, comme jamais regardé.
+  reset,
+}
 
 /// Nom de l'animation de l'affiche d'une entrée vers sa fiche.
 String resumeHeroTag(ResumeEntry entry) => 'home-continue-${entry.id}';
@@ -115,9 +126,10 @@ class ContinueWatchingRow extends StatelessWidget {
 }
 
 /// Panneau de l'appui long sur une affiche : le titre, puis « Reprendre
-/// à … », « Depuis le début », « Aller à la page du film / de la série » et
-/// « Retirer de Continuer à regarder ». Pour un épisode suivant (pas encore
-/// commencé) : seulement « Lire l'épisode » et la page de la série.
+/// à … », « Depuis le début », « Aller à la page du film / de la série »,
+/// « Marquer comme vu », « Télécharger » (pas sur télé) et « Retirer de
+/// Continuer à regarder ». Pour un épisode suivant (pas encore commencé) :
+/// ni « Depuis le début », ni « Retirer ».
 /// Renvoie le choix, ou null si on ferme le panneau.
 Future<ResumeAction?> showResumeActions(
   BuildContext context,
@@ -174,18 +186,110 @@ Future<ResumeAction?> showResumeActions(
                 title: const Text('Marquer comme vu'),
                 onTap: () => choose(ResumeAction.markPlayed),
               ),
+              // Télé : pas de téléchargements
+              if (!DeviceCapabilities.isTv)
+                _DownloadTile(
+                  itemId: entry.id,
+                  onTap: () => choose(ResumeAction.download),
+                ),
               if (!entry.isNext) ...[
                 const Divider(),
                 ListTile(
                   leading: const Icon(Icons.remove_circle_outline_rounded),
                   title: const Text('Retirer de Continuer à regarder'),
-                  subtitle: const Text(
-                    'La progression est effacée, comme si tu ne l\'avais '
-                    'pas regardé',
-                  ),
                   onTap: () => choose(ResumeAction.remove),
                 ),
               ],
+            ],
+          ),
+        ),
+      );
+    },
+  );
+}
+
+/// Ligne « Télécharger » du panneau, selon l'état du téléchargement : rien
+/// d'autre à faire s'il est déjà en cours ou terminé.
+class _DownloadTile extends StatelessWidget {
+  const _DownloadTile({required this.itemId, required this.onTap});
+
+  final String itemId;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final manager = DownloadManager.instance;
+    return ListenableBuilder(
+      listenable: manager,
+      builder: (context, _) => switch (manager.stateOf(itemId).phase) {
+        DownloadPhase.complete => const ListTile(
+          enabled: false,
+          leading: Icon(Icons.download_done_rounded),
+          title: Text('Téléchargé'),
+        ),
+        DownloadPhase.waiting ||
+        DownloadPhase.running ||
+        DownloadPhase.paused => const ListTile(
+          enabled: false,
+          leading: Icon(Icons.downloading_rounded),
+          title: Text('Téléchargement en cours'),
+        ),
+        DownloadPhase.failed => ListTile(
+          leading: const Icon(Icons.download_rounded),
+          title: const Text('Réessayer le téléchargement'),
+          onTap: onTap,
+        ),
+        DownloadPhase.none => ListTile(
+          leading: const Icon(Icons.download_rounded),
+          title: const Text('Télécharger'),
+          onTap: onTap,
+        ),
+      },
+    );
+  }
+}
+
+/// « Retirer de Continuer à regarder » : garder la progression (l'entrée
+/// est seulement masquée) ou tout remettre à zéro. Null si on ferme.
+Future<ResumeRemoval?> showResumeRemoval(
+  BuildContext context,
+  ResumeEntry entry,
+) {
+  return showModalBottomSheet<ResumeRemoval>(
+    context: context,
+    isScrollControlled: true,
+    builder: (context) {
+      void choose(ResumeRemoval removal) => Navigator.of(context).pop(removal);
+      return SafeArea(
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              ListTile(
+                title: Text(
+                  'Retirer « ${entry.title} »',
+                  style: Theme.of(context).textTheme.titleMedium,
+                ),
+              ),
+              ListTile(
+                autofocus: DeviceCapabilities.isTv,
+                leading: const Icon(Icons.bookmark_outline_rounded),
+                title: const Text('Garder ma progression'),
+                subtitle: const Text(
+                  'Retiré de la rangée ; reprend au même endroit si tu le '
+                  'relances',
+                ),
+                onTap: () => choose(ResumeRemoval.keepProgress),
+              ),
+              ListTile(
+                leading: const Icon(Icons.restart_alt_rounded),
+                title: const Text('Tout remettre à zéro'),
+                subtitle: const Text(
+                  'La progression est effacée, comme si tu ne l\'avais pas '
+                  'regardé',
+                ),
+                onTap: () => choose(ResumeRemoval.reset),
+              ),
             ],
           ),
         ),

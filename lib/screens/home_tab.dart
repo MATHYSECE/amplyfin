@@ -12,6 +12,7 @@ import '../services/connection_monitor.dart';
 import '../services/device_capabilities.dart';
 import '../services/download_groups.dart';
 import '../services/download_manager.dart';
+import '../services/hidden_resume.dart';
 import '../services/offline_progress.dart';
 import '../services/playback_launcher.dart';
 import '../services/track_preferences.dart';
@@ -178,12 +179,18 @@ class HomeTabState extends State<HomeTab> {
     final series = await _safe(
       widget.api.getUserData(userId: _userId, itemIds: seriesIds),
     );
-    return mergeContinueWatching(
-      resume ?? const [],
-      nextEntries,
-      series ?? const {},
+    // Sans ceux retirés en gardant leur progression
+    return _hidden.filter(
+      mergeContinueWatching(
+        resume ?? const [],
+        nextEntries,
+        series ?? const {},
+      ),
     );
   }
+
+  /// Entrées retirées de la rangée en gardant leur progression.
+  final _hidden = HiddenResume();
 
   /// Met à jour « Continuer à regarder » (au retour du lecteur ou d'une
   /// fiche, ou en revenant sur l'onglet).
@@ -277,23 +284,73 @@ class HomeTabState extends State<HomeTab> {
           related: [?entry.seriesId],
           onChanged: refreshContinue,
         );
+      case ResumeAction.download:
+        _download(entry);
       case ResumeAction.remove:
-        await _remove(entry);
+        final removal = await showResumeRemoval(context, entry);
+        if (!mounted) return;
+        switch (removal) {
+          case ResumeRemoval.keepProgress:
+            await _hide(entry);
+          case ResumeRemoval.reset:
+            await _remove(entry);
+          case null:
+            break;
+        }
       case null:
         break;
     }
+  }
+
+  /// Lance le téléchargement de l'entrée (fichier d'origine).
+  void _download(ResumeEntry entry) {
+    DownloadManager.instance.start(
+      api: widget.api,
+      userId: _userId,
+      itemId: entry.id,
+    );
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('Téléchargement de « ${entry.title} » lancé')),
+    );
+  }
+
+  /// Retire l'affiche de la rangée tout de suite.
+  void _dropFromRow(ResumeEntry entry) => setState(
+    () => _continue = [
+      for (final other in _continue)
+        if (other.id != entry.id) other,
+    ],
+  );
+
+  /// Masque l'entrée en gardant sa progression (elle revient si on la
+  /// relance), avec « Annuler » quelques secondes.
+  Future<void> _hide(ResumeEntry entry) async {
+    final messenger = ScaffoldMessenger.of(context);
+    _dropFromRow(entry);
+    await _hidden.hide(entry.id, entry.progress.position);
+    messenger.showSnackBar(
+      SnackBar(
+        content: const Text('Retiré, progression gardée'),
+        // Disparaît tout seul, même avec un bouton
+        persist: false,
+        duration: const Duration(seconds: 5),
+        action: SnackBarAction(
+          label: 'Annuler',
+          textColor: AppColors.white,
+          onPressed: () async {
+            await _hidden.show(entry.id);
+            await refreshContinue();
+          },
+        ),
+      ),
+    );
   }
 
   /// Efface la progression (comme jamais regardé) : l'affiche disparaît
   /// tout de suite, avec « Annuler » quelques secondes.
   Future<void> _remove(ResumeEntry entry) async {
     final messenger = ScaffoldMessenger.of(context);
-    setState(
-      () => _continue = [
-        for (final other in _continue)
-          if (other.id != entry.id) other,
-      ],
-    );
+    _dropFromRow(entry);
     try {
       await widget.api.updateWatchProgress(
         userId: _userId,
