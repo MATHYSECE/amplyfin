@@ -138,7 +138,7 @@ class _DownloadsScreenState extends State<DownloadsScreen> with UndoDelete {
   void _delete(DownloadEntry entry) =>
       deleteWithUndo([entry.id], '« ${entry.info.name} » supprimé');
 
-  /// Appui sur une série : sa fiche, ouverte sur la saison où on en est
+  /// Bouton ⋯ d'une série : sa fiche, ouverte sur la saison où on en est
   /// (hors ligne : avec seulement les épisodes téléchargés).
   void _openSeries(SeriesDownloads series) => _openDetails(
     series.episodeToOpen(
@@ -146,7 +146,8 @@ class _DownloadsScreenState extends State<DownloadsScreen> with UndoDelete {
     ),
   );
 
-  /// Les épisodes téléchargés d'une série (pour les lire ou les gérer).
+  /// Appui sur une série : ses épisodes téléchargés (pour les lire ou les
+  /// gérer).
   void _openDownloadedEpisodes(SeriesDownloads series) {
     Navigator.of(context).push(
       MaterialPageRoute<void>(
@@ -307,8 +308,8 @@ class _DownloadsScreenState extends State<DownloadsScreen> with UndoDelete {
             _SeriesRow(
               api: widget.api,
               series: series,
-              onTap: () => _openSeries(series),
-              onEpisodes: () => _openDownloadedEpisodes(series),
+              onTap: () => _openDownloadedEpisodes(series),
+              onDetails: () => _openSeries(series),
             ),
           ),
       ],
@@ -519,22 +520,23 @@ class _MovieRow extends StatelessWidget {
 }
 
 /// Ligne d'une série : affiche, nom, nombre d'épisodes et place prise, ⋯.
+/// Appui : les épisodes téléchargés ; ⋯ : la fiche de la série.
 class _SeriesRow extends StatelessWidget {
   const _SeriesRow({
     required this.api,
     required this.series,
     required this.onTap,
-    required this.onEpisodes,
+    required this.onDetails,
   });
 
   final JellyfinApi api;
   final SeriesDownloads series;
 
-  /// Appui sur la ligne : la fiche de la série.
+  /// Appui sur la ligne : les épisodes téléchargés.
   final VoidCallback onTap;
 
-  /// Bouton ⋯ : les épisodes téléchargés.
-  final VoidCallback onEpisodes;
+  /// Bouton ⋯ : la fiche de la série.
+  final VoidCallback onDetails;
 
   @override
   Widget build(BuildContext context) {
@@ -572,9 +574,9 @@ class _SeriesRow extends StatelessWidget {
             const SizedBox(width: 10),
             GlassCircleButton(
               icon: Icons.more_horiz_rounded,
-              tooltip: 'Épisodes téléchargés',
+              tooltip: 'Fiche de la série',
               size: 40,
-              onPressed: onEpisodes,
+              onPressed: onDetails,
             ),
           ],
         ),
