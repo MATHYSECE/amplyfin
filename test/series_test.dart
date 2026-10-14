@@ -96,6 +96,18 @@ void main() {
       expect(withQuality.infoLine, '22 min · 1080p · HEVC · E-AC3 Stéréo');
     });
 
+    test('ligne d\'infos : taille du fichier à la fin', () {
+      final withSize = Episode.fromJson({
+        'Id': 'ep1',
+        'Name': 'Pilote',
+        'RunTimeTicks': 13200000000, // 22 min
+        'MediaSources': [
+          {'Size': 2834567890},
+        ],
+      });
+      expect(withSize.infoLine, '22 min · 2,8 Go');
+    });
+
     test('épisode sans numéro ni série : titre seul', () {
       final bare = Episode.fromJson({'Id': 'ep', 'Name': 'Bonus'});
       expect(bare.listTitle, 'Bonus');

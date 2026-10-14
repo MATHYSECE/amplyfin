@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../api/jellyfin_api.dart';
+import '../models/file_size.dart';
 import '../models/item_details.dart';
 import '../models/media_item.dart';
 import '../models/session.dart';
@@ -361,6 +362,8 @@ class _MovieScreenState extends State<MovieScreen> {
         infos: [
           if (movie.year != null) '${movie.year}',
           ?details?.runtimeLabel,
+          // Taille du fichier, si le serveur la donne
+          ?formatFileSize(details?.fileSize),
           ?details?.officialRating,
         ],
         rating: details?.ratingLabel,

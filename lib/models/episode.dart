@@ -1,4 +1,5 @@
 import 'durations.dart';
+import 'file_size.dart';
 import 'media_quality.dart';
 import 'media_track.dart';
 import 'watch_progress.dart';
@@ -102,6 +103,11 @@ class Episode {
 
   String? get runtimeLabel => formatRuntime(runtime);
 
-  /// Ligne d'infos sous le titre : « 47 min · 1080p · HEVC · E-AC3 5.1 ».
-  String get infoLine => [?runtimeLabel, ...?quality?.labels].join(' · ');
+  /// Ligne d'infos sous le titre : « 47 min · 1080p · HEVC · E-AC3 5.1 ·
+  /// 1,2 Go » (taille du fichier si le serveur la donne).
+  String get infoLine => [
+    ?runtimeLabel,
+    ...?quality?.labels,
+    ?formatFileSize(fileSize),
+  ].join(' · ');
 }
