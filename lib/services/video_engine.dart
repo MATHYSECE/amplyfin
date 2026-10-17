@@ -2,8 +2,10 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/widgets.dart';
 
 import '../models/media_track.dart';
+import 'device_capabilities.dart';
 import 'exo_engine.dart';
 import 'mpv_engine.dart';
+import 'tizen_engine.dart';
 
 /// Vrai si cet appareil lit avec ExoPlayer (Android).
 bool get usesExoPlayer => defaultTargetPlatform == TargetPlatform.android;
@@ -14,8 +16,13 @@ bool get usesExoPlayer => defaultTargetPlatform == TargetPlatform.android;
 /// elle.
 abstract class VideoEngine {
   /// Le meilleur moteur pour cet appareil : ExoPlayer sur Android (télé,
-  /// téléphone, tablette), mpv ailleurs (iPhone, iPad, PC).
-  factory VideoEngine.forDevice() => usesExoPlayer ? ExoEngine() : MpvEngine();
+  /// téléphone, tablette), le lecteur de la télé sur Samsung, mpv ailleurs
+  /// (iPhone, iPad, PC).
+  factory VideoEngine.forDevice() {
+    if (usesExoPlayer) return ExoEngine();
+    if (DeviceCapabilities.isTizen) return TizenEngine();
+    return MpvEngine();
+  }
 
   /// Prépare l'affichage. [refreshRate] : fréquence de l'écran (images par
   /// seconde), utile au lissage des films sur PC.

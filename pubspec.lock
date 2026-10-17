@@ -978,6 +978,14 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "0.3.0"
+  tizen_window_manager:
+    dependency: transitive
+    description:
+      name: tizen_window_manager
+      sha256: "695d56c7976096c4971fbf1f32032d2f99a8f0226fa95ff42b956d7aa7de5d2f"
+      url: "https://pub.dev"
+    source: hosted
+    version: "0.2.0"
   typed_data:
     dependency: transitive
     description:
@@ -1050,6 +1058,14 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "6.9.0"
+  video_player_videohole:
+    dependency: "direct main"
+    description:
+      name: video_player_videohole
+      sha256: a593b55a1f5c6a9239ee014d2f9f0f501d7116e86693f1959e2e9485ba6e6d49
+      url: "https://pub.dev"
+    source: hosted
+    version: "0.6.1"
   video_player_web:
     dependency: transitive
     description:

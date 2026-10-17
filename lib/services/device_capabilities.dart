@@ -81,6 +81,7 @@ class DeviceCapabilities {
   static Future<DeviceDecoders> decoders() => _decoders ??= _readDecoders();
 
   static Future<DeviceDecoders> _readDecoders() async {
+    if (isTizen) return _tizenDecoders;
     final emulator = await isAndroidEmulator();
     Map<Object?, Object?>? map;
     try {
@@ -98,6 +99,26 @@ class DeviceCapabilities {
       return DeviceDecoders.fromMap(map, allow10Bit: !emulator, player: player);
     }
     return DeviceDecoders(allow10Bit: !emulator, player: player);
+  }
+
+  /// Télé Samsung : la télé ne répond pas sur ses décodeurs → ce que lisent
+  /// les télés Samsung récentes (4K et 10 bits / HDR10 par la puce ; le
+  /// Dolby Vision pur est déjà converti pour tous les appareils).
+  static DeviceDecoders get _tizenDecoders {
+    playerCodecs = PlayerCodecs.tizen;
+    const chip = CodecSupport(
+      hardware: true,
+      maxWidth: 3840,
+      maxHeight: 2160,
+      tenBit: true,
+    );
+    // H.264 en 10 bits (rare, dessins animés) : pas lu par les télés
+    const h264 = CodecSupport(hardware: true, maxWidth: 3840, maxHeight: 2160);
+    return const DeviceDecoders(
+      codecs: {'h264': h264, 'hevc': chip, 'av1': chip, 'vp9': chip},
+      hdrScreen: true,
+      player: PlayerCodecs.tizen,
+    );
   }
 
   /// Demande la liste de ses décodeurs à un lecteur caché, créé pour

@@ -156,6 +156,40 @@ const exoContainers = [
   '3gp',
 ];
 
+/// Télé Samsung (Tizen) : formats lus par le lecteur de la télé, d'après
+/// les tableaux de Samsung (la télé ne donne pas sa liste). Pas de DTS
+/// (absent des télés 2025) ni de TrueHD (jamais confirmé) : convertis.
+const _tizenFormats = {
+  'aac',
+  'ac3',
+  'eac3',
+  'flac',
+  'opus',
+  'vorbis',
+  'mp3',
+  'mp2',
+  'pcm_s16le',
+  'pcm_s24le',
+  'mpeg2video',
+  'mpeg4',
+  'h263',
+  'vp8',
+};
+
+/// Formats de fichier ouverts par la télé Samsung.
+const tizenContainers = [
+  'mkv',
+  'webm',
+  'mp4',
+  'm4v',
+  'mov',
+  'avi',
+  'ts',
+  'mpegts',
+  'flv',
+  '3gp',
+];
+
 class PlayerCodecs {
   const PlayerCodecs(
     this.names, {
@@ -178,6 +212,14 @@ class PlayerCodecs {
       containers: exoContainers,
     );
   }
+
+  /// Télé Samsung : liste fixe ; sous-titres envoyés à part en SRT par le
+  /// serveur (affichés par l'appli, comme avec ExoPlayer).
+  static const tizen = PlayerCodecs(
+    _tizenFormats,
+    fileSubtitles: false,
+    containers: tizenContainers,
+  );
 
   /// Lit la réponse du lecteur à « decoder-list » (liste JSON d'objets
   /// avec un champ « codec »). Null si la réponse est illisible.
