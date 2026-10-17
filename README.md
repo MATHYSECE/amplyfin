@@ -13,6 +13,7 @@ sobre en noir et blanc.
 [![Dernière version](https://img.shields.io/github/v/release/MATHYSECE/amplyfin?label=version&color=white&labelColor=black)](https://github.com/MATHYSECE/amplyfin/releases/latest)
 ![Android](https://img.shields.io/badge/Android-téléphone%20·%20tablette-black?logo=android&logoColor=white)
 ![Fire TV](https://img.shields.io/badge/Fire%20TV-télécommande-black?logo=amazonfiretv&logoColor=white)
+![Samsung](https://img.shields.io/badge/Samsung-Tizen%206.5+-black?logo=samsung&logoColor=white)
 ![iPhone](https://img.shields.io/badge/iPhone%20·%20iPad-iOS%2015+-black?logo=apple&logoColor=white)
 ![Windows](https://img.shields.io/badge/Windows-10%20·%2011-black?logo=windows&logoColor=white)
 ![Flutter](https://img.shields.io/badge/Flutter-3.47-black?logo=flutter&logoColor=white)
@@ -83,7 +84,7 @@ d'un appareil à l'autre. Amplyfin part du principe inverse :
 |---|---|
 | **Téléphone** | Gestes : double appui pour ±10 s, glisser pour la luminosité et le volume. |
 | **Tablette** | Mise en page adaptée, « Qui regarde ? » à l'ouverture. |
-| **Fire TV** | Tout à la télécommande : sélection visible, OK maintenu pour les options, avance rapide en maintenant les flèches. |
+| **Fire TV, télé Samsung** | Tout à la télécommande : sélection visible, OK maintenu pour les options, avance rapide en maintenant les flèches. |
 | **PC Windows** | Souris et clavier : plein écran (F, F11, double clic), espace, flèches, molette pour le volume, survol des affiches. |
 
 ## Les lecteurs vidéo
@@ -91,10 +92,12 @@ d'un appareil à l'autre. Amplyfin part du principe inverse :
 | Appareil | Lecteur | Pourquoi |
 |---|---|---|
 | Android (téléphone, tablette, Fire TV) | **ExoPlayer** | Le lecteur d'Android (celui de Plex, Netflix, YouTube) : il parle directement à la puce vidéo. |
+| Télé Samsung | **Lecteur de la télé** | Le lecteur standard de Tizen (paquet `video_player_videohole`), décodé par la puce de la télé : 4K, HDR10, Dolby Digital Plus / Atmos. |
 | iPhone, iPad | **mpv** | Lit le MKV, le DTS et les sous-titres avancés, que le lecteur d'Apple refuse. Décodage par la puce de l'iPhone. |
 | Windows | **mpv** | La référence sur PC. Décodage par la carte graphique (D3D11), lissage des films à 24 images/s. |
 
-Ce que chaque appareil sait décoder est mesuré sur l'appareil lui-même et
+Ce que chaque appareil sait décoder est mesuré sur l'appareil lui-même (sur
+Samsung, d'après les caractéristiques des télés : DTS et TrueHD convertis) et
 envoyé au serveur : la page **Paramètres → « Ce que l'appareil sait lire »**
 l'affiche.
 
@@ -125,6 +128,23 @@ Android 7 ou plus récent.
 
 L'apk `-tv` fonctionne aussi sur les téléphones et sur les Android 32 bits.
 Les Fire TV récentes sous Vega OS ne lisent pas les applis Android.
+</details>
+
+<details>
+<summary><b>Télé Samsung (Tizen)</b></summary>
+
+Samsung n'autorise l'installation hors de sa boutique que depuis un PC, télé
+par télé :
+
+1. Sur la télé : **Applications**, tape **1 2 3 4 5** à la télécommande,
+   active **Developer mode** avec l'adresse IP du PC, puis redémarre la télé.
+2. Sur le PC : outils Tizen (voir [Développement](#développement)) et un
+   **certificat Samsung** (compte Samsung Developer gratuit) qui contient
+   l'identifiant (DUID) de la télé.
+3. `sdb connect <IP de la télé>`, puis `sdb install Amplyfin-x.y.z-samsung.tpk`.
+
+Télés Samsung de 2021 et après (Tizen 6.5 à 9.0). Pas de téléchargements sur
+télé.
 </details>
 
 <details>
@@ -167,6 +187,9 @@ iOS 15 ou plus récent.
   développeur de Windows activé, [Inno Setup 6](https://jrsoftware.org/isinfo.php)
   pour l'installateur
 - iPhone : aucun Mac nécessaire, tout se fait sur Codemagic
+- Samsung : [flutter-tizen](https://github.com/flutter-tizen/flutter-tizen)
+  (même version de Flutter), .NET SDK 8, extension **Tizen** de VS Code avec
+  le paquet « 6.5 IOT-Headed + Mobile », certificat Samsung
 
 ### Commandes utiles
 ```bash
@@ -183,6 +206,8 @@ Fabriquer les versions à distribuer :
 flutter build apk --release --target-platform android-arm64
 # Android, Fire TV et 32 bits
 flutter build apk --release --target-platform android-arm,android-arm64
+# Télé Samsung (Tizen 6.5 à 9.0, 32 bits)
+flutter-tizen build tpk -p tv --target-arch arm
 # Windows : appli + installateur dans dist\
 powershell -ExecutionPolicy Bypass -File windows\installer\build.ps1
 ```
@@ -198,7 +223,8 @@ lib/
 ├── services/   session, téléchargements, profils, moteurs vidéo
 │   ├── video_engine.dart   lecteur générique utilisé par tout l'écran de lecture
 │   ├── exo_engine.dart     ExoPlayer (Android)
-│   └── mpv_engine.dart     mpv (iPhone, iPad, Windows)
+│   ├── mpv_engine.dart     mpv (iPhone, iPad, Windows)
+│   └── tizen_engine.dart   lecteur de la télé (Samsung)
 ├── screens/    écrans (accueil, fiches, lecteur, paramètres…)
 ├── theme/      couleurs, polices (Manrope), arrondis
 └── widgets/    morceaux d'écran réutilisés (affiches, commandes du lecteur…)
@@ -219,7 +245,7 @@ Principes du code :
 - [x] Lecteur ExoPlayer sur Android
 - [x] Améliorations (téléchargements, Continuer à regarder, synchronisation)
 - [x] Visite guidée à la première connexion
-- [ ] Télés Samsung (Tizen, lecteur AVPlay)
+- [x] Télés Samsung (Tizen, lecteur de la télé)
 
 ---
 
