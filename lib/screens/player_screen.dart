@@ -19,17 +19,20 @@ import '../services/download_manager.dart';
 import '../services/next_episode_finder.dart';
 import '../services/offline_progress.dart';
 import '../services/player_preferences.dart';
+import '../services/tour_preferences.dart';
 import '../services/track_preferences.dart';
 import '../services/video_engine.dart';
 import '../theme/app_theme.dart';
 import '../widgets/error_details.dart';
 import '../widgets/next_episode_card.dart';
 import '../widgets/player_controls.dart';
+import '../widgets/player_tip.dart';
 import '../widgets/skip_intro_button.dart';
 import '../widgets/subtitle_overlay.dart';
 import '../widgets/track_picker.dart';
 import '../widgets/transcode_dialog.dart';
 import '../widgets/ui.dart';
+import 'tour_screen.dart';
 
 /// Lecteur vidéo plein écran, à l'horizontale.
 /// Par défaut le fichier original est lu tel quel (lecture directe) ;
@@ -239,7 +242,23 @@ class _PlayerScreenState extends State<PlayerScreen> {
       (_) => _reportProgress(),
     );
     _loadSubtitleSize();
+    _loadTip();
     _start();
+  }
+
+  /// Astuce de la première lecture (une fois par profil).
+  bool _showTip = false;
+
+  Future<void> _loadTip() async {
+    if (await TourPreferences().playerTipSeen() || !mounted) return;
+    setState(() => _showTip = true);
+  }
+
+  /// L'astuce disparaît pour de bon (premier geste, touche, « Compris »).
+  void _dismissTip() {
+    if (!_showTip) return;
+    setState(() => _showTip = false);
+    TourPreferences().markPlayerTipSeen();
   }
 
   Future<void> _loadSubtitleSize() async {
@@ -993,7 +1012,11 @@ class _PlayerScreenState extends State<PlayerScreen> {
         backgroundColor: AppColors.black,
         body: Listener(
           // Un appui sur l'écran : on regarde bien (« Tu regardes toujours ? »)
-          onPointerDown: (_) => _autoPlays = 0,
+          onPointerDown: (_) {
+            _autoPlays = 0;
+            // Premier appui : l'astuce disparaît (l'appui agit quand même)
+            _dismissTip();
+          },
           child: Stack(
             fit: StackFit.expand,
             children: [
@@ -1125,6 +1148,8 @@ class _PlayerScreenState extends State<PlayerScreen> {
                   onContinue: _continueWatching,
                   onStop: _close,
                 ),
+              if (_showTip)
+                PlayerTip(device: currentTourDevice(), onDismiss: _dismissTip),
               if (_error != null)
                 _ErrorOverlay(
                   message: _error!,
