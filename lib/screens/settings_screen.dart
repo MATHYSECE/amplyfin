@@ -15,6 +15,7 @@ import '../widgets/tv_focus.dart';
 import '../widgets/ui.dart';
 import 'admin_screen.dart';
 import 'device_info_screen.dart';
+import 'tour_screen.dart';
 
 /// Page « Paramètres » (menu Compte) : langues préférées du compte, taille
 /// des sous-titres, téléchargements en données mobiles, ce que l'appareil
@@ -269,6 +270,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
             const SettingsSectionTitle('À propos'),
             SettingsPanel(
               children: [
+                SettingsTile(
+                  icon: Icons.explore_outlined,
+                  title: 'Visite guidée',
+                  value: 'Revoir la découverte de l\'appli',
+                  onTap: () => TourScreen.show(context),
+                ),
+                const Divider(indent: 16, endIndent: 16),
                 SettingsTile(
                   icon: Icons.info_outline_rounded,
                   title: 'Amplyfin',

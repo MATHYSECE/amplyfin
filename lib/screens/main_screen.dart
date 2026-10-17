@@ -6,6 +6,7 @@ import '../models/session.dart';
 import '../services/device_capabilities.dart';
 import '../services/download_manager.dart';
 import '../services/session_store.dart';
+import '../services/tour_preferences.dart';
 import '../theme/app_theme.dart';
 import '../widgets/account_sheet.dart';
 import '../widgets/connection_pill.dart';
@@ -21,6 +22,7 @@ import 'movie_screen.dart';
 import 'search_tab.dart';
 import 'series_screen.dart';
 import 'settings_screen.dart';
+import 'tour_screen.dart';
 
 /// Écran principal après la connexion : en-tête (titre, téléchargements,
 /// déconnexion), quatre onglets (Accueil, Films, Séries, Recherche) et la
@@ -80,10 +82,19 @@ class _MainScreenState extends State<MainScreen> {
     }
     if (widget.openDownloads) {
       WidgetsBinding.instance.addPostFrameCallback((_) => _showDownloads());
+    } else {
+      // Première connexion de ce profil : la visite guidée
+      WidgetsBinding.instance.addPostFrameCallback((_) => _maybeShowTour());
     }
     // Appui sur la notification d'un téléchargement
     DownloadManager.instance.onNotificationTap = () =>
         _showDownloads(offlineStart: false);
+  }
+
+  /// Visite guidée, si ce profil ne l'a encore jamais vue (ni passée).
+  Future<void> _maybeShowTour() async {
+    if (await TourPreferences().tourSeen() || !mounted) return;
+    await TourScreen.show(context);
   }
 
   /// Vrai pendant que l'écran Téléchargements est ouvert (pas deux fois).
