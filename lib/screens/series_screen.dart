@@ -850,7 +850,8 @@ class _EpisodeTile extends StatelessWidget {
                 children: [
                   _EpisodeThumbnail(api: api, episode: episode),
                   // Commencé : fine barre de progression en bas de l'image
-                  if (episode.progress.canResume && !episode.played)
+                  // (aussi pour un épisode déjà vu que l'on revoit)
+                  if (episode.progress.canResume)
                     Positioned(
                       left: 0,
                       right: 0,
@@ -990,7 +991,8 @@ class _EpisodeSheet extends StatelessWidget {
                 ),
               ),
               const SizedBox(height: 22),
-              if (progress.canResume && !episode.played) ...[
+              // Commencé, même déjà vu (revu en partie) : reprise possible
+              if (progress.canResume) ...[
                 ProgressLine(
                   value: progress.fraction,
                   height: 4,
