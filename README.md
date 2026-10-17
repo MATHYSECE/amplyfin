@@ -62,6 +62,12 @@ d'un appareil à l'autre. Amplyfin part du principe inverse :
 - Carte **« Épisode suivant »** avec compte à rebours, et
   **« Tu regardes toujours ? »** après trois épisodes enchaînés.
 
+### Prise en main
+- **Visite guidée** à la première connexion de chaque profil, adaptée à
+  l'appareil (gestes, télécommande, souris et clavier), à revoir dans
+  Paramètres.
+- **Astuce** à la première lecture : les gestes ou les touches du lecteur.
+
 ### Partout, même hors ligne
 - **Téléchargements** du fichier d'origine sur téléphone et tablette (Wi-Fi
   par défaut), lus sans connexion ; la position est renvoyée au serveur au
@@ -211,9 +217,9 @@ Principes du code :
 - [x] Profils
 - [x] Windows
 - [x] Lecteur ExoPlayer sur Android
-- [ ] Améliorations iPhone / iPad
+- [x] Améliorations (téléchargements, Continuer à regarder, synchronisation)
+- [x] Visite guidée à la première connexion
 - [ ] Télés Samsung (Tizen, lecteur AVPlay)
-- [ ] Visite guidée à la première connexion
 
 ---
 
