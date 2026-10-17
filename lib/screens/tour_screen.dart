@@ -109,21 +109,25 @@ class _TourScreenState extends State<TourScreen> {
               ),
               child: Column(
                 children: [
-                  Row(
-                    children: [
-                      Text(
-                        '${_index + 1} / ${_pages.length}',
-                        style: textTheme.labelLarge?.copyWith(
-                          color: AppColors.grey,
+                  // Hauteur fixe : rien ne bouge quand « Passer » disparaît
+                  SizedBox(
+                    height: 52,
+                    child: Row(
+                      children: [
+                        Text(
+                          '${_index + 1} / ${_pages.length}',
+                          style: textTheme.labelLarge?.copyWith(
+                            color: AppColors.grey,
+                          ),
                         ),
-                      ),
-                      const Spacer(),
-                      if (!_last)
-                        OutlinedButton(
-                          onPressed: _finish,
-                          child: const Text('Passer'),
-                        ),
-                    ],
+                        const Spacer(),
+                        if (!_last)
+                          OutlinedButton(
+                            onPressed: _finish,
+                            child: const Text('Passer'),
+                          ),
+                      ],
+                    ),
                   ),
                   Expanded(
                     child: PageView.builder(
@@ -208,6 +212,8 @@ class _TourPageView extends StatelessWidget {
               );
         return Center(
           child: SingleChildScrollView(
+            // Le halo de l'illustration dépasse : pas découpé en carré
+            clipBehavior: Clip.none,
             padding: const EdgeInsets.symmetric(vertical: 16),
             child: ConstrainedBox(
               constraints: BoxConstraints(maxWidth: wide ? 1000 : 480),
@@ -563,10 +569,15 @@ class _TourIllustration extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              OutlinedButton.icon(
-                onPressed: null,
-                icon: const Icon(Icons.download_rounded),
-                label: const Text('Télécharger · 12,4 Go'),
+              // Simple image du bouton : normal, mais sans effet
+              IgnorePointer(
+                child: ExcludeFocus(
+                  child: OutlinedButton.icon(
+                    onPressed: () {},
+                    icon: const Icon(Icons.download_rounded),
+                    label: const Text('Télécharger · 12,4 Go'),
+                  ),
+                ),
               ),
               const SizedBox(height: 16),
               Row(
