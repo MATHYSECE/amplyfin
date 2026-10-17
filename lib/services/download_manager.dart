@@ -103,6 +103,18 @@ class DownloadManager extends ChangeNotifier {
   /// téléchargement arrêté ou supprimé, et il est ignoré.
   bool _loaded = false;
 
+  /// Éléments arrêtés ou supprimés (gardés sur l'appareil) : le
+  /// téléchargeur peut encore écrire leur état juste après la suppression
+  /// (iPhone) ; au démarrage, ces restes sont effacés au lieu d'être
+  /// rechargés. Un élément en sort quand on le télécharge à nouveau.
+  static const _removedKey = 'downloads_removed';
+  Set<String> _removed = {};
+
+  Future<void> _saveRemoved() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setStringList(_removedKey, _removed.toList());
+  }
+
   /// Chemin complet du dossier des téléchargements (connu après [init]).
   String? _directoryPath;
 
@@ -193,9 +205,17 @@ class DownloadManager extends ChangeNotifier {
     _directoryPath = File(await _filePath('_')).parent.path;
 
     // Téléchargements déjà connus (terminés, ou en cours avant la fermeture)
+    _removed = {...?prefs.getStringList(_removedKey)};
     for (final record in await downloader.database.allRecords(
       group: _mediaGroup,
     )) {
+      // Arrêté ou supprimé avant la fermeture : reste effacé
+      if (_removed.contains(record.taskId) ||
+          record.status == TaskStatus.canceled) {
+        await downloader.cancelTaskWithId(record.taskId);
+        await _forget(record.taskId, _infoOf(record.task));
+        continue;
+      }
       _states[record.taskId] = DownloadState(
         phase: _phaseOf(record.status),
         progress: record.status == TaskStatus.complete
@@ -261,6 +281,10 @@ class DownloadManager extends ChangeNotifier {
           id,
     ];
     if (todo.isEmpty) return;
+    if (_removed.any(todo.contains)) {
+      _removed.removeAll(todo);
+      await _saveRemoved();
+    }
     final now = DateTime.now();
     for (final (i, id) in todo.indexed) {
       _states[id] = DownloadState(
@@ -456,6 +480,8 @@ class DownloadManager extends ChangeNotifier {
     await init();
     final removed = {for (final id in itemIds) id: _states.remove(id)?.info};
     notifyListeners();
+    _removed.addAll(removed.keys);
+    await _saveRemoved();
 
     for (final MapEntry(key: itemId, value: info) in removed.entries) {
       await FileDownloader().cancelTaskWithId(itemId);
@@ -543,7 +569,10 @@ class DownloadManager extends ChangeNotifier {
     if (task.group != _mediaGroup) return;
     // Arrêté ou supprimé dans l'appli : un dernier signal (« en cours »,
     // « échec » à la coupure) ne doit pas le faire réapparaître
-    if (_loaded && !_states.containsKey(task.taskId)) return;
+    if (_loaded && !_states.containsKey(task.taskId)) {
+      unawaited(_dropStray(update));
+      return;
+    }
     final current = stateOf(task.taskId);
     final info = current.info ?? _infoOf(task);
     switch (update) {
@@ -579,6 +608,19 @@ class DownloadManager extends ChangeNotifier {
           ),
         );
     }
+  }
+
+  /// Signal d'un élément arrêté ou supprimé : le téléchargeur a pu le
+  /// réenregistrer, on l'efface encore ; s'il avance encore, on l'arrête.
+  Future<void> _dropStray(TaskUpdate update) async {
+    final id = update.task.taskId;
+    final alive = switch (update) {
+      TaskStatusUpdate(:final status) =>
+        status == TaskStatus.running || status == TaskStatus.enqueued,
+      TaskProgressUpdate(:final progress) => progress >= 0,
+    };
+    if (alive) await FileDownloader().cancelTaskWithId(id);
+    await FileDownloader().database.deleteRecordWithId(id);
   }
 
   void _update(String itemId, DownloadState state) {
