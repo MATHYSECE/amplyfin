@@ -40,7 +40,7 @@ class _LoginScreenState extends State<LoginScreen> {
   @override
   void initState() {
     super.initState();
-    _userController.text = widget.userName ?? _devUser;
+    _userController.text = widget.userName ?? '';
     _serverController.text = _devServer;
     // Pré-remplit l'adresse utilisée la dernière fois
     _store.lastServerUrl().then((url) {
@@ -48,11 +48,10 @@ class _LoginScreenState extends State<LoginScreen> {
     });
   }
 
-  /// Essais sur télé (provisoire) : adresse et identifiant donnés à la
-  /// fabrication (`--dart-define=AMPLYFIN_DEV_SERVER=…`), jamais écrits dans
-  /// le code. Vides dans une version normale.
+  /// Essais sur télé (provisoire) : adresse donnée à la fabrication
+  /// (`--dart-define=AMPLYFIN_DEV_SERVER=…`), jamais écrite dans le code.
+  /// Vide dans une version normale.
   static const _devServer = String.fromEnvironment('AMPLYFIN_DEV_SERVER');
-  static const _devUser = String.fromEnvironment('AMPLYFIN_DEV_USER');
 
   @override
   void dispose() {
