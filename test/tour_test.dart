@@ -2,6 +2,7 @@ import 'package:amplyfin/models/tour.dart';
 import 'package:amplyfin/screens/tour_screen.dart';
 import 'package:amplyfin/services/tour_preferences.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -87,6 +88,30 @@ void main() {
     await tester.tap(find.text('Passer'));
     await tester.pumpAndSettle();
     expect(TourScreen.isOpen.value, isFalse);
+  });
+
+  testWidgets('Télécommande : les flèches restent dans la visite', (
+    tester,
+  ) async {
+    SharedPreferences.setMockInitialValues({});
+    await tester.pumpWidget(
+      const MaterialApp(home: TourScreen(device: TourDevice.tv)),
+    );
+    await tester.pumpAndSettle();
+    FocusNode focused() => FocusManager.instance.primaryFocus!;
+    expect(focused().debugLabel, 'Suivant');
+
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowUp);
+    await tester.pump();
+    expect(focused().debugLabel, 'Passer');
+
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+    await tester.pump();
+    expect(focused().debugLabel, 'Suivant');
+
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
+    await tester.pumpAndSettle();
+    expect(find.text('2 / 5'), findsOneWidget);
   });
 
   testWidgets('Passer ferme la visite et la marque vue', (tester) async {

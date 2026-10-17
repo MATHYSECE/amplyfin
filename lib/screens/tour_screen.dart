@@ -54,11 +54,17 @@ class _TourScreenState extends State<TourScreen> {
   final _controller = PageController();
   int _index = 0;
 
+  /// « Passer » et le bouton du bas : les seuls éléments sélectionnables.
+  final _skipFocus = FocusNode(debugLabel: 'Passer');
+  final _nextFocus = FocusNode(debugLabel: 'Suivant');
+
   bool get _last => _index == _pages.length - 1;
 
   @override
   void dispose() {
     _controller.dispose();
+    _skipFocus.dispose();
+    _nextFocus.dispose();
     super.dispose();
   }
 
@@ -80,21 +86,35 @@ class _TourScreenState extends State<TourScreen> {
     if (mounted) Navigator.of(context).pop();
   }
 
-  /// Flèches gauche / droite (clavier, télécommande) : page précédente /
-  /// suivante. Haut / bas restent pour aller de « Passer » au bouton.
+  /// Les quatre flèches (clavier, télécommande) sont gérées ici, pour
+  /// que la sélection ne parte jamais dans l'écran caché dessous :
+  /// gauche / droite = page précédente / suivante, haut = « Passer »,
+  /// bas = le bouton du bas.
   KeyEventResult _onKey(FocusNode node, KeyEvent event) {
     if (event is! KeyDownEvent && event is! KeyRepeatEvent) {
       return KeyEventResult.ignored;
     }
-    if (event.logicalKey == LogicalKeyboardKey.arrowRight) {
+    final key = event.logicalKey;
+    if (key == LogicalKeyboardKey.arrowRight) {
       _goTo(_index + 1);
-      return KeyEventResult.handled;
-    }
-    if (event.logicalKey == LogicalKeyboardKey.arrowLeft) {
+    } else if (key == LogicalKeyboardKey.arrowLeft) {
       _goTo(_index - 1);
-      return KeyEventResult.handled;
+    } else if (key == LogicalKeyboardKey.arrowUp) {
+      // Dernière page : pas de « Passer », on reste sur « Commencer »
+      if (!_last) _skipFocus.requestFocus();
+    } else if (key == LogicalKeyboardKey.arrowDown) {
+      _nextFocus.requestFocus();
+    } else {
+      return KeyEventResult.ignored;
     }
-    return KeyEventResult.ignored;
+    return KeyEventResult.handled;
+  }
+
+  /// Nouvelle page : sur la dernière, « Passer » disparaît ; s'il était
+  /// sélectionné, la sélection passe sur « Commencer ».
+  void _onPageChanged(int index) {
+    setState(() => _index = index);
+    if (_last && _skipFocus.hasFocus) _nextFocus.requestFocus();
   }
 
   @override
@@ -135,6 +155,7 @@ class _TourScreenState extends State<TourScreen> {
                         const Spacer(),
                         if (!_last)
                           OutlinedButton(
+                            focusNode: _skipFocus,
                             onPressed: _finish,
                             child: const Text('Passer'),
                           ),
@@ -145,7 +166,7 @@ class _TourScreenState extends State<TourScreen> {
                     child: PageView.builder(
                       controller: _controller,
                       itemCount: _pages.length,
-                      onPageChanged: (index) => setState(() => _index = index),
+                      onPageChanged: _onPageChanged,
                       itemBuilder: (context, index) =>
                           _TourPageView(page: _pages[index], device: _device),
                     ),
@@ -158,6 +179,7 @@ class _TourScreenState extends State<TourScreen> {
                       width: double.infinity,
                       child: FilledButton(
                         // Télé : sélectionné d'emblée, OK suffit
+                        focusNode: _nextFocus,
                         autofocus: true,
                         onPressed: _next,
                         child: Text(_last ? 'Commencer' : 'Suivant'),
