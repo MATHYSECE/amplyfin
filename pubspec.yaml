@@ -50,6 +50,14 @@ dependencies:
   video_player: 2.14.1
   wakelock_plus: 1.8.0
   package_info_plus: 10.2.1
+  # Télé Samsung (Tizen) : versions des bibliothèques ci-dessus
+  flutter_secure_storage_tizen: ^0.1.6
+  shared_preferences_tizen: ^2.3.5
+  path_provider_tizen: ^2.3.3
+  sqflite_tizen: ^0.1.6
+  connectivity_plus_tizen: ^1.3.3
+  package_info_plus_tizen: ^1.2.0
+  wakelock_plus_tizen: ^2.1.5
 
 dev_dependencies:
   flutter_test:

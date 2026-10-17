@@ -26,8 +26,8 @@ Future<void> main() async {
     followTvFocus();
     ignoreTvOkRepeats();
   }
-  // Prépare le moteur vidéo (media_kit)
-  MediaKit.ensureInitialized();
+  // Prépare le moteur vidéo (media_kit), absent des télés Samsung
+  if (!DeviceCapabilities.isTizen) MediaKit.ensureInitialized();
   // Vraie version de l'appli (Paramètres, en-tête envoyé au serveur)
   await JellyfinApi.loadClientVersion();
   // Reprend le suivi des téléchargements (terminés ou en cours)

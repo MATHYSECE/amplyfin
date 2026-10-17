@@ -156,6 +156,11 @@ class DownloadManager extends ChangeNotifier {
   Future<void> init() => _ready ??= _init();
 
   Future<void> _init() async {
+    // Télé Samsung : pas de téléchargements (et pas de téléchargeur)
+    if (DeviceCapabilities.isTizen) {
+      _loaded = true;
+      return;
+    }
     final downloader = FileDownloader();
     await downloader.configure(
       globalConfig: [

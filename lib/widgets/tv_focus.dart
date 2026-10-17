@@ -293,9 +293,15 @@ class TvScale extends StatelessWidget {
   final Widget child;
   final double scale;
 
+  /// Samsung (écran de 1200 de large pour Flutter) : plus grand que sur la
+  /// Fire TV, la télé est souvent loin du canapé (l'appli se croit sur un
+  /// écran de 1212 × 682, toujours en présentation tablette).
+  static const _tizenScale = 0.99;
+
   @override
   Widget build(BuildContext context) {
     final media = MediaQuery.of(context);
+    final scale = DeviceCapabilities.isTizen ? _tizenScale : this.scale;
     final size = media.size / scale;
     return MediaQuery(
       data: media.copyWith(

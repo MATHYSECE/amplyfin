@@ -21,9 +21,16 @@ class DeviceCapabilities {
   /// AppDelegate.swift sur iPhone).
   static const _channel = MethodChannel('amplyfin/device');
 
-  /// Vrai sur une télé (Fire TV, Android TV) : interface à la télécommande,
-  /// pas de téléchargements. Connu dès le démarrage ([detectTv]).
+  /// Vrai sur une télé (Fire TV, Android TV, Samsung) : interface à la
+  /// télécommande, pas de téléchargements. Connu dès le démarrage
+  /// ([detectTv]).
   static bool isTv = false;
+
+  /// Vrai sur une télé Samsung (Tizen) : Dart la voit comme un Linux, mais
+  /// flutter-tizen donne la version de Tizen dans l'environnement.
+  static final bool isTizen = Platform.environment.containsKey(
+    'TIZEN_API_VERSION',
+  );
 
   /// Vrai sur un ordinateur (Windows) : souris et clavier, fenêtre, pas de
   /// luminosité ni de données mobiles. Connu dès le démarrage
@@ -40,6 +47,11 @@ class DeviceCapabilities {
 
   /// Demande au téléphone s'il est une télé (une seule fois, au démarrage).
   static Future<void> detectTv() async {
+    // Tizen : l'appli n'est publiée que pour les télés
+    if (isTizen) {
+      isTv = true;
+      return;
+    }
     if (!Platform.isAndroid) return;
     try {
       isTv = await _channel.invokeMethod<bool>('isTv') ?? false;
