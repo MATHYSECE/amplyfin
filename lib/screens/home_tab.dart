@@ -60,7 +60,7 @@ class HomeTab extends StatefulWidget {
   State<HomeTab> createState() => HomeTabState();
 }
 
-class HomeTabState extends State<HomeTab> {
+class HomeTabState extends State<HomeTab> with WidgetsBindingObserver {
   bool _loading = true;
 
   /// Vrai si aucune rangée n'a pu être chargée (serveur injoignable).
@@ -82,12 +82,38 @@ class HomeTabState extends State<HomeTab> {
     super.initState();
     _load();
     ConnectionMonitor.instance.addListener(_onConnection);
+    WidgetsBinding.instance.addObserver(this);
+    // Appli laissée ouverte (PC, télé) : mise à jour régulière aussi
+    _refreshTimer = Timer.periodic(
+      const Duration(minutes: 5),
+      (_) => refreshContinue(),
+    );
   }
+
+  Timer? _refreshTimer;
 
   @override
   void dispose() {
+    _refreshTimer?.cancel();
+    WidgetsBinding.instance.removeObserver(this);
     ConnectionMonitor.instance.removeListener(_onConnection);
     super.dispose();
+  }
+
+  /// Dernière mise à jour de « Continuer à regarder ».
+  DateTime _lastRefresh = DateTime.now();
+
+  /// Retour sur l'appli (fenêtre du PC remise au premier plan, téléphone
+  /// déverrouillé…) : « Continuer à regarder » est redemandé au serveur,
+  /// pour tenir compte de ce qui a été regardé sur un autre appareil
+  /// entre-temps (au plus toutes les 30 s).
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state != AppLifecycleState.resumed) return;
+    if (DateTime.now().difference(_lastRefresh) < const Duration(seconds: 30)) {
+      return;
+    }
+    refreshContinue();
   }
 
   /// Dernier état connu de la connexion (pour repérer son retour).
@@ -195,6 +221,7 @@ class HomeTabState extends State<HomeTab> {
   /// Met à jour « Continuer à regarder » (au retour du lecteur ou d'une
   /// fiche, ou en revenant sur l'onglet).
   Future<void> refreshContinue() async {
+    _lastRefresh = DateTime.now();
     final entries = await _fetchContinue();
     if (mounted && entries != null) setState(() => _continue = entries);
   }
