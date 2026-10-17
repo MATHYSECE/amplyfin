@@ -269,7 +269,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
             const SettingsSectionTitle('À propos'),
             SettingsPanel(
               children: [
-                const SettingsTile(
+                SettingsTile(
                   icon: Icons.info_outline_rounded,
                   title: 'Amplyfin',
                   value: 'Version ${JellyfinApi.clientVersion}',

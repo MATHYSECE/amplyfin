@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:http/http.dart' as http;
+import 'package:package_info_plus/package_info_plus.dart';
 
 import '../models/device_decoders.dart';
 import '../models/durations.dart';
@@ -61,7 +62,22 @@ class JellyfinApi {
   JellyfinApi({required this.serverUrl, required this.deviceId, this.token});
 
   static const clientName = 'Amplyfin';
-  static const clientVersion = '1.0.0';
+
+  /// Version de l'appli (celle de pubspec.yaml), lue au démarrage par
+  /// [loadClientVersion] ; affichée dans Paramètres et envoyée au serveur.
+  static String clientVersion = '1.1.0';
+
+  /// Lit la vraie version de l'appli (garde la valeur par défaut si
+  /// l'appareil ne répond pas, ex. dans les tests).
+  static Future<void> loadClientVersion() async {
+    try {
+      final info = await PackageInfo.fromPlatform();
+      if (info.version.isNotEmpty) clientVersion = info.version;
+    } on Object {
+      // Version par défaut
+    }
+  }
+
   static const _timeout = Duration(seconds: 15);
 
   /// Prévenus quand une demande n'obtient aucune réponse du serveur, ou au

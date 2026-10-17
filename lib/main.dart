@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:media_kit/media_kit.dart';
 
+import 'api/jellyfin_api.dart';
 import 'screens/start_screen.dart';
 import 'services/device_capabilities.dart';
 import 'services/download_manager.dart';
@@ -27,6 +28,8 @@ Future<void> main() async {
   }
   // Prépare le moteur vidéo (media_kit)
   MediaKit.ensureInitialized();
+  // Vraie version de l'appli (Paramètres, en-tête envoyé au serveur)
+  await JellyfinApi.loadClientVersion();
   // Reprend le suivi des téléchargements (terminés ou en cours)
   unawaited(DownloadManager.instance.init());
   // Licence de la police Manrope, ajoutée aux mentions légales de l'appli
