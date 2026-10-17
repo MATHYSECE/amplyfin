@@ -175,6 +175,16 @@ class _LibraryGridState extends State<LibraryGrid>
     }
   }
 
+  /// Après une page : s'il reste peu (ou rien) à faire défiler, la suite.
+  void _fillScreen() {
+    if (!mounted || !_scrollController.hasClients) return;
+    if (_error == null &&
+        _hasMore &&
+        _scrollController.position.extentAfter < _loadMoreThreshold) {
+      _loadMore();
+    }
+  }
+
   /// Charge la page suivante et l'ajoute à la grille.
   /// Avec [reset], recharge la première page et remplace toute la grille.
   Future<void> _loadMore({bool reset = false}) async {
@@ -207,6 +217,10 @@ class _LibraryGridState extends State<LibraryGrid>
         // Sécurité : le serveur n'a plus rien à donner
         if (page.items.isEmpty) _totalCount = _items.length;
       });
+      // Grand écran (PC, tablette, télé) : la page entière tient sans
+      // défiler, donc rien ne demanderait la suite (et la roue tournerait
+      // sans fin) : on la demande tant que la grille ne remplit pas l'écran
+      WidgetsBinding.instance.addPostFrameCallback((_) => _fillScreen());
     } on JellyfinException catch (e) {
       if (generation != _generation) return;
       if (e.isUnauthorized) {
