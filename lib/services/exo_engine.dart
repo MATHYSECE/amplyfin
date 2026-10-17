@@ -6,6 +6,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/widgets.dart';
 import 'package:http/http.dart' as http;
 import 'package:video_player/video_player.dart';
+import 'package:wakelock_plus/wakelock_plus.dart';
 
 import '../models/media_track.dart';
 import '../models/player_message.dart';
@@ -148,6 +149,7 @@ class ExoEngine implements VideoEngine {
     if (value.isPlaying != _wasPlaying) {
       _wasPlaying = value.isPlaying;
       _playing.add(value.isPlaying);
+      _keepScreenOn(value.isPlaying);
     }
     if (value.isBuffering != _wasBuffering) {
       _wasBuffering = value.isBuffering;
@@ -159,6 +161,15 @@ class ExoEngine implements VideoEngine {
     }
     final error = value.errorDescription;
     if (error != null && error != _lastError) _report(error);
+  }
+
+  /// Écran gardé allumé pendant la lecture (sinon la télé ou le téléphone
+  /// se met en veille en plein film), relâché en pause. mpv le fait seul ;
+  /// ExoPlayer non.
+  void _keepScreenOn(bool on) {
+    unawaited(
+      (on ? WakelockPlus.enable() : WakelockPlus.disable()).catchError((_) {}),
+    );
   }
 
   /// Erreur de lecture, sans adresse ni clé de connexion.
@@ -260,6 +271,7 @@ class ExoEngine implements VideoEngine {
   Future<void> _release() async {
     final controller = _current.value;
     _current.value = null;
+    if (_wasPlaying) _keepScreenOn(false);
     _wasPlaying = false;
     _wasBuffering = false;
     _wasCompleted = false;
@@ -276,6 +288,7 @@ class ExoEngine implements VideoEngine {
   @override
   Future<void> dispose() async {
     _disposed = true;
+    _keepScreenOn(false);
     final controller = _current.value;
     _current.dispose();
     await controller?.dispose();
