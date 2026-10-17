@@ -96,16 +96,21 @@ void main() {
       expect(withQuality.infoLine, '22 min · 1080p · HEVC · E-AC3 Stéréo');
     });
 
-    test('ligne d\'infos : taille du fichier à la fin', () {
+    test('ligne d\'infos : taille du fichier juste après la durée', () {
       final withSize = Episode.fromJson({
         'Id': 'ep1',
         'Name': 'Pilote',
         'RunTimeTicks': 13200000000, // 22 min
         'MediaSources': [
-          {'Size': 2834567890},
+          {
+            'Size': 2834567890,
+            'MediaStreams': [
+              {'Type': 'Video', 'Codec': 'hevc', 'Width': 1920},
+            ],
+          },
         ],
       });
-      expect(withSize.infoLine, '22 min · 2,8 Go');
+      expect(withSize.infoLine, '22 min · 2,8 Go · 1080p · HEVC');
     });
 
     test('épisode sans numéro ni série : titre seul', () {

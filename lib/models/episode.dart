@@ -103,11 +103,12 @@ class Episode {
 
   String? get runtimeLabel => formatRuntime(runtime);
 
-  /// Ligne d'infos sous le titre : « 47 min · 1080p · HEVC · E-AC3 5.1 ·
-  /// 1,2 Go » (taille du fichier si le serveur la donne).
+  /// Ligne d'infos sous le titre : « 47 min · 1,2 Go · 1080p · HEVC ·
+  /// E-AC3 5.1 ». La taille (si le serveur la donne) suit la durée : en fin
+  /// de ligne, elle était coupée sur un écran étroit (2 lignes au plus).
   String get infoLine => [
     ?runtimeLabel,
-    ...?quality?.labels,
     ?formatFileSize(fileSize),
+    ...?quality?.labels,
   ].join(' · ');
 }
