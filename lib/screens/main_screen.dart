@@ -318,14 +318,20 @@ class _MainScreenState extends State<MainScreen> {
 
     return Scaffold(
       body: GlowBackground(
-        child: tv
-            ? Row(
-                children: [
-                  _SideRail(index: _tab, onSelect: _select),
-                  Expanded(child: content),
-                ],
-              )
-            : content,
+        // Visite guidée ouverte par-dessus : rien ici ne prend la sélection
+        child: ValueListenableBuilder<bool>(
+          valueListenable: TourScreen.isOpen,
+          builder: (context, tourOpen, child) =>
+              ExcludeFocus(excluding: tourOpen, child: child!),
+          child: tv
+              ? Row(
+                  children: [
+                    _SideRail(index: _tab, onSelect: _select),
+                    Expanded(child: content),
+                  ],
+                )
+              : content,
+        ),
       ),
     );
   }

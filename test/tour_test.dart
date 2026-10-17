@@ -68,6 +68,27 @@ void main() {
     expect(await TourPreferences().tourSeen(), isTrue);
   });
 
+  testWidgets("Pendant la visite, l'écran du dessous est figé", (tester) async {
+    SharedPreferences.setMockInitialValues({});
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Builder(
+          builder: (context) => TextButton(
+            onPressed: () => TourScreen.show(context),
+            child: const Text('Ouvrir'),
+          ),
+        ),
+      ),
+    );
+    expect(TourScreen.isOpen.value, isFalse);
+    await tester.tap(find.text('Ouvrir'));
+    await tester.pumpAndSettle();
+    expect(TourScreen.isOpen.value, isTrue);
+    await tester.tap(find.text('Passer'));
+    await tester.pumpAndSettle();
+    expect(TourScreen.isOpen.value, isFalse);
+  });
+
   testWidgets('Passer ferme la visite et la marque vue', (tester) async {
     SharedPreferences.setMockInitialValues({});
     await tester.pumpWidget(

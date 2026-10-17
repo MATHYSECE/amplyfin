@@ -24,13 +24,25 @@ class TourScreen extends StatefulWidget {
   /// Appareil (par défaut celui-ci ; précisé dans les tests).
   final TourDevice? device;
 
+  /// Vrai pendant que la visite est ouverte : l'écran principal, dessous,
+  /// est figé (télé : sinon il prend la sélection quand l'accueil finit de
+  /// charger, et les flèches bougent dans un écran invisible).
+  static final isOpen = ValueNotifier<bool>(false);
+
   /// Ouvre la visite par-dessus l'écran actuel.
-  static Future<void> show(BuildContext context) => Navigator.of(context).push(
-    MaterialPageRoute<void>(
-      fullscreenDialog: true,
-      builder: (_) => const TourScreen(),
-    ),
-  );
+  static Future<void> show(BuildContext context) async {
+    isOpen.value = true;
+    try {
+      await Navigator.of(context).push(
+        MaterialPageRoute<void>(
+          fullscreenDialog: true,
+          builder: (_) => const TourScreen(),
+        ),
+      );
+    } finally {
+      isOpen.value = false;
+    }
+  }
 
   @override
   State<TourScreen> createState() => _TourScreenState();
