@@ -8,6 +8,17 @@ import 'media_track.dart';
 import 'playback_info.dart';
 import 'watch_progress.dart';
 
+/// Sous-titres en images : rien à extraire en texte.
+const _imageSubtitleCodecs = {
+  'pgs',
+  'pgssub',
+  'hdmv_pgs_subtitle',
+  'dvdsub',
+  'dvd_subtitle',
+  'dvbsub',
+  'dvb_subtitle',
+};
+
 /// Ce qu'on garde d'un film ou d'un épisode téléchargé, pour l'afficher et
 /// le lire sans le serveur. Enregistré avec le téléchargement lui-même.
 class DownloadInfo {
@@ -229,10 +240,17 @@ class DownloadInfo {
 
   List<MediaTrack> get tracks => tracksFromStreams(streams);
 
-  /// Sous-titres en fichier séparé sur le serveur : téléchargés à part.
-  List<MediaTrack> get externalSubtitles => [
+  /// Sous-titres gardés avec la vidéo, en fichiers SRT à part : ceux en
+  /// fichier séparé sur le serveur, et ceux en texte intégrés à la vidéo
+  /// (le serveur les extrait). Le lecteur les affiche hors ligne comme en
+  /// streaming ; ExoPlayer et libmdk ne savent pas lire ceux du fichier.
+  /// Pas les sous-titres en images (PGS…) : impossibles en texte.
+  List<MediaTrack> get savedSubtitles => [
     for (final track in tracks)
-      if (track.type == TrackType.subtitle && track.isExternal) track,
+      if (track.type == TrackType.subtitle &&
+          (track.isExternal ||
+              !_imageSubtitleCodecs.contains(track.codec?.toLowerCase())))
+        track,
   ];
 
   /// Nom du fichier sur le téléphone (l'extension aide à s'y retrouver ;
@@ -334,7 +352,8 @@ class DownloadInfo {
   }) {
     final localTracks = [
       for (final track in tracks)
-        if (track.isExternal && subtitleFiles.containsKey(track.index))
+        if (track.type == TrackType.subtitle &&
+            subtitleFiles.containsKey(track.index))
           MediaTrack(
             index: track.index,
             type: track.type,

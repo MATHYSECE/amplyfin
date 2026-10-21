@@ -718,6 +718,10 @@ class _PlayerScreenState extends State<PlayerScreen> {
 
     // Téléchargé : lu depuis le téléphone. Sinon, le serveur dit comment
     // le lire (même qualité qu'avant)
+    await DownloadManager.instance.fetchMissingSubtitles(
+      widget.api,
+      next.itemId,
+    );
     var info = await DownloadManager.instance.localPlayback(next.itemId);
     // Son du fichier téléchargé illisible (TrueHD…) : flux du serveur
     final localAudio = info?.track(tracks.audioIndex ?? info.defaultAudioIndex);

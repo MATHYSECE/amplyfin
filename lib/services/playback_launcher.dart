@@ -36,6 +36,8 @@ Future<String?> launchPlayback(
 }) async {
   final PlaybackInfo info;
   final decoders = await DeviceCapabilities.decoders();
+  // Vidéo téléchargée : sous-titres manquants récupérés s'il y a du réseau
+  await DownloadManager.instance.fetchMissingSubtitles(api, itemId);
   var local = await DownloadManager.instance.localPlayback(itemId);
   // Son du fichier téléchargé illisible (TrueHD…) : flux du serveur
   final localAudio = local?.track(tracks.audioIndex ?? local.defaultAudioIndex);

@@ -76,7 +76,8 @@ void main() {
       // Affiche : celle de la série
       expect(info.posterItem.id, 'malcolm');
       expect(info.posterItem.posterTag, 'tag-serie');
-      expect(info.externalSubtitles.map((t) => t.index), [3]);
+      // Sous-titres gardés en SRT : intégré (2) et séparé (3)
+      expect(info.savedSubtitles.map((t) => t.index), [2, 3]);
       // Résumé, saison, vignette, et fond de la série
       expect(info.overview, 'La famille part à Las Vegas.');
       expect(info.seasonId, 'saison5');
@@ -85,6 +86,24 @@ void main() {
       expect(info.backdropTag, 'tag-fond-serie');
       expect(info.episodeCode, 'S5 · É1');
       expect(info.episodeTitle, '1. Las Vegas');
+    });
+
+    test('sous-titres en images (PGS) : pas gardés en SRT', () {
+      final info = DownloadInfo.fromItemJson({
+        'Id': 'film',
+        'Name': '1917',
+        'Type': 'Movie',
+        'MediaSources': [
+          {
+            'Id': 'film',
+            'MediaStreams': [
+              {'Type': 'Subtitle', 'Index': 2, 'Codec': 'PGSSUB'},
+              {'Type': 'Subtitle', 'Index': 3, 'Codec': 'ass'},
+            ],
+          },
+        ],
+      });
+      expect(info.savedSubtitles.map((t) => t.index), [3]);
     });
 
     test('film : son propre fond, pas de vignette', () {
@@ -147,6 +166,17 @@ void main() {
       expect(external.deliveryUrl, startsWith('file:'));
       // Les pistes du fichier gardent leur place pour le lecteur
       expect(playerTrackId(playback.tracks, playback.track(2)!), 1);
+    });
+
+    test('sous-titres intégrés gardés en SRT : lus depuis le téléphone', () {
+      final playback = DownloadInfo.fromItemJson(episodeJson).localPlaybackInfo(
+        '/données/ep1.mkv',
+        subtitleFiles: {2: '/données/ep1.sub2.srt'},
+      );
+      final saved = playback.track(2)!;
+      expect(saved.deliveryMethod, 'External');
+      expect(saved.deliveryUrl, startsWith('file:'));
+      expect(saved.language, 'fre');
     });
 
     test('sous-titres séparés absents : piste retirée', () {

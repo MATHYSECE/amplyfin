@@ -5,11 +5,13 @@ import 'dart:io';
 
 import 'package:background_downloader/background_downloader.dart';
 import 'package:flutter/foundation.dart';
+import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../api/jellyfin_api.dart';
 import '../models/download_info.dart';
 import '../models/playback_info.dart';
+import 'connection_monitor.dart';
 import 'device_capabilities.dart';
 
 /// Où en est le téléchargement d'un film ou d'un épisode.
@@ -426,7 +428,7 @@ class DownloadManager extends ChangeNotifier {
       if (posterUrl != null) (posterUrl, _posterFile(info.itemId)),
       if (backdropUrl != null) (backdropUrl, _backdropFile(info.itemId)),
       if (thumbUrl != null) (thumbUrl, _thumbFile(info.itemId)),
-      for (final track in info.externalSubtitles)
+      for (final track in info.savedSubtitles)
         (
           api.subtitleFileUrl(
             itemId: info.itemId,
@@ -504,13 +506,51 @@ class DownloadManager extends ChangeNotifier {
       _posterFile(itemId),
       _backdropFile(itemId),
       _thumbFile(itemId),
-      for (final track in info?.externalSubtitles ?? const []) ...[
+      for (final track in info?.savedSubtitles ?? const []) ...[
         _subtitleFile(itemId, track.index),
       ],
     ];
     for (final name in names) {
       await downloader.cancelTaskWithId(name);
       await _deleteFile(name);
+    }
+  }
+
+  /// Sous-titres d'un téléchargement terminé qui manquent sur le téléphone
+  /// (téléchargés avant que l'appli garde aussi ceux intégrés à la vidéo,
+  /// ou échec au téléchargement) : demandés au serveur s'il répond, avant
+  /// la lecture. Sans réseau : rien, la vidéo se lit quand même.
+  Future<void> fetchMissingSubtitles(JellyfinApi api, String itemId) async {
+    await init();
+    final info = stateOf(itemId).info;
+    if (stateOf(itemId).phase != DownloadPhase.complete ||
+        info == null ||
+        !ConnectionMonitor.instance.online) {
+      return;
+    }
+    for (final track in info.savedSubtitles) {
+      final file = File(await _filePath(_subtitleFile(itemId, track.index)));
+      if (file.existsSync()) continue;
+      try {
+        final response = await http
+            .get(
+              Uri.parse(
+                api.subtitleFileUrl(
+                  itemId: itemId,
+                  mediaSourceId: info.mediaSourceId,
+                  index: track.index,
+                ),
+              ),
+              headers: api.streamHeaders,
+            )
+            .timeout(const Duration(seconds: 15));
+        if (response.statusCode == 200) {
+          await file.writeAsBytes(response.bodyBytes);
+        }
+      } on Object {
+        // Serveur injoignable ou occupé : on réessaiera à la prochaine lecture
+        return;
+      }
     }
   }
 
@@ -524,7 +564,7 @@ class DownloadManager extends ChangeNotifier {
     final video = await _filePath(info.fileName);
     if (!File(video).existsSync()) return null;
     final subtitles = <int, String>{};
-    for (final track in info.externalSubtitles) {
+    for (final track in info.savedSubtitles) {
       final path = await _filePath(_subtitleFile(itemId, track.index));
       if (File(path).existsSync()) subtitles[track.index] = path;
     }
