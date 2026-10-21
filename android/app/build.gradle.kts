@@ -49,6 +49,21 @@ android {
         }
     }
 
+    // Moteur libmdk (paquet fvp) : sert seulement sur iPhone et iPad, Android
+    // lit avec ExoPlayer. Ses fichiers pèseraient 36 Mo de plus dans l'apk
+    // (fvp démarre sans eux : il le note juste dans le journal).
+    packaging {
+        jniLibs {
+            excludes += listOf(
+                "**/libmdk.so",
+                "**/libfvp.so",
+                "**/libffmpeg.so",
+                "**/libass.so",
+                "**/libdav1d.so",
+            )
+        }
+    }
+
     buildTypes {
         release {
             signingConfig = if (keyProperties.isNotEmpty()) {

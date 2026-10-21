@@ -4,12 +4,14 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/gestures.dart' show kBackMouseButton;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:fvp/fvp.dart' as fvp;
 import 'package:media_kit/media_kit.dart';
 
 import 'api/jellyfin_api.dart';
 import 'screens/start_screen.dart';
 import 'services/device_capabilities.dart';
 import 'services/download_manager.dart';
+import 'services/video_engine.dart';
 import 'theme/app_theme.dart';
 import 'widgets/tv_focus.dart';
 
@@ -28,6 +30,15 @@ Future<void> main() async {
   }
   // Prépare le moteur vidéo (media_kit), absent des télés Samsung
   if (!DeviceCapabilities.isTizen) MediaKit.ensureInitialized();
+  // iPhone, iPad : video_player passe par libmdk (puce vidéo, image
+  // partagée avec Flutter sans recopie) au lieu d'AVPlayer
+  if (usesMdk) {
+    fvp.registerWith(
+      options: {
+        'platforms': ['ios'],
+      },
+    );
+  }
   // Vraie version de l'appli (Paramètres, en-tête envoyé au serveur)
   await JellyfinApi.loadClientVersion();
   // Reprend le suivi des téléchargements (terminés ou en cours)

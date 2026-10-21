@@ -24,6 +24,10 @@ class ExoEngine implements VideoEngine {
   /// Vidéo en cours (une nouvelle à chaque ouverture).
   final _current = ValueNotifier<VideoPlayerController?>(null);
 
+  /// Vidéo en cours, pour un moteur qui reprend celui-ci (libmdk).
+  @protected
+  VideoPlayerController? get controller => _current.value;
+
   final _position = StreamController<Duration>.broadcast();
   final _playing = StreamController<bool>.broadcast();
   final _buffering = StreamController<bool>.broadcast();

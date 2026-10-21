@@ -221,6 +221,11 @@ class PlayerCodecs {
     containers: tizenContainers,
   );
 
+  /// libmdk (iPhone, iPad) : mêmes décodeurs FFmpeg que mpv (pas de
+  /// TrueHD, converti) ; sous-titres envoyés à part en SRT par le serveur
+  /// et affichés par l'appli, comme avec ExoPlayer.
+  static final mdk = builtIn.withoutFileSubtitles();
+
   /// Lit la réponse du lecteur à « decoder-list » (liste JSON d'objets
   /// avec un champ « codec »). Null si la réponse est illisible.
   static PlayerCodecs? fromDecoderList(String text) {

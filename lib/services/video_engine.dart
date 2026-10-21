@@ -4,11 +4,15 @@ import 'package:flutter/widgets.dart';
 import '../models/media_track.dart';
 import 'device_capabilities.dart';
 import 'exo_engine.dart';
+import 'mdk_engine.dart';
 import 'mpv_engine.dart';
 import 'tizen_engine.dart';
 
 /// Vrai si cet appareil lit avec ExoPlayer (Android).
 bool get usesExoPlayer => defaultTargetPlatform == TargetPlatform.android;
+
+/// Vrai si cet appareil lit avec libmdk (iPhone, iPad).
+bool get usesMdk => defaultTargetPlatform == TargetPlatform.iOS;
 
 /// Moteur vidéo : ce dont le lecteur a besoin, quel que soit l'appareil.
 /// Chaque appareil branche le meilleur moteur pour lui derrière cette même
@@ -16,10 +20,11 @@ bool get usesExoPlayer => defaultTargetPlatform == TargetPlatform.android;
 /// elle.
 abstract class VideoEngine {
   /// Le meilleur moteur pour cet appareil : ExoPlayer sur Android (télé,
-  /// téléphone, tablette), le lecteur de la télé sur Samsung, mpv ailleurs
-  /// (iPhone, iPad, PC).
+  /// téléphone, tablette), libmdk sur iPhone et iPad, le lecteur de la télé
+  /// sur Samsung, mpv sur PC.
   factory VideoEngine.forDevice() {
     if (usesExoPlayer) return ExoEngine();
+    if (usesMdk) return MdkEngine();
     if (DeviceCapabilities.isTizen) return TizenEngine();
     return MpvEngine();
   }

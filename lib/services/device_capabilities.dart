@@ -94,6 +94,8 @@ class DeviceCapabilities {
     // ExoPlayer (Android) : les décodeurs d'Android ; mpv : les siens
     final player = playerCodecs = usesExoPlayer
         ? PlayerCodecs.android(map?['types'] as List<Object?>?)
+        : usesMdk
+        ? PlayerCodecs.mdk
         : await _readPlayerCodecs();
     if (map != null) {
       return DeviceDecoders.fromMap(map, allow10Bit: !emulator, player: player);
