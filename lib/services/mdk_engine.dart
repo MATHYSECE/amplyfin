@@ -20,7 +20,11 @@ class MdkEngine extends ExoEngine {
   /// propre police : on ne garde que ceux qu'on a choisis, et c'est notre
   /// afficheur qui dessine leur texte (police et taille de l'appli).
   @override
-  void prepare(VideoPlayerController controller) => _applyFileTrack(controller);
+  void prepare(VideoPlayerController controller) {
+    // libmdk lit la piste mais ne la dessine pas dans l'image
+    controller.setProperty('subtitle', '0');
+    _applyFileTrack(controller);
+  }
 
   /// Sous-titres du fichier (vidéo téléchargée) : libmdk les lit et nous
   /// passe le texte. Sinon : comme ExoPlayer (SRT envoyé par le serveur).
