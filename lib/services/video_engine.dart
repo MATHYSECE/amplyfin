@@ -33,8 +33,11 @@ abstract class VideoEngine {
   /// seconde), utile au lissage des films sur PC.
   Future<void> initialize({required double refreshRate});
 
-  /// La vidéo elle-même, sans commandes ni sous-titres.
-  Widget buildVideo();
+  /// La vidéo elle-même, sans commandes ni sous-titres. [fill] : agrandie
+  /// (proportions gardées) jusqu'à remplir l'écran, ce qui dépasse est
+  /// coupé (bandes noires du fichier, ou un peu d'image) ; sinon l'image
+  /// entière.
+  Widget buildVideo({bool fill = false});
 
   /// Ouvre une vidéo (et démarre la lecture).
   Future<void> open(EngineMedia media);

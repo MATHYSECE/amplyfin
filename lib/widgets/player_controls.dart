@@ -58,6 +58,7 @@ class PlayerControls extends StatefulWidget {
     this.onVisibleChanged,
     this.onKeyActivity,
     this.onSelectOverride,
+    this.onZoom,
   });
 
   final VideoEngine player;
@@ -89,6 +90,10 @@ class PlayerControls extends StatefulWidget {
   /// l'intro » affiché) ; renvoie vrai s'il a servi.
   final bool Function()? onSelectOverride;
 
+  /// Téléphone, tablette : pincer la vidéo. Vrai (doigts écartés) : remplir
+  /// l'écran ; faux (doigts rapprochés) : image entière. Null : pas de zoom.
+  final ValueChanged<bool>? onZoom;
+
   @override
   State<PlayerControls> createState() => PlayerControlsState();
 }
@@ -112,6 +117,20 @@ class PlayerControlsState extends State<PlayerControls> {
   // Retour visuel du double appui : -1 recul, 1 avance, 0 rien
   int _seekFeedback = 0;
   Timer? _seekFeedbackTimer;
+
+  /// Doigts posés sur la vidéo (pour le pincer) et écart au début du
+  /// pincer ; un seul changement de zoom par pincer.
+  final _fingers = <int, Offset>{};
+  double? _pinchStart;
+  bool _pinchUsed = false;
+
+  /// Vrai depuis que deux doigts sont posés, jusqu'à ce que tous soient
+  /// levés : aucun réglage de luminosité / volume pendant ce temps.
+  bool _pinching = false;
+
+  /// Message « Plein écran » / « Image entière », un instant.
+  String? _zoomFeedback;
+  Timer? _zoomFeedbackTimer;
   Offset? _doubleTapPosition;
 
   // Télé : le lecteur reçoit les touches quand les commandes sont masquées,
@@ -181,6 +200,7 @@ class PlayerControlsState extends State<PlayerControls> {
     _hideTimer?.cancel();
     _levelTimer?.cancel();
     _seekFeedbackTimer?.cancel();
+    _zoomFeedbackTimer?.cancel();
     _playingSubscription?.cancel();
     _rootFocus.dispose();
     _playFocus.dispose();
@@ -414,9 +434,56 @@ class PlayerControlsState extends State<PlayerControls> {
     });
   }
 
+  // ---------- Zoom (pincer) ----------
+
+  /// Écart entre les deux premiers doigts posés.
+  double? get _fingerSpread {
+    if (_fingers.length < 2) return null;
+    final [a, b, ...] = _fingers.values.toList();
+    return (a - b).distance;
+  }
+
+  void _onFingerDown(PointerDownEvent event) {
+    _fingers[event.pointer] = event.localPosition;
+    if (_fingers.length != 2) return;
+    // Deux doigts : c'est un pincer, pas un réglage de luminosité / volume
+    _pinchStart = _fingerSpread;
+    _pinchUsed = false;
+    _pinching = true;
+    if (_level != null) setState(() => _level = null);
+  }
+
+  void _onFingerMove(PointerMoveEvent event) {
+    if (!_fingers.containsKey(event.pointer)) return;
+    _fingers[event.pointer] = event.localPosition;
+    final start = _pinchStart;
+    final spread = _fingerSpread;
+    if (start == null || spread == null || start == 0 || _pinchUsed) return;
+    final ratio = spread / start;
+    if (ratio > 1.2) _zoom(true);
+    if (ratio < 0.83) _zoom(false);
+  }
+
+  void _onFingerUp(PointerEvent event) {
+    _fingers.remove(event.pointer);
+    if (_fingers.length < 2) _pinchStart = null;
+    if (_fingers.isEmpty) _pinching = false;
+  }
+
+  void _zoom(bool fill) {
+    _pinchUsed = true;
+    widget.onZoom?.call(fill);
+    setState(() => _zoomFeedback = fill ? 'Plein écran' : 'Image entière');
+    _zoomFeedbackTimer?.cancel();
+    _zoomFeedbackTimer = Timer(const Duration(milliseconds: 900), () {
+      if (mounted) setState(() => _zoomFeedback = null);
+    });
+  }
+
   // ---------- Luminosité et volume ----------
 
   void _onLevelDragStart(DragStartDetails details, double width) {
+    if (_pinching) return;
     _levelTimer?.cancel();
     setState(() {
       _level = details.localPosition.dx < width / 2
@@ -426,6 +493,8 @@ class PlayerControlsState extends State<PlayerControls> {
   }
 
   void _onLevelDragUpdate(DragUpdateDetails details, double height) {
+    // Pincer en cours : le doigt qui glisse ne règle rien
+    if (_pinching) return;
     // Glisser sur 70 % de la hauteur de l'écran = de 0 à 100 %
     final change = -details.delta.dy / (height * 0.7);
     setState(() {
@@ -565,6 +634,10 @@ class PlayerControlsState extends State<PlayerControls> {
             // volume, pas de glissement)
             Listener(
               onPointerSignal: _desktop ? _onPointerSignal : null,
+              onPointerDown: widget.onZoom == null ? null : _onFingerDown,
+              onPointerMove: widget.onZoom == null ? null : _onFingerMove,
+              onPointerUp: widget.onZoom == null ? null : _onFingerUp,
+              onPointerCancel: widget.onZoom == null ? null : _onFingerUp,
               child: GestureDetector(
                 behavior: HitTestBehavior.opaque,
                 onTap: _desktop ? _playOrPause : _toggleVisible,
@@ -639,6 +712,13 @@ class PlayerControlsState extends State<PlayerControls> {
               bottom: 0,
               child: Center(
                 child: _SeekBubble(visible: _seekFeedback > 0, label: '+10 s'),
+              ),
+            ),
+            // Retour visuel du pincer
+            Center(
+              child: _SeekBubble(
+                visible: _zoomFeedback != null,
+                label: _zoomFeedback ?? '',
               ),
             ),
             // Roue quand la vidéo charge (même commandes masquées)

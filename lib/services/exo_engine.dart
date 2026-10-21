@@ -108,27 +108,41 @@ class ExoEngine implements VideoEngine {
   }
 
   @override
-  Widget buildVideo() => ValueListenableBuilder<VideoPlayerController?>(
-    valueListenable: _current,
-    builder: (context, controller, _) {
-      if (controller == null) return const SizedBox.shrink();
-      // Redessinée quand la taille de l'image est connue
-      return ValueListenableBuilder<VideoPlayerValue>(
-        valueListenable: controller,
-        builder: (context, value, _) {
-          if (!value.isInitialized || value.size.isEmpty) {
-            return const SizedBox.shrink();
-          }
-          return Center(
-            child: AspectRatio(
-              aspectRatio: value.aspectRatio,
-              child: VideoPlayer(controller),
-            ),
+  Widget buildVideo({bool fill = false}) =>
+      ValueListenableBuilder<VideoPlayerController?>(
+        valueListenable: _current,
+        builder: (context, controller, _) {
+          if (controller == null) return const SizedBox.shrink();
+          // Redessinée quand la taille de l'image est connue
+          return ValueListenableBuilder<VideoPlayerValue>(
+            valueListenable: controller,
+            builder: (context, value, _) {
+              if (!value.isInitialized || value.size.isEmpty) {
+                return const SizedBox.shrink();
+              }
+              if (fill) {
+                return ClipRect(
+                  child: SizedBox.expand(
+                    child: FittedBox(
+                      fit: BoxFit.cover,
+                      child: SizedBox.fromSize(
+                        size: value.size,
+                        child: VideoPlayer(controller),
+                      ),
+                    ),
+                  ),
+                );
+              }
+              return Center(
+                child: AspectRatio(
+                  aspectRatio: value.aspectRatio,
+                  child: VideoPlayer(controller),
+                ),
+              );
+            },
           );
         },
       );
-    },
-  );
 
   @override
   Future<void> open(EngineMedia media) async {

@@ -98,28 +98,30 @@ class TizenEngine implements VideoEngine {
     // Rien à préparer : l'affichage est créé avec chaque vidéo
   }
 
+  /// Télé : toujours l'image entière (pas de geste pour zoomer).
   @override
-  Widget buildVideo() => ValueListenableBuilder<VideoPlayerController?>(
-    valueListenable: _current,
-    builder: (context, controller, _) {
-      if (controller == null) return const SizedBox.shrink();
-      // Redessinée quand la taille de l'image est connue
-      return ValueListenableBuilder<VideoPlayerValue>(
-        valueListenable: controller,
-        builder: (context, value, _) {
-          if (!value.isInitialized || value.size.isEmpty) {
-            return const SizedBox.shrink();
-          }
-          return Center(
-            child: AspectRatio(
-              aspectRatio: value.aspectRatio,
-              child: VideoPlayer(controller),
-            ),
+  Widget buildVideo({bool fill = false}) =>
+      ValueListenableBuilder<VideoPlayerController?>(
+        valueListenable: _current,
+        builder: (context, controller, _) {
+          if (controller == null) return const SizedBox.shrink();
+          // Redessinée quand la taille de l'image est connue
+          return ValueListenableBuilder<VideoPlayerValue>(
+            valueListenable: controller,
+            builder: (context, value, _) {
+              if (!value.isInitialized || value.size.isEmpty) {
+                return const SizedBox.shrink();
+              }
+              return Center(
+                child: AspectRatio(
+                  aspectRatio: value.aspectRatio,
+                  child: VideoPlayer(controller),
+                ),
+              );
+            },
           );
         },
       );
-    },
-  );
 
   @override
   Future<void> open(EngineMedia media) async {

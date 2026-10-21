@@ -110,6 +110,10 @@ class _PlayerScreenState extends State<PlayerScreen> {
   /// Évite de montrer deux fois la fenêtre « lecture directe impossible ».
   bool _decodeProblemShown = false;
 
+  /// Vidéo agrandie pour remplir l'écran (pincer) : jamais au départ, ni
+  /// pour l'épisode suivant (choix de l'utilisateur).
+  bool _fill = false;
+
   /// Nouveaux essais déjà faits pour les sous-titres à part actuels.
   int _subtitleAttempts = 0;
 
@@ -710,6 +714,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
       _segments = const MediaSegments();
       _nextDismissed = false;
       _decodeProblemShown = false;
+      _fill = false;
     });
     // Ancienne séance déjà signalée terminée : _open ne la signale pas
     _info.value = null;
@@ -1058,7 +1063,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
             children: [
               if (_engineReady) ...[
                 // La vidéo seule, sans commandes ni sous-titres
-                _player.buildVideo(),
+                _player.buildVideo(fill: _fill),
                 // Nos sous-titres, sous les commandes
                 SubtitleOverlay(
                   player: _player,
@@ -1086,6 +1091,11 @@ class _PlayerScreenState extends State<PlayerScreen> {
                   onQuality: _chooseQuality,
                   onVisibleChanged: (visible) =>
                       _controlsVisible.value = visible,
+                  // Téléphone, tablette : pincer pour remplir l'écran
+                  onZoom:
+                      DeviceCapabilities.isTv || DeviceCapabilities.isDesktop
+                      ? null
+                      : (fill) => setState(() => _fill = fill),
                 ),
               ],
               // Infos de lecture (menu Qualité), en haut à gauche

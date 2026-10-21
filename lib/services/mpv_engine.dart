@@ -181,13 +181,14 @@ class MpvEngine implements VideoEngine {
   }
 
   @override
-  Widget buildVideo() {
+  Widget buildVideo({bool fill = false}) {
     final controller = _controller;
     if (controller == null) return const SizedBox.shrink();
     // La vidéo seule (commandes et sous-titres de media_kit désactivés)
     return Video(
       controller: controller,
       controls: NoVideoControls,
+      fit: fill ? BoxFit.cover : BoxFit.contain,
       subtitleViewConfiguration: const SubtitleViewConfiguration(
         visible: false,
       ),
