@@ -51,6 +51,7 @@ class PlayerScreen extends StatefulWidget {
     this.tracks = const TrackSelection(),
     this.start = Duration.zero,
     this.initialInfo,
+    this.trailer = false,
   });
 
   final JellyfinApi api;
@@ -74,6 +75,11 @@ class PlayerScreen extends StatefulWidget {
   /// Réponse du serveur déjà obtenue avant d'ouvrir le lecteur (la fiche
   /// vérifie si la lecture directe est possible) : évite de redemander.
   final PlaybackInfo? initialInfo;
+
+  /// Bande-annonce : rien n'est enregistré sur le serveur (elle
+  /// apparaîtrait sinon dans « Continuer à regarder »), ni épisode
+  /// suivant, ni intro à passer.
+  final bool trailer;
 
   @override
   State<PlayerScreen> createState() => _PlayerScreenState();
@@ -287,6 +293,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
       start: widget.start,
       prefetched: widget.initialInfo,
     );
+    if (widget.trailer) return;
     _prepareNext();
     _loadSegments();
   }
@@ -304,7 +311,12 @@ class _PlayerScreenState extends State<PlayerScreen> {
     }
     // Prévient le serveur (il arrête une éventuelle conversion)
     final info = _info.value;
-    if (info != null) {
+    if (info != null && widget.trailer) {
+      // Bande-annonce convertie : le serveur arrête la conversion
+      if (!info.directPlay) {
+        _report(() => widget.api.reportPlaybackStopped(info, Duration.zero));
+      }
+    } else if (info != null) {
       final position = _player.state.position;
       _report(() => widget.api.reportPlaybackStopped(info, position));
       if (info.isLocal) {
@@ -383,7 +395,10 @@ class _PlayerScreenState extends State<PlayerScreen> {
       // Changement de qualité : l'ancienne séance est terminée
       final previous = _info.value;
       if (previous != null) {
-        _report(() => widget.api.reportPlaybackStopped(previous, start));
+        // (bande-annonce : seulement pour arrêter une conversion)
+        if (!widget.trailer || !previous.directPlay) {
+          _report(() => widget.api.reportPlaybackStopped(previous, start));
+        }
         // Oublie l'ancienne vidéo (pistes, durée) avant d'ouvrir la nouvelle :
         // les pistes de la nouvelle seront appliquées une fois connues
         await _player.stop();
@@ -410,7 +425,9 @@ class _PlayerScreenState extends State<PlayerScreen> {
           ? 'SON CONVERTI'
           : 'CONVERTI';
       setState(() => _quality = quality);
-      _report(() => widget.api.reportPlaybackStart(info, start));
+      if (!widget.trailer) {
+        _report(() => widget.api.reportPlaybackStart(info, start));
+      }
       await _applyTracks(info);
     } on JellyfinException catch (e) {
       if (mounted) setState(() => _error = e.message);
@@ -533,7 +550,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
 
   void _reportProgress() {
     final info = _info.value;
-    if (info == null) return;
+    if (info == null || widget.trailer) return;
     final state = _player.state;
     // Fichier téléchargé : position aussi gardée sur le téléphone (si
     // l'appli est fermée en pleine lecture, on reprend quand même)

@@ -33,6 +33,7 @@ Future<String?> launchPlayback(
   String? subtitle,
   TrackSelection tracks = const TrackSelection(),
   Duration start = Duration.zero,
+  bool trailer = false,
 }) async {
   final PlaybackInfo info;
   final decoders = await DeviceCapabilities.decoders();
@@ -93,6 +94,7 @@ Future<String?> launchPlayback(
         start: start,
         // Réponse déjà obtenue : le lecteur démarre sans redemander
         initialInfo: info,
+        trailer: trailer,
       ),
     ),
   );

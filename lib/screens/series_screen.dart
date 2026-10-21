@@ -19,6 +19,7 @@ import '../services/offline_progress.dart';
 import '../services/playback_launcher.dart';
 import '../services/track_preferences.dart';
 import '../theme/app_theme.dart';
+import '../widgets/trailer_button.dart';
 import '../widgets/details_page.dart';
 import '../widgets/download_controls.dart';
 import '../widgets/track_picker.dart';
@@ -428,6 +429,13 @@ class _SeriesScreenState extends State<SeriesScreen> {
       below: twoColumns ? _buildSeasons(twoColumns: true) : const [],
       children: [
         if (!twoColumns) ...[overview, const SizedBox(height: 26)],
+        TrailerButton(
+          api: widget.api,
+          session: widget.session,
+          itemId: series.id,
+          title: series.name,
+          padding: const EdgeInsets.only(bottom: 26),
+        ),
         Text(
           'Langues pour toute la série',
           style: Theme.of(context).textTheme.labelLarge

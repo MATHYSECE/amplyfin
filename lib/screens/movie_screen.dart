@@ -12,6 +12,7 @@ import '../services/download_manager.dart';
 import '../services/offline_progress.dart';
 import '../services/playback_launcher.dart';
 import '../theme/app_theme.dart';
+import '../widgets/trailer_button.dart';
 import '../widgets/details_page.dart';
 import '../widgets/download_controls.dart';
 import '../widgets/track_picker.dart';
@@ -242,6 +243,13 @@ class _MovieScreenState extends State<MovieScreen> {
             onPressed: details == null ? null : () => _toggleWatched(details),
           ),
         ],
+      ),
+      TrailerButton(
+        api: widget.api,
+        session: widget.session,
+        itemId: widget.movie.id,
+        title: widget.movie.name,
+        padding: const EdgeInsets.only(top: 14),
       ),
       OfflineNote(itemId: widget.movie.id),
     ];

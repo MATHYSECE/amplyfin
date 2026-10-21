@@ -18,6 +18,7 @@ import '../models/season.dart';
 import '../models/server_admin.dart';
 import '../models/session.dart';
 import '../models/track_choice.dart';
+import '../models/trailer.dart';
 import '../models/user_settings.dart';
 import '../models/watch_progress.dart';
 import 'device_profile.dart';
@@ -239,6 +240,24 @@ class JellyfinApi {
       query: {'userId': userId},
     );
     return json as Map<String, dynamic>;
+  }
+
+  /// GET /Items/{id}/LocalTrailers?userId=… : les bandes-annonces rangées
+  /// à côté d'un film ou d'une série sur le serveur (liste vide s'il n'y en
+  /// a pas).
+  Future<List<Trailer>> getLocalTrailers({
+    required String userId,
+    required String itemId,
+  }) async {
+    final json = await _send(
+      'GET',
+      '/Items/$itemId/LocalTrailers',
+      query: {'userId': userId},
+    );
+    return [
+      for (final item in (json as List<dynamic>?) ?? const [])
+        Trailer.fromJson(item as Map<String, dynamic>),
+    ];
   }
 
   /// GET /Items/{id}/Download : le fichier d'origine, pour le télécharger
