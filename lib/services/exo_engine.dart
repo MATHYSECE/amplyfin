@@ -60,6 +60,25 @@ class ExoEngine implements VideoEngine {
   SrtSubtitles? _srt;
   List<String> _lines = const [];
 
+  /// Sous-titre du fichier vidéo lu par le moteur lui-même (libmdk) : texte
+  /// et moment où il s'affiche. Null : aucun.
+  ({Duration start, Duration end, List<String> text})? _cue;
+
+  /// Moteur qui lit lui-même les sous-titres du fichier (libmdk) : nouveau
+  /// texte à afficher de [start] à [end]. Null pour ne plus rien afficher.
+  @protected
+  void showFileCue(Duration start, Duration end, List<String> text) {
+    _cue = (start: start, end: end, text: text);
+    _showSubtitlesAt(state.position);
+  }
+
+  /// Oublie le sous-titre du fichier en cours.
+  @protected
+  void clearFileCue() {
+    _cue = null;
+    _showSubtitlesAt(state.position);
+  }
+
   /// Numéro de la demande de sous-titres : une réponse arrivée après un
   /// autre choix est ignorée.
   int _subtitleRequest = 0;
@@ -253,7 +272,12 @@ class ExoEngine implements VideoEngine {
 
   /// Met à jour les lignes affichées pour la position [position].
   void _showSubtitlesAt(Duration position) {
-    final lines = _srt?.linesAt(position) ?? const <String>[];
+    final cue = _cue;
+    final lines =
+        _srt?.linesAt(position) ??
+        (cue != null && position >= cue.start && position < cue.end
+            ? cue.text
+            : const <String>[]);
     if (listEquals(lines, _lines)) return;
     _lines = lines;
     _subtitle.add(lines);
@@ -301,6 +325,7 @@ class ExoEngine implements VideoEngine {
     // Les sous-titres sont choisis à nouveau pour chaque vidéo
     _subtitleRequest++;
     _srt = null;
+    _cue = null;
     _showSubtitlesAt(Duration.zero);
     await controller?.dispose();
   }

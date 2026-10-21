@@ -3,6 +3,7 @@ import 'package:video_player/video_player.dart';
 
 import '../models/media_track.dart';
 import 'exo_engine.dart';
+import 'video_engine.dart';
 
 /// Moteur vidéo de l'iPhone et de l'iPad : libmdk (paquet fvp), branché
 /// sur video_player. Il lit les MKV tels quels (Direct Play), décode avec
@@ -11,12 +12,52 @@ import 'exo_engine.dart';
 /// Tout le reste (sous-titres SRT, écran allumé, erreurs) est celui
 /// d'ExoPlayer, qui passe aussi par video_player.
 class MdkEngine extends ExoEngine {
+  /// Piste de sous-titres du fichier à lire (n-ième, depuis 0), pour une
+  /// vidéo téléchargée lue sans le serveur. Null : aucune.
+  int? _fileTrack;
+
   /// libmdk affiche de lui-même les sous-titres du fichier (MKV), dans sa
-  /// propre police, dessinés dans l'image : on les coupe, seuls les nôtres
-  /// (SRT envoyé par le serveur, police et taille de l'appli) s'affichent.
+  /// propre police : on ne garde que ceux qu'on a choisis, et c'est notre
+  /// afficheur qui dessine leur texte (police et taille de l'appli).
   @override
-  void prepare(VideoPlayerController controller) {
-    controller.setSubtitleTracks([]);
+  void prepare(VideoPlayerController controller) => _applyFileTrack(controller);
+
+  /// Sous-titres du fichier (vidéo téléchargée) : libmdk les lit et nous
+  /// passe le texte. Sinon : comme ExoPlayer (SRT envoyé par le serveur).
+  @override
+  Future<void> selectSubtitles(SubtitleSource source) async {
+    final number = source is EmbeddedSubtitles
+        ? playerTrackId(source.all, source.track)
+        : null;
+    _fileTrack = number == null ? null : number - 1;
+    final current = controller;
+    if (current != null && current.value.isInitialized) {
+      _applyFileTrack(current);
+    }
+    await super.selectSubtitles(
+      source is EmbeddedSubtitles ? const NoSubtitles() : source,
+    );
+  }
+
+  /// Active la piste [_fileTrack] de [current] (ou aucune) et reçoit son
+  /// texte.
+  void _applyFileTrack(VideoPlayerController current) {
+    clearFileCue();
+    final track = _fileTrack;
+    if (track == null) {
+      current.onSubtitleText(null);
+      current.setSubtitleTracks([]);
+      return;
+    }
+    current.onSubtitleText((start, end, text) {
+      if (controller != current) return;
+      showFileCue(
+        Duration(milliseconds: (start * 1000).round()),
+        Duration(milliseconds: (end * 1000).round()),
+        text,
+      );
+    });
+    current.setSubtitleTracks([track]);
   }
 
   /// libmdk liste les pistes audio dans l'ordre du fichier : la n-ième
