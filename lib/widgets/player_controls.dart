@@ -816,6 +816,7 @@ class PlayerControlsState extends State<PlayerControls> {
                   onInteraction: _interacted,
                   focusNode: _tv ? _seekFocus : null,
                   scrubber: _tv ? _scrubber : null,
+                  active: _visible,
                 ),
               ],
             ),

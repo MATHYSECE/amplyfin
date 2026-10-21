@@ -59,9 +59,79 @@ class MpvEngine implements VideoEngine {
       _player,
       configuration: _videoConfiguration(),
     );
+    await _saveEnergy();
     if (defaultTargetPlatform == TargetPlatform.windows) {
       await _smoothMotion(refreshRate);
     }
+  }
+
+  /// Dessin de l'image le plus léger possible (batterie) : mise à l'échelle
+  /// simple, sans traitements que l'œil ne voit presque pas sur un écran de
+  /// téléphone ou de portable (lissage des dégradés, mesure de la
+  /// luminosité HDR à chaque image…).
+  /// iPhone : la puce vidéo décode, 10 bits compris ; elle remet l'image en
+  /// 8 bits (nv12), le seul format qu'elle sait passer directement à
+  /// l'affichage de media_kit (sinon mpv décoderait avec le processeur).
+  Future<void> _saveEnergy() async {
+    final platform = _player.platform;
+    if (platform is! NativePlayer) return;
+    final settings = {
+      'scale': 'bilinear',
+      'dscale': 'bilinear',
+      'cscale': 'bilinear',
+      'dither-depth': 'no',
+      'correct-downscaling': 'no',
+      'linear-downscaling': 'no',
+      'sigmoid-upscaling': 'no',
+      'deband': 'no',
+      'hdr-compute-peak': 'no',
+      if (defaultTargetPlatform == TargetPlatform.iOS) ...{
+        'hwdec-image-format': 'nv12',
+        // Ancien nom du même réglage (versions précédentes de mpv)
+        'videotoolbox-format': 'nv12',
+      },
+    };
+    for (final MapEntry(:key, :value) in settings.entries) {
+      try {
+        await platform.setProperty(key, value);
+      } on Object {
+        // Réglage inconnu de cette version de mpv : on continue
+      }
+    }
+  }
+
+  @override
+  Future<List<String>> playbackDetails() async {
+    final platform = _player.platform;
+    if (platform is! NativePlayer) return const ['Lecteur : mpv'];
+    Future<String> read(String name) async {
+      try {
+        return await platform.getProperty(name);
+      } on Object {
+        return '';
+      }
+    }
+
+    final hwdec = await read('hwdec-current');
+    final codec = await read('video-codec');
+    final format = await read('video-params/pixelformat');
+    final width = await read('video-params/w');
+    final height = await read('video-params/h');
+    final fps = double.tryParse(await read('estimated-vf-fps'));
+    final dropped = await read('frame-drop-count');
+    final decoderDropped = await read('decoder-frame-drop-count');
+    final onChip = hwdec.isNotEmpty && hwdec != 'no';
+    return [
+      'Lecteur : mpv',
+      'Décodage : ${onChip ? 'puce vidéo ($hwdec)' : 'processeur'}',
+      if (codec.isNotEmpty) 'Vidéo : ${codec.split(' ').first}',
+      if (width.isNotEmpty)
+        'Image : $width × $height'
+            '${format.isEmpty ? '' : ' · $format'}'
+            '${fps == null ? '' : ' · ${fps.toStringAsFixed(fps % 1 == 0 ? 0 : 3)} i/s'}',
+      'Images perdues : ${dropped.isEmpty ? 0 : dropped}'
+          '${decoderDropped.isEmpty || decoderDropped == '0' ? '' : ' (décodeur : $decoderDropped)'}',
+    ];
   }
 
   /// Réglage de l'affichage vidéo. Sur Android, la puce vidéo décode l'image
@@ -81,6 +151,10 @@ class MpvEngine implements VideoEngine {
     }
     if (defaultTargetPlatform == TargetPlatform.windows) {
       return const VideoControllerConfiguration(hwdec: 'd3d11va,dxva2,auto');
+    }
+    if (defaultTargetPlatform == TargetPlatform.iOS) {
+      // Puce vidéo de l'iPhone / iPad (VideoToolbox) en priorité
+      return const VideoControllerConfiguration(hwdec: 'videotoolbox,auto');
     }
     return const VideoControllerConfiguration();
   }

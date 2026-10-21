@@ -81,6 +81,18 @@ class ExoEngine implements VideoEngine {
     );
   }
 
+  /// ExoPlayer passe toujours par les décodeurs d'Android (la puce pour la
+  /// vidéo) : il ne dit pas lequel, seulement la taille de l'image.
+  @override
+  Future<List<String>> playbackDetails() async {
+    final value = _current.value?.value;
+    return [
+      'Lecteur : ExoPlayer (Android)',
+      if (value != null && !value.size.isEmpty)
+        'Image : ${value.size.width.round()} × ${value.size.height.round()}',
+    ];
+  }
+
   @override
   Future<void> initialize({required double refreshRate}) async {
     // Rien à préparer : l'affichage est créé avec chaque vidéo

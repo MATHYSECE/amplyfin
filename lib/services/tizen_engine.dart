@@ -81,6 +81,18 @@ class TizenEngine implements VideoEngine {
     );
   }
 
+  /// Le lecteur de la télé décode toujours avec sa puce : seule la taille
+  /// de l'image est connue.
+  @override
+  Future<List<String>> playbackDetails() async {
+    final value = _current.value?.value;
+    return [
+      'Lecteur : télé Samsung (puce de la télé)',
+      if (value != null && !value.size.isEmpty)
+        'Image : ${value.size.width.round()} × ${value.size.height.round()}',
+    ];
+  }
+
   @override
   Future<void> initialize({required double refreshRate}) async {
     // Rien à préparer : l'affichage est créé avec chaque vidéo

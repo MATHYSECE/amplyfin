@@ -146,6 +146,11 @@ class _PlayerScreenState extends State<PlayerScreen> {
   /// Attente lancée par une erreur du moteur avant le démarrage.
   Timer? _startupErrorTimer;
 
+  /// Panneau « Infos de lecture » (menu Qualité) : lignes affichées, mises
+  /// à jour toutes les 2 s tant qu'il est ouvert.
+  List<String>? _details;
+  Timer? _detailsTimer;
+
   // ---------- Épisode suivant ----------
 
   /// Élément lu en ce moment (change quand on enchaîne sur l'épisode suivant).
@@ -286,6 +291,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
   void dispose() {
     _progressTimer?.cancel();
     _startupErrorTimer?.cancel();
+    _detailsTimer?.cancel();
     _skipFocus.dispose();
     _nextFocus.dispose();
     _stillFocus.dispose();
@@ -982,9 +988,35 @@ class _PlayerScreenState extends State<PlayerScreen> {
           ),
       ],
       selected: _quality,
+      extra: PickerExtra(
+        icon: Icons.info_outline_rounded,
+        label: 'Infos de lecture',
+        value: _details == null ? 'Masquées' : 'Affichées',
+        onTap: _toggleDetails,
+      ),
     );
     if (chosen == null || chosen.value == _quality || !mounted) return;
     await _open(chosen.value, start: _player.state.position);
+  }
+
+  /// Affiche ou masque le panneau « Infos de lecture ».
+  void _toggleDetails() {
+    _detailsTimer?.cancel();
+    if (_details != null) {
+      setState(() => _details = null);
+      return;
+    }
+    Future<void> refresh() async {
+      final lines = await _player.playbackDetails();
+      if (mounted && _detailsTimer != null) setState(() => _details = lines);
+    }
+
+    _detailsTimer = Timer.periodic(
+      const Duration(seconds: 2),
+      (_) => refresh(),
+    );
+    setState(() => _details = const ['…']);
+    refresh();
   }
 
   @override
@@ -1052,6 +1084,27 @@ class _PlayerScreenState extends State<PlayerScreen> {
                       _controlsVisible.value = visible,
                 ),
               ],
+              // Infos de lecture (menu Qualité), en haut à gauche
+              if (_details case final details?)
+                Positioned(
+                  left: insets.left + 24,
+                  top: insets.top + 96,
+                  child: IgnorePointer(
+                    child: DecoratedBox(
+                      decoration: BoxDecoration(
+                        color: AppColors.scrim70,
+                        borderRadius: BorderRadius.circular(AppRadius.poster),
+                      ),
+                      child: Padding(
+                        padding: const EdgeInsets.all(12),
+                        child: Text(
+                          details.join('\n'),
+                          style: Theme.of(context).textTheme.bodySmall,
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
               // Fondu au noir pendant le passage à l'épisode suivant
               IgnorePointer(
                 child: AnimatedOpacity(

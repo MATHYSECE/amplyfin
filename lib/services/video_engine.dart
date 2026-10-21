@@ -57,6 +57,10 @@ abstract class VideoEngine {
   /// Libère le moteur (arrête d'abord la lecture).
   Future<void> dispose();
 
+  /// Lignes du panneau « Infos de lecture » : lecteur, décodage (puce ou
+  /// processeur), format, images perdues.
+  Future<List<String>> playbackDetails();
+
   /// État actuel.
   EngineState get state;
 

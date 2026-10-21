@@ -142,12 +142,18 @@ class SeekBar extends StatefulWidget {
     required this.onInteraction,
     this.focusNode,
     this.scrubber,
+    this.active = true,
   });
 
   final VideoEngine player;
   final VoidCallback onInteraction;
   final FocusNode? focusNode;
   final TvScrubber? scrubber;
+
+  /// Faux quand les commandes sont cachées : la barre ne suit plus la
+  /// lecture (sinon elle est redessinée à chaque image pour rien, ce qui
+  /// use la batterie). Elle se remet à jour dès qu'elle réapparaît.
+  final bool active;
 
   @override
   State<SeekBar> createState() => _SeekBarState();
@@ -172,7 +178,7 @@ class _SeekBarState extends State<SeekBar> {
   @override
   Widget build(BuildContext context) {
     Widget positionBar() => StreamBuilder<Duration>(
-      stream: _player.stream.position,
+      stream: widget.active ? _player.stream.position : null,
       initialData: _player.state.position,
       builder: (context, snapshot) =>
           _buildBar(context, snapshot.data ?? Duration.zero),
