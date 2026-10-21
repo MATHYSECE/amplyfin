@@ -1,4 +1,5 @@
 import 'package:fvp/fvp.dart';
+import 'package:video_player/video_player.dart';
 
 import '../models/media_track.dart';
 import 'exo_engine.dart';
@@ -10,6 +11,14 @@ import 'exo_engine.dart';
 /// Tout le reste (sous-titres SRT, écran allumé, erreurs) est celui
 /// d'ExoPlayer, qui passe aussi par video_player.
 class MdkEngine extends ExoEngine {
+  /// libmdk affiche de lui-même les sous-titres du fichier (MKV), dans sa
+  /// propre police, dessinés dans l'image : on les coupe, seuls les nôtres
+  /// (SRT envoyé par le serveur, police et taille de l'appli) s'affichent.
+  @override
+  void prepare(VideoPlayerController controller) {
+    controller.setSubtitleTracks([]);
+  }
+
   /// libmdk liste les pistes audio dans l'ordre du fichier : la n-ième
   /// piste audio du serveur est la n-ième ici (numérotées depuis 0).
   @override

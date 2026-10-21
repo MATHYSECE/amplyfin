@@ -28,6 +28,11 @@ class ExoEngine implements VideoEngine {
   @protected
   VideoPlayerController? get controller => _current.value;
 
+  /// Réglages propres au moteur, une fois la vidéo ouverte (avant la
+  /// lecture). Rien pour ExoPlayer.
+  @protected
+  void prepare(VideoPlayerController controller) {}
+
   final _position = StreamController<Duration>.broadcast();
   final _playing = StreamController<bool>.broadcast();
   final _buffering = StreamController<bool>.broadcast();
@@ -146,6 +151,7 @@ class ExoEngine implements VideoEngine {
     try {
       await controller.initialize();
       if (_current.value != controller) return;
+      prepare(controller);
       await controller.setVolume(_volume);
       if (media.start > Duration.zero) await controller.seekTo(media.start);
       await controller.play();
