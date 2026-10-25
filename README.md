@@ -55,6 +55,12 @@ d'un appareil à l'autre. Amplyfin part du principe inverse :
   **taille des sous-titres** réglable.
 - Langues préférées enregistrées sur ton compte Jellyfin, et retenues
   **série par série**.
+- **Pincer pour remplir l'écran** sur téléphone et tablette (fini les bandes
+  noires des films au format cinéma), image d'origine au départ.
+- **Bandes-annonces** : bouton sur la fiche des films et des séries quand le
+  serveur en a (téléchargées par exemple avec
+  [Trailarr](https://github.com/nandyalu/trailarr)), lues dans le lecteur
+  sans toucher à « Continuer à regarder ».
 
 ### Séries
 - **Reprise** à l'endroit exact où tu t'étais arrêté.
@@ -71,8 +77,8 @@ d'un appareil à l'autre. Amplyfin part du principe inverse :
 
 ### Partout, même hors ligne
 - **Téléchargements** du fichier d'origine sur téléphone et tablette (Wi-Fi
-  par défaut), lus sans connexion ; la position est renvoyée au serveur au
-  retour du réseau.
+  par défaut), lus sans connexion avec leurs sous-titres ; la position est
+  renvoyée au serveur au retour du réseau.
 - **Profils** : chaque membre de la famille garde son compte, ses reprises,
   ses recherches et ses langues. Écran **« Qui regarde ? »** sur télé et
   tablette.
@@ -82,7 +88,7 @@ d'un appareil à l'autre. Amplyfin part du principe inverse :
 ### Sur chaque appareil
 | Appareil | Ce qui change |
 |---|---|
-| **Téléphone** | Gestes : double appui pour ±10 s, glisser pour la luminosité et le volume. |
+| **Téléphone** | Gestes : double appui pour ±10 s, glisser pour la luminosité et le volume, pincer pour remplir l'écran. |
 | **Tablette** | Mise en page adaptée, « Qui regarde ? » à l'ouverture. |
 | **Fire TV, télé Samsung** | Tout à la télécommande : sélection visible, OK maintenu pour les options, avance rapide en maintenant les flèches. |
 | **PC Windows** | Souris et clavier : plein écran (F, F11, double clic), espace, flèches, molette pour le volume, survol des affiches. |
@@ -93,7 +99,7 @@ d'un appareil à l'autre. Amplyfin part du principe inverse :
 |---|---|---|
 | Android (téléphone, tablette, Fire TV) | **ExoPlayer** | Le lecteur d'Android (celui de Plex, Netflix, YouTube) : il parle directement à la puce vidéo. |
 | Télé Samsung | **Lecteur de la télé** | Le lecteur standard de Tizen (paquet `video_player_videohole`), décodé par la puce de la télé : 4K, HDR10, Dolby Digital Plus / Atmos. |
-| iPhone, iPad | **mpv** | Lit le MKV, le DTS et les sous-titres avancés, que le lecteur d'Apple refuse. Décodage par la puce de l'iPhone. |
+| iPhone, iPad | **libmdk** (paquet `fvp`) | Lit le MKV tel quel, que le lecteur d'Apple refuse. Décodage par la puce de l'iPhone et image partagée en Metal sans recopie : environ 5 fois moins de batterie qu'avec mpv. |
 | Windows | **mpv** | La référence sur PC. Décodage par la carte graphique (D3D11), lissage des films à 24 images/s. |
 
 Ce que chaque appareil sait décoder est mesuré sur l'appareil lui-même (sur
