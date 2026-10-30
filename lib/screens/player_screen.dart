@@ -1113,6 +1113,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
                       DeviceCapabilities.isTv || DeviceCapabilities.isDesktop
                       ? null
                       : (fill) => setState(() => _fill = fill),
+                  zoomed: _fill,
                 ),
               ],
               // Infos de lecture (menu Qualité), en haut à gauche
