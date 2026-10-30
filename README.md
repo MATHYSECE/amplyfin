@@ -55,8 +55,9 @@ d'un appareil à l'autre. Amplyfin part du principe inverse :
   **taille des sous-titres** réglable.
 - Langues préférées enregistrées sur ton compte Jellyfin, et retenues
   **série par série**.
-- **Pincer pour remplir l'écran** sur téléphone et tablette (fini les bandes
-  noires des films au format cinéma), image d'origine au départ.
+- **Remplir l'écran** sur téléphone et tablette, en pinçant ou avec le bouton
+  zoom du lecteur (fini les bandes noires des films au format cinéma), image
+  d'origine au départ.
 - **Bandes-annonces** : bouton sur la fiche des films et des séries quand le
   serveur en a (téléchargées par exemple avec
   [Trailarr](https://github.com/nandyalu/trailarr)), lues dans le lecteur
@@ -100,7 +101,7 @@ d'un appareil à l'autre. Amplyfin part du principe inverse :
 | Android (téléphone, tablette, Fire TV) | **ExoPlayer** | Le lecteur d'Android (celui de Plex, Netflix, YouTube) : il parle directement à la puce vidéo. |
 | Télé Samsung | **Lecteur de la télé** | Le lecteur standard de Tizen (paquet `video_player_videohole`), décodé par la puce de la télé : 4K, HDR10, Dolby Digital Plus / Atmos. |
 | iPhone, iPad | **libmdk** (paquet `fvp`) | Lit le MKV tel quel, que le lecteur d'Apple refuse. Décodage par la puce de l'iPhone et image partagée en Metal sans recopie : environ 5 fois moins de batterie qu'avec mpv. |
-| Windows | **mpv** | La référence sur PC. Décodage par la carte graphique (D3D11), lissage des films à 24 images/s. |
+| Windows | **libmdk** (paquet `fvp`) | Décodage par la carte graphique et image partagée sans recopie : environ 3 fois moins de processeur et de carte graphique qu'avec mpv, pour les PC portables sur batterie. |
 
 Ce que chaque appareil sait décoder est mesuré sur l'appareil lui-même (sur
 Samsung, d'après les caractéristiques des télés : DTS et TrueHD convertis) et
@@ -229,7 +230,8 @@ lib/
 ├── services/   session, téléchargements, profils, moteurs vidéo
 │   ├── video_engine.dart   lecteur générique utilisé par tout l'écran de lecture
 │   ├── exo_engine.dart     ExoPlayer (Android)
-│   ├── mpv_engine.dart     mpv (iPhone, iPad, Windows)
+│   ├── mdk_engine.dart     libmdk (iPhone, iPad, Windows)
+│   ├── mpv_engine.dart     mpv (secours, plus utilisé par défaut)
 │   └── tizen_engine.dart   lecteur de la télé (Samsung)
 ├── screens/    écrans (accueil, fiches, lecteur, paramètres…)
 ├── theme/      couleurs, polices (Manrope), arrondis
