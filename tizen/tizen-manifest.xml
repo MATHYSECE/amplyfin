@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!-- api-version 6.5 : télés Samsung Tizen 6.5 à 9.0 (lecteur vidéo) -->
-<manifest package="com.picheret.amplyfin" version="1.2.0" api-version="6.5" xmlns="http://tizen.org/ns/packages">
+<manifest package="com.picheret.amplyfin" version="1.3.0" api-version="6.5" xmlns="http://tizen.org/ns/packages">
     <profile name="tv"/>
     <ui-application appid="com.picheret.amplyfin" exec="Runner.dll" type="dotnet" multiple="false" nodisplay="false" taskmanage="true">
         <label>Amplyfin</label>
