@@ -59,6 +59,7 @@ class PlayerControls extends StatefulWidget {
     this.onKeyActivity,
     this.onSelectOverride,
     this.onZoom,
+    this.zoomed = false,
   });
 
   final VideoEngine player;
@@ -93,6 +94,9 @@ class PlayerControls extends StatefulWidget {
   /// Téléphone, tablette : pincer la vidéo. Vrai (doigts écartés) : remplir
   /// l'écran ; faux (doigts rapprochés) : image entière. Null : pas de zoom.
   final ValueChanged<bool>? onZoom;
+
+  /// Vrai quand la vidéo remplit l'écran (icône du bouton zoom).
+  final bool zoomed;
 
   @override
   State<PlayerControls> createState() => PlayerControlsState();
@@ -826,6 +830,22 @@ class PlayerControlsState extends State<PlayerControls> {
                       tooltip: 'Qualité',
                       onPressed: () => _openMenu(widget.onQuality),
                     ),
+                    // Téléphone, tablette : zoom, comme le pincer
+                    if (widget.onZoom != null) ...[
+                      const SizedBox(width: 10),
+                      GlassCircleButton(
+                        icon: widget.zoomed
+                            ? Icons.fullscreen_exit_rounded
+                            : Icons.fit_screen_outlined,
+                        tooltip: widget.zoomed
+                            ? 'Image entière'
+                            : 'Plein écran',
+                        onPressed: () {
+                          _zoom(!widget.zoomed);
+                          _scheduleHide();
+                        },
+                      ),
+                    ],
                     if (_desktop) ...[
                       const SizedBox(width: 10),
                       ValueListenableBuilder(
