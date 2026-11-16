@@ -67,7 +67,7 @@ class JellyfinApi {
 
   /// Version de l'appli (celle de pubspec.yaml), lue au démarrage par
   /// [loadClientVersion] ; affichée dans Paramètres et envoyée au serveur.
-  static String clientVersion = '1.3.0';
+  static String clientVersion = '1.4.0';
 
   /// Lit la vraie version de l'appli (garde la valeur par défaut si
   /// l'appareil ne répond pas, ex. dans les tests).
