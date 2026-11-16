@@ -82,6 +82,16 @@ d'un appareil à l'autre. Amplyfin part du principe inverse :
 - Carte **« Épisode suivant »** avec compte à rebours, et
   **« Tu regardes toujours ? »** après trois épisodes enchaînés.
 
+### Interface
+- **Images instantanées** : un aperçu flou des couleurs s'affiche tout de
+  suite (envoyé par le serveur), puis l'image nette arrive en fondu.
+- **Ambilight** : le halo de chaque fiche prend la couleur de son affiche.
+- Sur téléphone, **« À la une » en paquet de cartes** qu'on lance de côté,
+  fiches qu'on **tire vers le bas** pour agrandir l'image ou les fermer.
+- Rangées d'affiches **en arc** (les affiches pivotent en sortant de
+  l'écran), barre d'onglets **liquide**, mouvements avec un léger
+  **ressort**.
+
 ### Prise en main
 - **Visite guidée** à la première connexion de chaque profil, adaptée à
   l'appareil (gestes, télécommande, souris et clavier), à revoir dans
@@ -268,6 +278,7 @@ Principes du code :
 - [x] Télés Samsung (Tizen, lecteur de la télé)
 - [x] Ma liste, distribution, titres similaires, recommandations
 - [x] Vitesse de lecture et minuterie de sommeil
+- [x] Nouvelle interface : aperçus flous, ambilight, paquet de cartes, ressorts
 
 ---
 
