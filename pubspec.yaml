@@ -61,7 +61,6 @@ dependencies:
   video_player_videohole: ^0.6.1
   fvp: ^0.39.1
   flutter_animate: ^4.5.2
-  animations: ^3.0.0
   flutter_blurhash: ^0.9.1
 
 dev_dependencies:
