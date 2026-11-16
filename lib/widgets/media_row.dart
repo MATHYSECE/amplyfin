@@ -4,6 +4,7 @@ import '../api/jellyfin_api.dart';
 import '../models/media_item.dart';
 import '../theme/app_theme.dart';
 import 'poster_image.dart';
+import 'row_depth.dart';
 import 'ui.dart';
 
 /// Tailles de la page d'accueil : affiches plus grandes et marges plus
@@ -88,7 +89,8 @@ class MediaRow extends StatelessWidget {
             clipBehavior: Clip.none,
             itemCount: children.length,
             separatorBuilder: (_, _) => const SizedBox(width: 12),
-            itemBuilder: (_, index) => children[index],
+            // Affiches qui pivotent un peu en sortant de l'écran
+            itemBuilder: (_, index) => RowDepth(child: children[index]),
           ),
         ),
       ],
@@ -155,7 +157,8 @@ class MediaTile extends StatelessWidget {
                   borderRadius: BorderRadius.circular(AppRadius.poster),
                   child: Stack(
                     fit: StackFit.expand,
-                    children: [poster, ...overlays],
+                    // Reflet qui traverse l'affiche quand la rangée défile
+                    children: [poster, ...overlays, const PosterSheen()],
                   ),
                 ),
               ),
