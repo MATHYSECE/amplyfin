@@ -67,7 +67,12 @@ class SearchEpisode {
 
 /// Un acteur, réalisateur… trouvé.
 class SearchPerson {
-  const SearchPerson({required this.id, required this.name, this.imageTag});
+  const SearchPerson({
+    required this.id,
+    required this.name,
+    this.imageTag,
+    this.role,
+  });
 
   factory SearchPerson.fromJson(Map<String, dynamic> json) {
     final imageTags = json['ImageTags'] as Map<String, dynamic>?;
@@ -78,11 +83,33 @@ class SearchPerson {
     );
   }
 
+  /// Lit une personne de la partie « People » d'une fiche : son rôle dans
+  /// le film (« Tony Stark »), ou son métier pour les autres (réalisation…).
+  factory SearchPerson.fromCastJson(Map<String, dynamic> json) {
+    final role = (json['Role'] as String?)?.trim();
+    return SearchPerson(
+      id: json['Id'] as String,
+      name: (json['Name'] as String?) ?? 'Sans nom',
+      imageTag: json['PrimaryImageTag'] as String?,
+      role: role != null && role.isNotEmpty
+          ? role
+          : switch (json['Type']) {
+              'Director' => 'Réalisation',
+              'Writer' => 'Scénario',
+              'Producer' => 'Production',
+              _ => null,
+            },
+    );
+  }
+
   final String id;
   final String name;
 
   /// Empreinte de la photo (null s'il n'y en a pas).
   final String? imageTag;
+
+  /// Rôle dans le film ou la série (fiches seulement).
+  final String? role;
 
   /// Initiales, à la place de la photo : « TH » pour Tom Hanks.
   String get initials => name

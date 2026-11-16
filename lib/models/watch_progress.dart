@@ -11,6 +11,7 @@ class WatchProgress {
     this.played = false,
     this.lastPlayed,
     this.unplayedCount,
+    this.favorite = false,
   });
 
   /// Lit la partie « UserData » d'un élément (absente : rien de commencé).
@@ -26,6 +27,7 @@ class WatchProgress {
         (userData['LastPlayedDate'] as String?) ?? '',
       ),
       unplayedCount: userData['UnplayedItemCount'] as int?,
+      favorite: userData['IsFavorite'] == true,
     );
   }
 
@@ -44,6 +46,9 @@ class WatchProgress {
   /// Série ou saison : nombre d'épisodes pas encore vus (null : inconnu,
   /// ou film).
   final int? unplayedCount;
+
+  /// Vrai si l'élément est dans « Ma liste » (favori sur le serveur).
+  final bool favorite;
 
   /// Vrai si la lecture peut reprendre là où elle s'était arrêtée.
   bool get canResume => position > Duration.zero;

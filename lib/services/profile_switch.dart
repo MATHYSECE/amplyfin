@@ -1,5 +1,6 @@
 import '../api/jellyfin_api.dart';
 import 'connection_monitor.dart';
+import 'favorite_state.dart';
 import 'watched_state.dart';
 
 /// Prépare l'appli pour la personne qui vient d'être choisie (ou de se
@@ -8,6 +9,7 @@ import 'watched_state.dart';
 /// relues par le coffre-fort de session (ProfileData).
 void beginProfile(JellyfinApi api, String userId, {required bool online}) {
   WatchedState.instance.reset();
+  FavoriteState.instance.reset();
   ConnectionMonitor.instance.start(api, userId, online: online);
 }
 

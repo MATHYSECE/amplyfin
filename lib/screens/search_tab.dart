@@ -15,6 +15,7 @@ import '../services/search_history.dart';
 import '../theme/app_theme.dart';
 import '../widgets/genre_card.dart';
 import '../widgets/media_row.dart';
+import '../widgets/people_row.dart';
 import '../widgets/ui.dart';
 import '../widgets/tv_focus.dart';
 import 'genre_screen.dart';
@@ -576,8 +577,9 @@ class _SearchTabState extends State<SearchTab> {
           ],
         ),
       if (results.people.isNotEmpty)
-        _PeopleRow(
+        PeopleRow(
           api: widget.api,
+          title: 'Acteurs et réalisateurs',
           people: results.people,
           onOpen: _openPerson,
         ),
@@ -667,104 +669,6 @@ class _SearchField extends StatelessWidget {
                 ),
         ),
       ),
-    );
-  }
-}
-
-/// Acteurs et réalisateurs : photo ronde (ou initiales) et nom.
-class _PeopleRow extends StatelessWidget {
-  const _PeopleRow({
-    required this.api,
-    required this.people,
-    required this.onOpen,
-  });
-
-  final JellyfinApi api;
-  final List<SearchPerson> people;
-  final ValueChanged<SearchPerson> onOpen;
-
-  static const _size = 84.0;
-
-  @override
-  Widget build(BuildContext context) {
-    final layout = HomeLayout.of(context);
-    final textTheme = Theme.of(context).textTheme;
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Padding(
-          padding: EdgeInsets.symmetric(horizontal: layout.gutter),
-          child: Text(
-            'Acteurs et réalisateurs',
-            style: textTheme.titleMedium?.copyWith(
-              fontSize: 18,
-              fontWeight: FontWeight.w800,
-            ),
-          ),
-        ),
-        const SizedBox(height: 12),
-        SizedBox(
-          height: _size + 48,
-          child: ListView.separated(
-            scrollDirection: Axis.horizontal,
-            padding: EdgeInsets.symmetric(horizontal: layout.gutter),
-            itemCount: people.length,
-            separatorBuilder: (_, _) => const SizedBox(width: 14),
-            itemBuilder: (context, index) {
-              final person = people[index];
-              final url = api.imageUrl(
-                itemId: person.id,
-                type: 'Primary',
-                tag: person.imageTag,
-                width: 240,
-              );
-              final initials = Center(
-                child: Text(
-                  person.initials,
-                  style: textTheme.titleLarge?.copyWith(color: AppColors.grey),
-                ),
-              );
-              return PressableScale(
-                onTap: () => onOpen(person),
-                child: SizedBox(
-                  width: _size,
-                  child: Column(
-                    children: [
-                      ClipOval(
-                        child: SizedBox.square(
-                          dimension: _size,
-                          child: ColoredBox(
-                            color: AppColors.surface3,
-                            child: url == null
-                                ? initials
-                                : CachedNetworkImage(
-                                    imageUrl: url,
-                                    fit: BoxFit.cover,
-                                    memCacheWidth: 240,
-                                    placeholder: (_, _) => initials,
-                                    errorWidget: (_, _, _) => initials,
-                                  ),
-                          ),
-                        ),
-                      ),
-                      const SizedBox(height: 8),
-                      Text(
-                        person.name,
-                        maxLines: 2,
-                        textAlign: TextAlign.center,
-                        overflow: TextOverflow.ellipsis,
-                        style: textTheme.bodySmall?.copyWith(
-                          fontWeight: FontWeight.w700,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              );
-            },
-          ),
-        ),
-      ],
     );
   }
 }

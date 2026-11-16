@@ -34,6 +34,7 @@ class LibraryGrid extends StatefulWidget {
     this.releasedBefore,
     this.personId,
     this.genreId,
+    this.favorites = false,
     this.showFilters = false,
   });
 
@@ -71,6 +72,9 @@ class LibraryGrid extends StatefulWidget {
 
   /// Seulement les films et séries de ce genre.
   final String? genreId;
+
+  /// Seulement les films et séries de « Ma liste » (favoris).
+  final bool favorites;
 
   /// Genres en pastilles et bouton « Trier » (onglets Films et Séries).
   final bool showFilters;
@@ -205,6 +209,7 @@ class _LibraryGridState extends State<LibraryGrid>
         releasedBefore: widget.releasedBefore,
         personId: widget.personId,
         genreId: _genreId ?? widget.genreId,
+        favorites: widget.favorites,
       );
       if (!mounted || generation != _generation) return;
       setState(() {

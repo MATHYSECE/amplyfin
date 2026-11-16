@@ -12,6 +12,7 @@ import '../services/connection_monitor.dart';
 import '../services/device_capabilities.dart';
 import '../services/download_groups.dart';
 import '../services/download_manager.dart';
+import '../services/favorite_state.dart';
 import '../services/hidden_resume.dart';
 import '../services/offline_progress.dart';
 import '../services/playback_launcher.dart';
@@ -71,6 +72,7 @@ class HomeTabState extends State<HomeTab> with WidgetsBindingObserver {
   List<Map<String, dynamic>> _latestMovies = const [];
   List<NewEpisodesEntry> _newEpisodes = const [];
   List<MediaItem> _released = const [];
+  List<MediaItem> _favorites = const [];
 
   /// Vrai pendant le lancement d'une lecture.
   bool _starting = false;
@@ -82,6 +84,7 @@ class HomeTabState extends State<HomeTab> with WidgetsBindingObserver {
     super.initState();
     _load();
     ConnectionMonitor.instance.addListener(_onConnection);
+    FavoriteState.instance.addListener(_refreshFavorites);
     WidgetsBinding.instance.addObserver(this);
     // Appli laissée ouverte (PC, télé) : mise à jour régulière aussi
     _refreshTimer = Timer.periodic(
@@ -97,6 +100,7 @@ class HomeTabState extends State<HomeTab> with WidgetsBindingObserver {
     _refreshTimer?.cancel();
     WidgetsBinding.instance.removeObserver(this);
     ConnectionMonitor.instance.removeListener(_onConnection);
+    FavoriteState.instance.removeListener(_refreshFavorites);
     super.dispose();
   }
 
@@ -157,10 +161,12 @@ class HomeTabState extends State<HomeTab> with WidgetsBindingObserver {
         releasedBefore: now,
       ),
     );
+    final favoritesFuture = _fetchFavorites();
     final continueEntries = await continueFuture;
     final movies = await moviesFuture;
     final episodes = await episodesFuture;
     final released = await releasedFuture;
+    final favorites = await favoritesFuture;
     if (!mounted) return;
     setState(() {
       _loading = false;
@@ -176,6 +182,7 @@ class HomeTabState extends State<HomeTab> with WidgetsBindingObserver {
           NewEpisodesEntry.fromLatestJson(json),
       ];
       _released = released?.items ?? const [];
+      _favorites = favorites ?? const [];
       _hero = pickHeroItems(movies ?? const [], episodes ?? const []);
     });
   }
@@ -213,6 +220,27 @@ class HomeTabState extends State<HomeTab> with WidgetsBindingObserver {
         series ?? const {},
       ),
     );
+  }
+
+  /// « Ma liste » : les derniers favoris ajoutés (null si le serveur ne
+  /// répond pas).
+  Future<List<MediaItem>?> _fetchFavorites() async {
+    final page = await _safe(
+      widget.api.getItems(
+        userId: _userId,
+        type: 'Movie,Series',
+        limit: 20,
+        sortBy: 'DateCreated',
+        favorites: true,
+      ),
+    );
+    return page?.items;
+  }
+
+  /// Un cœur vient d'être touché sur une fiche : la rangée suit.
+  Future<void> _refreshFavorites() async {
+    final favorites = await _fetchFavorites();
+    if (mounted && favorites != null) setState(() => _favorites = favorites);
   }
 
   /// Entrées retirées de la rangée en gardant leur progression.
@@ -467,6 +495,24 @@ class HomeTabState extends State<HomeTab> with WidgetsBindingObserver {
     );
   }
 
+  void _seeFavorites() {
+    Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => SortedItemsScreen(
+          api: widget.api,
+          session: widget.session,
+          title: 'Ma liste',
+          itemType: 'Movie,Series',
+          sortBy: 'DateCreated',
+          favorites: true,
+          emptyMessage:
+              'Ta liste est vide. Touche le cœur d\'une fiche '
+              'pour y ajouter un film ou une série.',
+        ),
+      ),
+    );
+  }
+
   void _openDownloads() {
     Navigator.of(context).push(
       MaterialPageRoute<void>(
@@ -549,6 +595,22 @@ class HomeTabState extends State<HomeTab> with WidgetsBindingObserver {
           entries: _continue,
           onPlay: _playEntry,
           onOptions: _showOptions,
+        ),
+      if (_favorites.isNotEmpty)
+        MediaRow(
+          title: 'Ma liste',
+          onSeeAll: _seeFavorites,
+          children: [
+            for (final item in _favorites)
+              MediaTile(
+                api: widget.api,
+                item: item,
+                title: item.name,
+                subtitle: item.year?.toString() ?? '',
+                heroTag: 'home-favorites-${item.id}',
+                onTap: () => _open(item, heroTag: 'home-favorites-${item.id}'),
+              ),
+          ],
         ),
       if (_latestMovies.isNotEmpty)
         MediaRow(

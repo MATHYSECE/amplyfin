@@ -2,6 +2,7 @@ import 'durations.dart';
 import 'media_item.dart';
 import 'media_quality.dart';
 import 'media_track.dart';
+import 'search_results.dart';
 import 'watch_progress.dart';
 
 /// La fiche complète d'un film ou d'une série : ce qu'affiche l'écran de détail.
@@ -22,6 +23,7 @@ class ItemDetails {
     this.defaultSubtitleIndex,
     this.progress = const WatchProgress(),
     this.fileSize,
+    this.people = const [],
   });
 
   /// Lit la fiche à partir du JSON renvoyé par GET /Items/{id}.
@@ -57,6 +59,7 @@ class ItemDetails {
         json['UserData'] as Map<String, dynamic>?,
       ),
       fileSize: source?['Size'] as int?,
+      people: castFromJson(json['People'] as List<dynamic>?),
     );
   }
 
@@ -105,6 +108,9 @@ class ItemDetails {
   /// Taille du fichier vidéo en octets (films), pour « Télécharger · 12,4 Go ».
   final int? fileSize;
 
+  /// Distribution : acteurs d'abord, puis réalisation (20 au plus).
+  final List<SearchPerson> people;
+
   List<MediaTrack> get audioTracks =>
       tracks.where((t) => t.type == TrackType.audio).toList();
 
@@ -133,4 +139,20 @@ class ItemDetails {
     'Unreleased' => 'À venir',
     _ => null,
   };
+}
+
+/// Distribution d'une fiche (partie « People ») : acteurs et réalisateurs,
+/// chacun une seule fois, les acteurs d'abord, [max] personnes au plus.
+List<SearchPerson> castFromJson(List<dynamic>? people, {int max = 20}) {
+  final seen = <String>{};
+  final actors = <SearchPerson>[];
+  final directors = <SearchPerson>[];
+  for (final json in people ?? const []) {
+    if (json is! Map<String, dynamic> || json['Id'] is! String) continue;
+    final type = json['Type'];
+    if (type != 'Actor' && type != 'Director') continue;
+    if (!seen.add(json['Id'] as String)) continue;
+    (type == 'Actor' ? actors : directors).add(SearchPerson.fromCastJson(json));
+  }
+  return [...actors, ...directors].take(max).toList();
 }

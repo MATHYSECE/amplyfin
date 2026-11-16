@@ -31,6 +31,8 @@ class DetailsPage extends StatefulWidget {
     required this.children,
     this.aside = const [],
     this.below = const [],
+    this.footer = const [],
+    this.action,
   });
 
   final JellyfinApi api;
@@ -53,6 +55,13 @@ class DetailsPage extends StatefulWidget {
 
   /// Sous les deux colonnes, sur toute la largeur (deux colonnes seulement).
   final List<Widget> below;
+
+  /// Tout en bas, d'un bord à l'autre de l'écran (rangées qui défilent :
+  /// distribution, titres similaires).
+  final List<Widget> footer;
+
+  /// Bouton rond en haut à droite, en face du retour (ex. le cœur).
+  final Widget? action;
 
   @override
   State<DetailsPage> createState() => _DetailsPageState();
@@ -195,14 +204,16 @@ class _DetailsPageState extends State<DetailsPage> {
                     ),
                   ),
                   SliverPadding(
-                    padding: EdgeInsets.fromLTRB(gutter, 26, gutter, 48),
+                    padding: EdgeInsets.fromLTRB(gutter, 26, gutter, 0),
                     sliver: SliverList.list(children: widget.below),
                   ),
                 ] else
                   SliverPadding(
-                    padding: EdgeInsets.fromLTRB(gutter, 22, gutter, 48),
+                    padding: EdgeInsets.fromLTRB(gutter, 22, gutter, 0),
                     sliver: SliverList.list(children: widget.children),
                   ),
+                SliverList.list(children: widget.footer),
+                const SliverToBoxAdapter(child: SizedBox(height: 48)),
               ],
             ),
             // Barre du haut en verre dépoli, visible une fois l'image passée
@@ -219,7 +230,12 @@ class _DetailsPageState extends State<DetailsPage> {
                       sigma: 20,
                       child: Container(
                         height: topInset + 60,
-                        padding: EdgeInsets.fromLTRB(76, topInset, 20, 0),
+                        padding: EdgeInsets.fromLTRB(
+                          76,
+                          topInset,
+                          widget.action == null ? 20 : 76,
+                          0,
+                        ),
                         alignment: Alignment.centerLeft,
                         color: AppColors.scrim70,
                         child: Text(
@@ -243,6 +259,8 @@ class _DetailsPageState extends State<DetailsPage> {
                 onPressed: () => Navigator.of(context).maybePop(),
               ),
             ),
+            if (widget.action case final action?)
+              Positioned(top: topInset + 8, right: gutter - 4, child: action),
           ],
         ),
       ),

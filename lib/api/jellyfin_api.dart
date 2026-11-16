@@ -176,6 +176,7 @@ class JellyfinApi {
   /// [releasedBefore] : seulement ceux déjà sortis à cette date.
   /// [personId] : seulement ceux où joue (ou qu'a réalisés) cette personne.
   /// [genreId] : seulement ceux de ce genre.
+  /// [favorites] : seulement ceux de « Ma liste » (favoris).
   Future<ItemPage> getItems({
     required String userId,
     required String type,
@@ -185,6 +186,7 @@ class JellyfinApi {
     DateTime? releasedBefore,
     String? personId,
     String? genreId,
+    bool favorites = false,
   }) async {
     final json = await _send(
       'GET',
@@ -199,6 +201,7 @@ class JellyfinApi {
           'maxPremiereDate': releasedBefore.toUtc().toIso8601String(),
         'personIds': ?personId,
         'genreIds': ?genreId,
+        if (favorites) 'isFavorite': 'true',
         'startIndex': '$startIndex',
         'limit': '$limit',
         // On ne veut que l'affiche, pas les autres images
@@ -240,6 +243,26 @@ class JellyfinApi {
       query: {'userId': userId},
     );
     return json as Map<String, dynamic>;
+  }
+
+  /// GET /Items/{id}/Similar?userId=… : films ou séries qui ressemblent à
+  /// celui-ci (mêmes genres, mêmes acteurs…), d'après le serveur.
+  Future<List<MediaItem>> getSimilar({
+    required String userId,
+    required String itemId,
+    int limit = 12,
+  }) async {
+    final json = await _send(
+      'GET',
+      '/Items/$itemId/Similar',
+      query: {'userId': userId, 'limit': '$limit'},
+    );
+    final items = (json['Items'] as List<dynamic>?) ?? [];
+    return [
+      for (final item in items)
+        if (item['Type'] == 'Movie' || item['Type'] == 'Series')
+          MediaItem.fromJson(item as Map<String, dynamic>),
+    ];
   }
 
   /// GET /Items/{id}/LocalTrailers?userId=… : les bandes-annonces rangées
@@ -611,6 +634,18 @@ class JellyfinApi {
   }) => _send(
     played ? 'POST' : 'DELETE',
     '/UserPlayedItems/$itemId',
+    query: {'userId': userId},
+  );
+
+  /// POST /UserFavoriteItems/{id} (ajout) ou DELETE (retrait) : met un film
+  /// ou une série dans les favoris du compte (« Ma liste »).
+  Future<void> setFavorite({
+    required String userId,
+    required String itemId,
+    required bool favorite,
+  }) => _send(
+    favorite ? 'POST' : 'DELETE',
+    '/UserFavoriteItems/$itemId',
     query: {'userId': userId},
   );
 

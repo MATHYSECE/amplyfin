@@ -23,6 +23,8 @@ class SortedItemsScreen extends StatelessWidget {
     this.releasedBefore,
     this.personId,
     this.genreId,
+    this.favorites = false,
+    this.emptyMessage = 'Rien à afficher pour l\'instant.',
   });
 
   final JellyfinApi api;
@@ -37,6 +39,12 @@ class SortedItemsScreen extends StatelessWidget {
   final DateTime? releasedBefore;
   final String? personId;
   final String? genreId;
+
+  /// Seulement « Ma liste » (favoris).
+  final bool favorites;
+
+  /// Message si la grille est vide.
+  final String emptyMessage;
 
   void _open(BuildContext context, MediaItem item) {
     Navigator.of(context).push(
@@ -64,7 +72,8 @@ class SortedItemsScreen extends StatelessWidget {
               releasedBefore: releasedBefore,
               personId: personId,
               genreId: genreId,
-              emptyMessage: 'Rien à afficher pour l\'instant.',
+              favorites: favorites,
+              emptyMessage: emptyMessage,
               topPadding: headerHeight,
               onOpen: (item) => _open(context, item),
               onUnauthorized: () => Navigator.of(context).maybePop(),

@@ -20,7 +20,9 @@ import '../services/playback_launcher.dart';
 import '../services/track_preferences.dart';
 import '../theme/app_theme.dart';
 import '../widgets/trailer_button.dart';
+import '../widgets/details_extras.dart';
 import '../widgets/details_page.dart';
+import '../widgets/favorite_button.dart';
 import '../widgets/download_controls.dart';
 import '../widgets/track_picker.dart';
 import '../widgets/ui.dart';
@@ -427,6 +429,19 @@ class _SeriesScreenState extends State<SeriesScreen> {
       ),
       aside: twoColumns ? [overview] : const [],
       below: twoColumns ? _buildSeasons(twoColumns: true) : const [],
+      action: FavoriteButton(
+        api: widget.api,
+        userId: widget.session.userId,
+        details: details,
+      ),
+      footer: [
+        DetailsExtras(
+          api: widget.api,
+          session: widget.session,
+          item: series,
+          details: details,
+        ),
+      ],
       children: [
         if (!twoColumns) ...[overview, const SizedBox(height: 26)],
         TrailerButton(

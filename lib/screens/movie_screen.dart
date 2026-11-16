@@ -13,7 +13,9 @@ import '../services/offline_progress.dart';
 import '../services/playback_launcher.dart';
 import '../theme/app_theme.dart';
 import '../widgets/trailer_button.dart';
+import '../widgets/details_extras.dart';
 import '../widgets/details_page.dart';
+import '../widgets/favorite_button.dart';
 import '../widgets/download_controls.dart';
 import '../widgets/track_picker.dart';
 import '../widgets/ui.dart';
@@ -380,6 +382,19 @@ class _MovieScreenState extends State<MovieScreen> {
         chips: details?.quality?.labels ?? const [],
       ),
       aside: twoColumns ? [overview] : const [],
+      action: FavoriteButton(
+        api: widget.api,
+        userId: widget.session.userId,
+        details: details,
+      ),
+      footer: [
+        DetailsExtras(
+          api: widget.api,
+          session: widget.session,
+          item: movie,
+          details: details,
+        ),
+      ],
       children: [
         ..._buildPlayButtons(details),
         const SizedBox(height: 18),
