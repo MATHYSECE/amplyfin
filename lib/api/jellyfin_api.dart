@@ -396,37 +396,6 @@ class JellyfinApi {
     ];
   }
 
-  /// GET /Items : les films et séries les plus récents du genre qui ont une
-  /// image de fond (candidats pour la carte du genre).
-  Future<List<ItemDetails>> getGenreCovers({
-    required String userId,
-    required String genreId,
-    int limit = 10,
-  }) async {
-    final json = await _send(
-      'GET',
-      '/Items',
-      query: {
-        'userId': userId,
-        'genreIds': genreId,
-        'includeItemTypes': 'Movie,Series',
-        'recursive': 'true',
-        'imageTypes': 'Backdrop',
-        'sortBy': 'DateCreated',
-        'sortOrder': 'Descending',
-        'limit': '$limit',
-        'enableImageTypes': 'Backdrop',
-        'imageTypeLimit': '1',
-        'enableUserData': 'false',
-        'enableTotalRecordCount': 'false',
-      },
-    );
-    return [
-      for (final item in (json['Items'] as List<dynamic>?) ?? [])
-        ItemDetails.fromJson(item as Map<String, dynamic>),
-    ];
-  }
-
   /// GET /Shows/{id}/Seasons : les saisons d'une série.
   Future<List<Season>> getSeasons({
     required String userId,

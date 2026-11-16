@@ -133,8 +133,6 @@ class _SearchTabState extends State<SearchTab> {
     final genres = usableGenres([
       for (final item in json) Genre.fromJson(item),
     ]);
-    // Images choisies ensemble : un titre ne sert qu'à un seul genre
-    prepareGenreCovers(widget.api, _userId, genres);
     setState(() => _genres = genres);
   }
 
@@ -415,7 +413,7 @@ class _SearchTabState extends State<SearchTab> {
     );
   }
 
-  /// « Parcourir par genre » : cartes avec image, 2 par ligne (4 sur
+  /// « Parcourir par genre » : cartes avec le nom, 2 par ligne (4 sur
   /// une tablette).
   Widget _buildGenres(HomeLayout layout, List<Genre> genres) {
     return Padding(
@@ -446,8 +444,6 @@ class _SearchTabState extends State<SearchTab> {
                       child: EntranceAnimation(
                         delay: Duration(milliseconds: 30 * i.clamp(0, 12)),
                         child: GenreCard(
-                          api: widget.api,
-                          userId: _userId,
                           genre: genre,
                           onTap: () => _openGenre(genre),
                         ),

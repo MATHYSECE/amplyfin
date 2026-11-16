@@ -4,15 +4,13 @@ import '../api/jellyfin_api.dart';
 import '../models/genre.dart';
 import '../models/media_item.dart';
 import '../models/session.dart';
-import '../theme/app_theme.dart';
-import '../widgets/genre_card.dart';
 import '../widgets/media_row.dart';
 import '../widgets/ui.dart';
 import 'movie_screen.dart';
 import 'series_screen.dart';
 import 'sorted_items_screen.dart';
 
-/// Page d'un genre : son image en grand, puis ses films et ses séries les
+/// Page d'un genre : son nom en grand, puis ses films et ses séries les
 /// mieux notés, chacun avec « Tout voir ».
 class GenreScreen extends StatelessWidget {
   const GenreScreen({
@@ -37,45 +35,21 @@ class GenreScreen extends StatelessWidget {
             bottom: MediaQuery.paddingOf(context).bottom + 32,
           ),
           children: [
-            // Image du genre, nom en grand par-dessus
-            SizedBox(
-              height: topInset + 220,
-              child: Stack(
-                fit: StackFit.expand,
+            // Nom du genre en grand, sous le bouton retour (sans image :
+            // elle mettait trop longtemps à charger)
+            Padding(
+              padding: EdgeInsets.fromLTRB(16, topInset + 8, 20, 8),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  GenreCover(
-                    api: api,
-                    userId: session.userId,
-                    genre: genre,
-                    width: 1280,
+                  GlassCircleButton(
+                    icon: Icons.chevron_left_rounded,
+                    tooltip: 'Retour',
+                    onPressed: () => Navigator.of(context).maybePop(),
                   ),
-                  const DecoratedBox(
-                    decoration: BoxDecoration(
-                      gradient: LinearGradient(
-                        begin: Alignment.topCenter,
-                        end: Alignment.bottomCenter,
-                        stops: [0, 0.3, 1],
-                        colors: [
-                          AppColors.scrim55,
-                          Colors.transparent,
-                          AppColors.black,
-                        ],
-                      ),
-                    ),
-                  ),
-                  Positioned(
-                    top: topInset + 8,
-                    left: 16,
-                    child: GlassCircleButton(
-                      icon: Icons.chevron_left_rounded,
-                      tooltip: 'Retour',
-                      onPressed: () => Navigator.of(context).maybePop(),
-                    ),
-                  ),
-                  Positioned(
-                    left: 20,
-                    right: 20,
-                    bottom: 12,
+                  const SizedBox(height: 28),
+                  Padding(
+                    padding: const EdgeInsets.only(left: 4),
                     child: Text(
                       genre.name,
                       maxLines: 2,

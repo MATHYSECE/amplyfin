@@ -45,29 +45,6 @@ void main() {
     });
   });
 
-  group('Images des genres', () {
-    test('jamais le même titre sur deux genres', () {
-      final covers = pickDistinctCovers({
-        'action': ['jump', 'heat', 'rambo'],
-        'comedie': ['jump', 'heat'],
-        'crime': ['jump'],
-      }, (id) => id);
-      // Crime n'a qu'un choix : il passe en premier
-      expect(covers, {'crime': 'jump', 'comedie': 'heat', 'action': 'rambo'});
-    });
-
-    test('genre sans image, ou tous ses titres déjà pris', () {
-      final covers = pickDistinctCovers({
-        'vide': <String>[],
-        'a': ['x'],
-        'b': ['x'],
-      }, (id) => id);
-      expect(covers.containsKey('vide'), isFalse);
-      expect(covers['a'], 'x');
-      expect(covers['b'], 'x');
-    });
-  });
-
   group('Tri des grilles', () {
     test('choix retenu, titre par défaut', () {
       expect(LibrarySort.fromName('rating'), LibrarySort.rating);

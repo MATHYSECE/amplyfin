@@ -44,31 +44,6 @@ List<Genre> usableGenres(List<Genre> genres, {String? type, int minCount = 3}) {
   return kept;
 }
 
-/// Une image par genre sans reprendre deux fois le même titre. [candidates]
-/// donne, pour chaque genre, ses titres du plus récent au plus ancien ; les
-/// genres qui ont le moins de choix se servent en premier. Si tous les titres
-/// d'un genre sont déjà pris, il garde son premier (mieux qu'aucune image).
-Map<String, T> pickDistinctCovers<T>(
-  Map<String, List<T>> candidates,
-  String Function(T) idOf,
-) {
-  final order = candidates.keys.toList()
-    ..sort((a, b) => candidates[a]!.length.compareTo(candidates[b]!.length));
-  final used = <String>{};
-  final picked = <String, T>{};
-  for (final genreId in order) {
-    final choices = candidates[genreId]!;
-    if (choices.isEmpty) continue;
-    final cover = choices.firstWhere(
-      (item) => !used.contains(idOf(item)),
-      orElse: () => choices.first,
-    );
-    used.add(idOf(cover));
-    picked[genreId] = cover;
-  }
-  return picked;
-}
-
 /// Tri d'une grille de films ou de séries.
 enum LibrarySort {
   title('Titre (A → Z)', null),
