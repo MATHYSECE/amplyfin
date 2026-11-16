@@ -9,6 +9,7 @@ import '../models/languages.dart';
 import '../models/media_item.dart';
 import '../models/media_track.dart';
 import '../models/season.dart';
+import '../models/series_progress.dart';
 import '../models/session.dart';
 import '../models/track_choice.dart';
 import '../services/connection_monitor.dart';
@@ -348,6 +349,7 @@ class _SeriesScreenState extends State<SeriesScreen> {
       }
       await _loadEpisodes(season);
     }
+    if (mounted) setState(() => _prefetched = true);
   }
 
   /// Vérifie avec le serveur si la lecture directe est possible (fenêtre
@@ -384,6 +386,88 @@ class _SeriesScreenState extends State<SeriesScreen> {
     if (season == null) return;
     if (season.id != _selectedSeason?.id) await _selectSeason(season);
     if (mounted) _loadEpisodes(season);
+  }
+
+  /// Vrai pendant le lancement d'une lecture depuis le grand bouton.
+  bool _starting = false;
+
+  /// Vrai quand le chargement de toutes les saisons a été tenté.
+  bool _prefetched = false;
+
+  /// Grand bouton de la fiche : « Reprendre S3 · É5 », « Lecture S1 · É1 »…
+  /// Une zone grise tant que toutes les saisons ne sont pas chargées (le
+  /// choix de l'épisode en dépend), rien si la série n'a pas d'épisode.
+  Widget _buildPlayButton() {
+    final seasons = _seasons;
+    // Toutes les saisons en mémoire (ou celles qui ont pu être chargées)
+    final loaded =
+        seasons != null &&
+        (seasons.every((season) => _episodes.containsKey(season.id)) ||
+            _prefetched);
+    if (!loaded) {
+      // Liste des saisons en erreur : pas de bouton
+      if (_seasonsError != null) return const SizedBox.shrink();
+      return const Padding(
+        padding: EdgeInsets.only(bottom: 22),
+        child: SkeletonBox(height: 56, radius: AppRadius.pill),
+      );
+    }
+    final pick = pickEpisodeToWatch(seasons, _episodes);
+    if (pick == null) return const SizedBox.shrink();
+    final progress = pick.episode.progress;
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 22),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          FilledButton.icon(
+            onPressed: () async {
+              if (_starting) return;
+              setState(() => _starting = true);
+              await _play(pick.episode);
+              if (mounted) setState(() => _starting = false);
+            },
+            style: FilledButton.styleFrom(minimumSize: const Size(0, 56)),
+            icon: _starting
+                ? const SizedBox(
+                    width: 22,
+                    height: 22,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2.5,
+                      color: AppColors.black,
+                    ),
+                  )
+                : const Icon(Icons.play_arrow_rounded, size: 26),
+            label: Text(pick.label),
+          ),
+          if (pick.resume) ...[
+            const SizedBox(height: 14),
+            Row(
+              children: [
+                Expanded(
+                  child: ProgressLine(
+                    value: progress.fraction,
+                    height: 4,
+                    rounded: true,
+                  ),
+                ),
+                if (progress.remainingLabel(pick.episode.runtime)
+                    case final left?) ...[
+                  const SizedBox(width: 12),
+                  Text(
+                    left,
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                      color: AppColors.grey,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ],
+        ],
+      ),
+    );
   }
 
   /// Saison (déjà chargée) qui contient l'épisode [episodeId].
@@ -443,6 +527,7 @@ class _SeriesScreenState extends State<SeriesScreen> {
         ),
       ],
       children: [
+        _buildPlayButton(),
         if (!twoColumns) ...[overview, const SizedBox(height: 26)],
         TrailerButton(
           api: widget.api,
