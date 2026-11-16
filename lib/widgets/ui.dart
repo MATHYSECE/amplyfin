@@ -427,11 +427,17 @@ class _EntranceAnimationState extends State<EntranceAnimation>
     with SingleTickerProviderStateMixin {
   late final _controller = AnimationController(
     vsync: this,
-    duration: const Duration(milliseconds: 420),
+    duration: const Duration(milliseconds: 560),
   );
   late final _curve = CurvedAnimation(
     parent: _controller,
     curve: Curves.easeOutCubic,
+  );
+
+  /// Montée avec un léger ressort (le fondu, lui, reste régulier).
+  late final _rise = CurvedAnimation(
+    parent: _controller,
+    curve: AppCurves.spring,
   );
 
   @override
@@ -453,9 +459,9 @@ class _EntranceAnimationState extends State<EntranceAnimation>
     return FadeTransition(
       opacity: _curve,
       child: AnimatedBuilder(
-        animation: _curve,
+        animation: _rise,
         builder: (context, child) => Transform.translate(
-          offset: Offset(0, 16 * (1 - _curve.value)),
+          offset: Offset(0, 18 * (1 - _rise.value)),
           child: child,
         ),
         child: widget.child,
@@ -519,10 +525,13 @@ class _PressableScaleState extends State<PressableScale> {
               widget.onLongPress!();
             },
       onSecondaryTap: DeviceCapabilities.isDesktop ? widget.onLongPress : null,
+      // S'enfonce vite, puis revient avec un petit rebond au relâchement
       child: AnimatedScale(
         scale: _pressed ? 0.95 : (_hovered ? 1.04 : 1),
-        duration: AppDurations.fast,
-        curve: Curves.easeOutCubic,
+        duration: _pressed
+            ? AppDurations.fast
+            : AppDurations.emphasized + AppDurations.fast,
+        curve: _pressed ? Curves.easeOutCubic : AppCurves.spring,
         child: widget.child,
       ),
     );

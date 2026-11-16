@@ -2,6 +2,10 @@ import 'package:flutter/cupertino.dart' show CupertinoPageTransitionsBuilder;
 import 'package:flutter/foundation.dart' show defaultTargetPlatform;
 import 'package:flutter/material.dart';
 
+import 'motion.dart';
+
+export 'motion.dart';
+
 /// Thème central d'Amplyfin : noir, blanc et quelques gris, police Manrope,
 /// coins légèrement arrondis. Tous les écrans prennent leur style ici.
 
@@ -215,11 +219,15 @@ ThemeData _buildTheme() {
       displayColor: AppColors.white,
     ),
 
-    // Changements d'écran doux (fondu), comme sur les systèmes récents
+    // Changements d'écran « en profondeur » (avec un léger ressort) ;
+    // iPhone : glissement d'origine (retour au doigt depuis le bord)
     pageTransitionsTheme: const PageTransitionsTheme(
       builders: {
-        TargetPlatform.android: FadeForwardsPageTransitionsBuilder(),
+        TargetPlatform.android: DepthPageTransitionsBuilder(),
         TargetPlatform.iOS: CupertinoPageTransitionsBuilder(),
+        TargetPlatform.windows: DepthPageTransitionsBuilder(),
+        TargetPlatform.linux: DepthPageTransitionsBuilder(),
+        TargetPlatform.macOS: DepthPageTransitionsBuilder(),
       },
     ),
 
@@ -415,6 +423,13 @@ ThemeData _tvTheme(ThemeData theme) {
     overlayColor: const WidgetStatePropertyAll(Colors.transparent),
   );
   return theme.copyWith(
+    // Télé : fondu simple (plus léger pour la Fire TV)
+    pageTransitionsTheme: const PageTransitionsTheme(
+      builders: {
+        TargetPlatform.android: FadeForwardsPageTransitionsBuilder(),
+        TargetPlatform.linux: FadeForwardsPageTransitionsBuilder(),
+      },
+    ),
     focusColor: const Color(0x4DFFFFFF), // 30 %
     filledButtonTheme: FilledButtonThemeData(
       style: buttonStyle.merge(theme.filledButtonTheme.style),
