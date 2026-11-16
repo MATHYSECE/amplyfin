@@ -3,10 +3,12 @@ import 'dart:ui' show ImageFilter;
 
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../api/jellyfin_api.dart';
 import '../models/item_details.dart';
 import '../models/media_item.dart';
+import '../services/device_capabilities.dart';
 import '../services/download_manager.dart';
 import '../theme/app_theme.dart';
 import 'poster_image.dart';
@@ -100,6 +102,44 @@ class _DetailsPageState extends State<DetailsPage> {
   /// Vrai quand l'image est passée : on affiche la barre avec le titre.
   bool _showBar = false;
 
+  /// Tirer la fiche vers le bas (en haut de page) agrandit l'image ; au-delà
+  /// de cette distance, lâcher ferme la fiche. Pas sur télé (télécommande)
+  /// ni sur PC (molette).
+  static const _closeDistance = 90.0;
+
+  bool get _canPull =>
+      !DeviceCapabilities.isTv && !DeviceCapabilities.isDesktop;
+
+  /// Vrai quand on a tiré assez loin pour fermer (une vibration le signale).
+  bool _closeArmed = false;
+  bool _closing = false;
+
+  /// Distance tirée au-delà du haut de la fiche (0 sinon).
+  double get _pull => _scrollController.hasClients
+      ? math.max(0.0, -_scrollController.offset)
+      : 0.0;
+
+  bool _onScrollNotification(ScrollNotification notification) {
+    if (!_canPull || _closing || notification.depth != 0) return false;
+    if (notification is ScrollUpdateNotification) {
+      if (notification.dragDetails != null) {
+        // Doigt posé : vibration au passage du seuil
+        final armed = -notification.metrics.pixels > _closeDistance;
+        if (armed != _closeArmed) {
+          _closeArmed = armed;
+          if (armed) HapticFeedback.mediumImpact();
+        }
+      } else if (_closeArmed) {
+        // Doigt levé assez bas (la fiche commence à revenir) : on ferme
+        _closing = true;
+        Navigator.of(context).maybePop();
+      }
+    } else if (notification is ScrollEndNotification) {
+      _closeArmed = false;
+    }
+    return false;
+  }
+
   @override
   void initState() {
     super.initState();
@@ -140,129 +180,173 @@ class _DetailsPageState extends State<DetailsPage> {
     final gutter = AppLayout.gutter(context);
     final twoColumns = _twoColumns;
 
-    return Scaffold(
-      body: GlowBackground(
-        center: const Alignment(0.9, -0.2),
-        child: Stack(
-          children: [
-            CustomScrollView(
-              controller: _scrollController,
-              // Le contenu passe au-dessus de l'en-tête : l'ombre de
-              // l'affiche ne déborde pas sur le bouton Lecture
-              paintOrder: SliverPaintOrder.lastIsTop,
-              slivers: [
-                SliverToBoxAdapter(
-                  child: Stack(
-                    children: [
-                      Positioned(
-                        top: 0,
-                        left: 0,
-                        right: 0,
-                        height: _backdropHeightNow,
-                        // Effet de profondeur : l'image défile moins vite
-                        child: AnimatedBuilder(
-                          animation: _scrollController,
-                          builder: (context, child) {
-                            final offset = _scrollController.hasClients
-                                ? math.max(0.0, _scrollController.offset)
-                                : 0.0;
+    final page = GlowBackground(
+      center: const Alignment(0.9, -0.2),
+      child: Stack(
+        children: [
+          CustomScrollView(
+            controller: _scrollController,
+            // Téléphone : la fiche rebondit en haut (pour l'agrandir ou la
+            // fermer en tirant)
+            physics: _canPull
+                ? const BouncingScrollPhysics(
+                    parent: AlwaysScrollableScrollPhysics(),
+                  )
+                : null,
+            // Le contenu passe au-dessus de l'en-tête : l'ombre de
+            // l'affiche ne déborde pas sur le bouton Lecture
+            paintOrder: SliverPaintOrder.lastIsTop,
+            slivers: [
+              SliverToBoxAdapter(
+                child: Stack(
+                  children: [
+                    Positioned(
+                      top: 0,
+                      left: 0,
+                      right: 0,
+                      height: _backdropHeightNow,
+                      // Effet de profondeur : l'image défile moins vite
+                      child: AnimatedBuilder(
+                        animation: _scrollController,
+                        builder: (context, child) {
+                          final offset = _scrollController.hasClients
+                              ? _scrollController.offset
+                              : 0.0;
+                          if (offset < 0) {
+                            // Tirée vers le bas : l'image reste collée en
+                            // haut de l'écran et s'agrandit
+                            final height = _backdropHeightNow;
                             return Transform.translate(
-                              offset: Offset(0, offset * 0.45),
-                              child: child,
+                              offset: Offset(0, offset),
+                              child: Transform.scale(
+                                scale: (height - offset) / height,
+                                alignment: Alignment.topCenter,
+                                child: child,
+                              ),
                             );
-                          },
-                          child: _Backdrop(
-                            api: widget.api,
-                            item: widget.item,
-                            details: widget.details,
-                            showFallback: widget.showBackdropFallback,
-                          ),
+                          }
+                          return Transform.translate(
+                            offset: Offset(0, offset * 0.45),
+                            child: child,
+                          );
+                        },
+                        child: _Backdrop(
+                          api: widget.api,
+                          item: widget.item,
+                          details: widget.details,
+                          showFallback: widget.showBackdropFallback,
                         ),
-                      ),
-                      Padding(
-                        padding: EdgeInsets.fromLTRB(
-                          gutter,
-                          _headerTopNow,
-                          gutter,
-                          0,
-                        ),
-                        // Deux colonnes : l'en-tête reste dans celle de gauche
-                        child: twoColumns
-                            ? _columns(widget.header, const SizedBox.shrink())
-                            : widget.header,
-                      ),
-                    ],
-                  ),
-                ),
-                if (twoColumns) ...[
-                  SliverPadding(
-                    padding: EdgeInsets.fromLTRB(gutter, 22, gutter, 0),
-                    sliver: SliverToBoxAdapter(
-                      child: _columns(
-                        _column(widget.children),
-                        _column(widget.aside),
                       ),
                     ),
+                    Padding(
+                      padding: EdgeInsets.fromLTRB(
+                        gutter,
+                        _headerTopNow,
+                        gutter,
+                        0,
+                      ),
+                      // Deux colonnes : l'en-tête reste dans celle de gauche
+                      child: twoColumns
+                          ? _columns(widget.header, const SizedBox.shrink())
+                          : widget.header,
+                    ),
+                  ],
+                ),
+              ),
+              if (twoColumns) ...[
+                SliverPadding(
+                  padding: EdgeInsets.fromLTRB(gutter, 22, gutter, 0),
+                  sliver: SliverToBoxAdapter(
+                    child: _columns(
+                      _column(widget.children),
+                      _column(widget.aside),
+                    ),
                   ),
-                  SliverPadding(
-                    padding: EdgeInsets.fromLTRB(gutter, 26, gutter, 0),
-                    sliver: SliverList.list(children: widget.below),
-                  ),
-                ] else
-                  SliverPadding(
-                    padding: EdgeInsets.fromLTRB(gutter, 22, gutter, 0),
-                    sliver: SliverList.list(children: widget.children),
-                  ),
-                SliverList.list(children: widget.footer),
-                const SliverToBoxAdapter(child: SizedBox(height: 48)),
-              ],
-            ),
-            // Barre du haut en verre dépoli, visible une fois l'image passée
-            Positioned(
-              top: 0,
-              left: 0,
-              right: 0,
-              child: IgnorePointer(
-                child: AnimatedOpacity(
-                  opacity: _showBar ? 1 : 0,
-                  duration: AppDurations.fast,
-                  child: ClipRect(
-                    child: FrostedBlur(
-                      sigma: 20,
-                      child: Container(
-                        height: topInset + 60,
-                        padding: EdgeInsets.fromLTRB(
-                          76,
-                          topInset,
-                          widget.action == null ? 20 : 76,
-                          0,
-                        ),
-                        alignment: Alignment.centerLeft,
-                        color: AppColors.scrim70,
-                        child: Text(
-                          widget.item.name,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: Theme.of(context).textTheme.titleMedium,
-                        ),
+                ),
+                SliverPadding(
+                  padding: EdgeInsets.fromLTRB(gutter, 26, gutter, 0),
+                  sliver: SliverList.list(children: widget.below),
+                ),
+              ] else
+                SliverPadding(
+                  padding: EdgeInsets.fromLTRB(gutter, 22, gutter, 0),
+                  sliver: SliverList.list(children: widget.children),
+                ),
+              SliverList.list(children: widget.footer),
+              const SliverToBoxAdapter(child: SizedBox(height: 48)),
+            ],
+          ),
+          // Barre du haut en verre dépoli, visible une fois l'image passée
+          Positioned(
+            top: 0,
+            left: 0,
+            right: 0,
+            child: IgnorePointer(
+              child: AnimatedOpacity(
+                opacity: _showBar ? 1 : 0,
+                duration: AppDurations.fast,
+                child: ClipRect(
+                  child: FrostedBlur(
+                    sigma: 20,
+                    child: Container(
+                      height: topInset + 60,
+                      padding: EdgeInsets.fromLTRB(
+                        76,
+                        topInset,
+                        widget.action == null ? 20 : 76,
+                        0,
+                      ),
+                      alignment: Alignment.centerLeft,
+                      color: AppColors.scrim70,
+                      child: Text(
+                        widget.item.name,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: Theme.of(context).textTheme.titleMedium,
                       ),
                     ),
                   ),
                 ),
               ),
             ),
-            Positioned(
-              top: topInset + 8,
-              left: gutter - 4,
-              child: GlassCircleButton(
-                icon: Icons.chevron_left_rounded,
-                tooltip: 'Retour',
-                onPressed: () => Navigator.of(context).maybePop(),
-              ),
+          ),
+          Positioned(
+            top: topInset + 8,
+            left: gutter - 4,
+            child: GlassCircleButton(
+              icon: Icons.chevron_left_rounded,
+              tooltip: 'Retour',
+              onPressed: () => Navigator.of(context).maybePop(),
             ),
-            if (widget.action case final action?)
-              Positioned(top: topInset + 8, right: gutter - 4, child: action),
-          ],
+          ),
+          if (widget.action case final action?)
+            Positioned(top: topInset + 8, right: gutter - 4, child: action),
+        ],
+      ),
+    );
+
+    return Scaffold(
+      backgroundColor: AppColors.black,
+      body: NotificationListener<ScrollNotification>(
+        onNotification: _onScrollNotification,
+        // Tirée vers le bas : la fiche rétrécit un peu et s'arrondit, comme
+        // une carte qu'on va reposer
+        child: AnimatedBuilder(
+          animation: _scrollController,
+          child: page,
+          builder: (context, child) {
+            final progress = (_pull / (_closeDistance * 1.5)).clamp(0.0, 1.0);
+            // Toujours les mêmes éléments (sinon la fiche serait recréée et
+            // perdrait sa position) ; découpe seulement pendant qu'on tire
+            return Transform.scale(
+              scale: 1 - 0.07 * progress,
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(32 * progress),
+                clipBehavior: progress == 0 ? Clip.none : Clip.antiAlias,
+                child: child,
+              ),
+            );
+          },
         ),
       ),
     );
@@ -406,6 +490,9 @@ class DetailsHeader extends StatelessWidget {
           ),
           child: Hero(
             tag: heroTag ?? PosterImage.heroTag(item),
+            flightShuttleBuilder: DeviceCapabilities.isTv
+                ? null
+                : _liftedPosterFlight,
             child: PosterImage(api: api, item: item),
           ),
         ),
@@ -462,6 +549,40 @@ class DetailsHeader extends StatelessWidget {
       ],
     );
   }
+}
+
+/// Affiche qui vole entre la rangée et la fiche : elle se soulève à
+/// mi-chemin (un peu plus grande, avec une ombre), puis se repose.
+Widget _liftedPosterFlight(
+  BuildContext flightContext,
+  Animation<double> animation,
+  HeroFlightDirection direction,
+  BuildContext fromContext,
+  BuildContext toContext,
+) {
+  // Toujours l'affiche de la fiche (dans les deux sens)
+  final fiche = direction == HeroFlightDirection.push ? toContext : fromContext;
+  final poster = (fiche.widget as Hero).child;
+  return AnimatedBuilder(
+    animation: animation,
+    child: poster,
+    builder: (context, child) {
+      final lift = math.sin(math.pi * animation.value);
+      return DecoratedBox(
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(AppRadius.poster),
+          boxShadow: [
+            BoxShadow(
+              color: AppColors.scrim70,
+              blurRadius: 36 * lift,
+              offset: Offset(0, 18 * lift),
+            ),
+          ],
+        ),
+        child: Transform.scale(scale: 1 + 0.06 * lift, child: child),
+      );
+    },
+  );
 }
 
 /// Genres (en pastilles) puis résumé.
