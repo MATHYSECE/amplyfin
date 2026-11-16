@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import '../api/jellyfin_api.dart';
 import '../models/home_items.dart';
 import '../models/media_item.dart';
+import '../models/recommendation.dart';
 import '../models/resume_entry.dart';
 import '../models/session.dart';
 import '../models/track_choice.dart';
@@ -73,6 +74,7 @@ class HomeTabState extends State<HomeTab> with WidgetsBindingObserver {
   List<NewEpisodesEntry> _newEpisodes = const [];
   List<MediaItem> _released = const [];
   List<MediaItem> _favorites = const [];
+  List<Recommendation> _recommended = const [];
 
   /// Vrai pendant le lancement d'une lecture.
   bool _starting = false;
@@ -162,11 +164,15 @@ class HomeTabState extends State<HomeTab> with WidgetsBindingObserver {
       ),
     );
     final favoritesFuture = _fetchFavorites();
+    final recommendedFuture = _safe(
+      widget.api.getRecommendations(userId: _userId),
+    );
     final continueEntries = await continueFuture;
     final movies = await moviesFuture;
     final episodes = await episodesFuture;
     final released = await releasedFuture;
     final favorites = await favoritesFuture;
+    final recommended = await recommendedFuture;
     if (!mounted) return;
     setState(() {
       _loading = false;
@@ -183,6 +189,7 @@ class HomeTabState extends State<HomeTab> with WidgetsBindingObserver {
       ];
       _released = released?.items ?? const [];
       _favorites = favorites ?? const [];
+      _recommended = pickRecommendations(recommended ?? const []);
       _hero = pickHeroItems(movies ?? const [], episodes ?? const []);
     });
   }
@@ -663,6 +670,18 @@ class HomeTabState extends State<HomeTab> with WidgetsBindingObserver {
           children: [
             for (final movie in _released)
               _movieTile(movie, 'home-released', movie.year?.toString() ?? ''),
+          ],
+        ),
+      for (final (i, row) in _recommended.indexed)
+        MediaRow(
+          title: row.title,
+          children: [
+            for (final movie in row.items)
+              _movieTile(
+                movie,
+                'home-recommended-$i',
+                movie.year?.toString() ?? '',
+              ),
           ],
         ),
       _DownloadedRow(

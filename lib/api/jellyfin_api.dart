@@ -12,6 +12,7 @@ import '../models/item_details.dart';
 import '../models/media_item.dart';
 import '../models/media_segments.dart';
 import '../models/playback_info.dart';
+import '../models/recommendation.dart';
 import '../models/playback_quality.dart';
 import '../models/resume_entry.dart';
 import '../models/season.dart';
@@ -243,6 +244,28 @@ class JellyfinApi {
       query: {'userId': userId},
     );
     return json as Map<String, dynamic>;
+  }
+
+  /// GET /Movies/Recommendations : rangées de films conseillés d'après ce
+  /// que la personne a regardé ou aimé (« parce que vous avez regardé… »).
+  Future<List<Recommendation>> getRecommendations({
+    required String userId,
+    int categoryLimit = 6,
+    int itemLimit = 12,
+  }) async {
+    final json = await _send(
+      'GET',
+      '/Movies/Recommendations',
+      query: {
+        'userId': userId,
+        'categoryLimit': '$categoryLimit',
+        'itemLimit': '$itemLimit',
+      },
+    );
+    return [
+      for (final category in (json as List<dynamic>?) ?? const [])
+        ?Recommendation.fromJson(category as Map<String, dynamic>),
+    ];
   }
 
   /// GET /Items/{id}/Similar?userId=… : films ou séries qui ressemblent à
