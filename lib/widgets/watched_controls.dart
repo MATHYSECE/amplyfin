@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../api/jellyfin_api.dart';
 import '../models/media_item.dart';
@@ -162,6 +163,7 @@ Future<bool> toggleWatched(
     return false;
   }
   final messenger = ScaffoldMessenger.of(context);
+  HapticFeedback.selectionClick();
   final played = !current.played;
   final state = WatchedState.instance;
   try {

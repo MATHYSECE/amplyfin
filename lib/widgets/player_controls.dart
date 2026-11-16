@@ -431,6 +431,8 @@ class PlayerControlsState extends State<PlayerControls> {
   }
 
   void _showSeekFeedback(int direction) {
+    // Petite vibration : le saut est bien pris en compte
+    HapticFeedback.selectionClick();
     setState(() => _seekFeedback = direction);
     _seekFeedbackTimer?.cancel();
     _seekFeedbackTimer = Timer(const Duration(milliseconds: 600), () {
@@ -476,6 +478,7 @@ class PlayerControlsState extends State<PlayerControls> {
 
   void _zoom(bool fill) {
     _pinchUsed = true;
+    HapticFeedback.lightImpact();
     widget.onZoom?.call(fill);
     setState(() => _zoomFeedback = fill ? 'Plein écran' : 'Image entière');
     _zoomFeedbackTimer?.cancel();

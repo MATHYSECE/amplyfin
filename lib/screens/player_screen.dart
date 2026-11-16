@@ -620,6 +620,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
   void _skipIntro() {
     final intro = _segments.intro;
     if (intro == null) return;
+    HapticFeedback.selectionClick();
     _player.seek(intro.end);
     _setInIntro(false, intro.end);
   }

@@ -1,6 +1,7 @@
 import 'dart:ui' show ImageFilter;
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../services/device_capabilities.dart';
 import '../theme/app_theme.dart';
@@ -513,6 +514,8 @@ class _PressableScaleState extends State<PressableScale> {
           ? null
           : () {
               _press(false);
+              // Vibration de l'appui long, comme les menus du téléphone
+              HapticFeedback.mediumImpact();
               widget.onLongPress!();
             },
       onSecondaryTap: DeviceCapabilities.isDesktop ? widget.onLongPress : null,
