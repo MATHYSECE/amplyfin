@@ -1,6 +1,8 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/physics.dart';
+import 'package:flutter/services.dart';
 
 import '../api/jellyfin_api.dart';
 import '../models/home_items.dart';
@@ -10,9 +12,9 @@ import 'media_row.dart';
 import 'net_image.dart';
 
 /// « À la une » en haut de l'accueil : les nouveautés défilent toutes
-/// seules (fondu et léger zoom sur l'image), ou au doigt. Sur un téléphone,
-/// une grande carte ; sur une tablette, une bannière sur toute la largeur
-/// avec le résumé.
+/// seules, ou au doigt. Sur un téléphone, un paquet de cartes (les
+/// suivantes dépassent derrière) qu'on lance de côté ; sur une tablette (et
+/// la télé), une bannière sur toute la largeur avec le résumé, en fondu.
 class HomeHero extends StatefulWidget {
   const HomeHero({
     super.key,
@@ -38,6 +40,10 @@ class _HomeHeroState extends State<HomeHero> {
   int _index = 0;
   Timer? _timer;
 
+  /// Vrai en bannière (tablette) : le paquet de cartes du téléphone a son
+  /// propre défilement.
+  bool _wide = true;
+
   @override
   void initState() {
     super.initState();
@@ -52,7 +58,9 @@ class _HomeHeroState extends State<HomeHero> {
 
   void _restartTimer() {
     _timer?.cancel();
-    _timer = Timer.periodic(HomeHero._interval, (_) => _go(_index + 1));
+    _timer = Timer.periodic(HomeHero._interval, (_) {
+      if (_wide) _go(_index + 1);
+    });
   }
 
   void _go(int index) {
@@ -66,6 +74,18 @@ class _HomeHeroState extends State<HomeHero> {
     final layout = HomeLayout.of(context);
     final items = widget.items;
     if (items.isEmpty) return const SizedBox.shrink();
+    _wide = layout.isWide;
+    if (!layout.isWide) {
+      return Padding(
+        padding: EdgeInsets.symmetric(horizontal: layout.gutter),
+        child: _HeroDeck(
+          api: widget.api,
+          items: items,
+          onPlay: widget.onPlay,
+          onInfo: widget.onInfo,
+        ),
+      );
+    }
     final current = items[_index.clamp(0, items.length - 1)];
     final width = MediaQuery.sizeOf(context).width;
 
@@ -293,6 +313,295 @@ class _HeroImageState extends State<_HeroImage>
         child: child,
       ),
       child: image,
+    );
+  }
+}
+
+/// Téléphone : paquet de cartes. La carte du dessus suit le doigt en
+/// pivotant un peu ; lancée assez loin (ou assez vite), elle s'envole et la
+/// suivante avance au premier plan. Relâchée trop tôt, elle revient avec un
+/// rebond. Toutes les 6 s, la carte du dessus s'envole toute seule.
+class _HeroDeck extends StatefulWidget {
+  const _HeroDeck({
+    required this.api,
+    required this.items,
+    required this.onPlay,
+    required this.onInfo,
+  });
+
+  final JellyfinApi api;
+  final List<HeroItem> items;
+  final void Function(HeroItem item) onPlay;
+  final void Function(HeroItem item) onInfo;
+
+  @override
+  State<_HeroDeck> createState() => _HeroDeckState();
+}
+
+class _HeroDeckState extends State<_HeroDeck>
+    with SingleTickerProviderStateMixin {
+  /// Décalage de la carte du dessus, en pixels (négatif : vers la gauche).
+  late final _offset = AnimationController.unbounded(vsync: this);
+
+  int _index = 0;
+  Timer? _timer;
+  double _width = 1;
+
+  /// Vrai pendant qu'une carte s'envole.
+  bool _flying = false;
+
+  /// Hauteur dont chaque carte de derrière dépasse en bas.
+  static const _peek = 11.0;
+
+  @override
+  void initState() {
+    super.initState();
+    _restartTimer();
+  }
+
+  @override
+  void dispose() {
+    _timer?.cancel();
+    _offset.dispose();
+    super.dispose();
+  }
+
+  void _restartTimer() {
+    _timer?.cancel();
+    _timer = Timer.periodic(HomeHero._interval, (_) => _flyAway(-1));
+  }
+
+  int get _count => widget.items.length;
+
+  /// La carte du dessus s'envole vers la gauche (-1) ou la droite (1), puis
+  /// la suivante passe devant.
+  Future<void> _flyAway(int direction) async {
+    if (_flying || _count < 2 || !mounted) return;
+    _flying = true;
+    await _offset.animateTo(
+      direction * _width * 1.25,
+      duration: const Duration(milliseconds: 380),
+      curve: Curves.easeInCubic,
+    );
+    if (!mounted) return;
+    setState(() => _index = (_index + 1) % _count);
+    _offset.value = 0;
+    _flying = false;
+  }
+
+  void _onDragEnd(DragEndDetails details) {
+    final speed = details.primaryVelocity ?? 0;
+    final dx = _offset.value;
+    if (dx.abs() > _width * 0.28 || speed.abs() > 700) {
+      final direction = (dx != 0 ? dx : speed).sign.toInt();
+      HapticFeedback.selectionClick();
+      _flyAway(direction == 0 ? -1 : direction);
+    } else {
+      // Pas assez loin : revient au centre avec un petit rebond
+      _offset.animateWith(
+        SpringSimulation(
+          const SpringDescription(mass: 1, stiffness: 420, damping: 24),
+          dx,
+          0,
+          speed,
+        ),
+      );
+    }
+    _restartTimer();
+  }
+
+  /// Aller directement à la nouveauté [index] (appui sur un point).
+  void _jump(int index) {
+    if (_flying) return;
+    setState(() => _index = index);
+    _restartTimer();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final items = widget.items;
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        _width = constraints.maxWidth;
+        final cardHeight = _width * 1.2;
+        final depths = [for (var d = 0; d < 3 && d < items.length; d++) d];
+        return GestureDetector(
+          onHorizontalDragStart: (_) {
+            if (_flying) return;
+            _timer?.cancel();
+            _offset.stop();
+          },
+          onHorizontalDragUpdate: (details) {
+            if (!_flying) _offset.value += details.delta.dx;
+          },
+          onHorizontalDragEnd: (details) {
+            if (!_flying) _onDragEnd(details);
+          },
+          child: SizedBox(
+            height: cardHeight + _peek * 2,
+            child: AnimatedBuilder(
+              animation: _offset,
+              builder: (context, _) {
+                final dx = _offset.value;
+                // Les cartes de derrière avancent pendant que celle du
+                // dessus s'en va
+                final progress = (dx.abs() / _width).clamp(0.0, 1.0);
+                return Stack(
+                  clipBehavior: Clip.none,
+                  children: [
+                    for (final depth in depths.reversed)
+                      _deckCard(
+                        items[(_index + depth) % items.length],
+                        depth: depth,
+                        place: depth == 0 ? 0.0 : depth - progress,
+                        dx: depth == 0 ? dx : 0,
+                        height: cardHeight,
+                      ),
+                    // Points : où on en est
+                    Positioned(
+                      right: 16,
+                      top: 16,
+                      child: _Dots(
+                        count: items.length,
+                        index: _index,
+                        onTap: _jump,
+                      ),
+                    ),
+                  ],
+                );
+              },
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  /// Une carte du paquet. [place] : 0 devant, 1 juste derrière, 2 au fond
+  /// (valeurs entre deux pendant un mouvement).
+  Widget _deckCard(
+    HeroItem item, {
+    required int depth,
+    required double place,
+    required double dx,
+    required double height,
+  }) {
+    final card = ClipRRect(
+      borderRadius: BorderRadius.circular(AppRadius.card),
+      child: Stack(
+        fit: StackFit.expand,
+        children: [
+          _HeroImage(api: widget.api, item: item, zoom: depth == 0),
+          const DecoratedBox(
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topCenter,
+                end: Alignment.bottomCenter,
+                stops: [0.35, 0.65, 1],
+                colors: [
+                  Colors.transparent,
+                  AppColors.scrim55,
+                  AppColors.black,
+                ],
+              ),
+            ),
+          ),
+          Positioned(
+            left: 20,
+            right: 20,
+            bottom: 18,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                _HeroText(item: item, wide: false),
+                const SizedBox(height: 16),
+                Row(
+                  children: [
+                    _HeroButton(
+                      filled: true,
+                      wide: false,
+                      icon: Icons.play_arrow_rounded,
+                      label: 'Lecture',
+                      onPressed: () => widget.onPlay(item),
+                    ),
+                    const SizedBox(width: 10),
+                    _HeroButton(
+                      filled: false,
+                      wide: false,
+                      icon: Icons.info_outline_rounded,
+                      label: 'Infos',
+                      onPressed: () => widget.onInfo(item),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+          // Cartes de derrière assombries
+          if (place > 0)
+            ColoredBox(
+              color: AppColors.black.withValues(
+                alpha: (0.45 * place).clamp(0.0, 0.8),
+              ),
+            ),
+        ],
+      ),
+    );
+    return Positioned(
+      // Même carte d'une place à l'autre : son image ne recharge pas
+      key: ValueKey(item.item.id),
+      left: 0,
+      right: 0,
+      top: 0,
+      height: height,
+      child: IgnorePointer(
+        ignoring: depth != 0,
+        child: Transform.translate(
+          offset: Offset(dx, _peek * place),
+          child: Transform.rotate(
+            // Pivote un peu dans le sens du lancer
+            angle: dx / _width * 0.18,
+            alignment: const Alignment(0, 2.2),
+            child: Transform.scale(
+              scale: 1 - 0.05 * place,
+              alignment: Alignment.bottomCenter,
+              child: card,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Points de « À la une » : le point actuel est une petite pilule.
+class _Dots extends StatelessWidget {
+  const _Dots({required this.count, required this.index, required this.onTap});
+
+  final int count;
+  final int index;
+  final ValueChanged<int> onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        for (var i = 0; i < count; i++)
+          GestureDetector(
+            onTap: () => onTap(i),
+            child: AnimatedContainer(
+              duration: AppDurations.medium,
+              curve: Curves.easeOutCubic,
+              margin: const EdgeInsets.only(left: 6),
+              width: i == index ? 22 : 7,
+              height: 7,
+              decoration: BoxDecoration(
+                color: i == index ? AppColors.white : AppColors.track,
+                borderRadius: BorderRadius.circular(AppRadius.pill),
+              ),
+            ),
+          ),
+      ],
     );
   }
 }
