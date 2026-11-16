@@ -62,8 +62,20 @@ d'un appareil à l'autre. Amplyfin part du principe inverse :
   serveur en a (téléchargées par exemple avec
   [Trailarr](https://github.com/nandyalu/trailarr)), lues dans le lecteur
   sans toucher à « Continuer à regarder ».
+- **Vitesse de lecture** (de × 0,5 à × 2) et **minuterie de sommeil** (pause
+  après 15 min à 1 h, ou à la fin de la vidéo), dans le menu Qualité.
+
+### Découvrir
+- **Ma liste** : le cœur d'une fiche ajoute le film ou la série à tes favoris
+  Jellyfin, retrouvés sur l'accueil (et dans tes autres applis Jellyfin).
+- **Distribution** sur chaque fiche : un appui sur un acteur ou un
+  réalisateur montre ses autres films et séries.
+- **Titres similaires** sous chaque fiche, et rangées **« Parce que tu as
+  regardé… »** sur l'accueil.
 
 ### Séries
+- Grand bouton **« Lecture »** ou **« Reprendre »** sur la fiche : l'épisode
+  commencé, sinon celui qui suit le dernier vu.
 - **Reprise** à l'endroit exact où tu t'étais arrêté.
 - Bouton **« Passer l'intro »** (avec le plugin Intro Skipper sur le serveur),
   jamais de saut automatique.
@@ -254,6 +266,8 @@ Principes du code :
 - [x] Améliorations (téléchargements, Continuer à regarder, synchronisation)
 - [x] Visite guidée à la première connexion
 - [x] Télés Samsung (Tizen, lecteur de la télé)
+- [x] Ma liste, distribution, titres similaires, recommandations
+- [x] Vitesse de lecture et minuterie de sommeil
 
 ---
 
