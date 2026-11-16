@@ -1,9 +1,9 @@
-import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 
 import '../api/jellyfin_api.dart';
 import '../models/media_item.dart';
 import '../services/download_manager.dart';
+import 'net_image.dart';
 
 /// Affiche d'un film ou d'une série aux coins arrondis (via le thème, Card).
 /// Utilisée dans la grille et sur la fiche : même adresse partout, donc
@@ -31,17 +31,13 @@ class PosterImage extends StatelessWidget {
     return Card(
       child: url == null
           ? _fallback()
-          : CachedNetworkImage(
-              imageUrl: url,
-              fit: BoxFit.cover,
-              width: double.infinity,
-              height: double.infinity,
+          : NetImage(
+              url: url,
+              blurHash: item.posterHash,
               // Image décodée à la taille demandée : économise la mémoire
               memCacheWidth: pixelWidth,
-              fadeInDuration: const Duration(milliseconds: 200),
-              placeholder: (_, _) => const SizedBox.shrink(),
               // Hors ligne : l'affiche téléchargée avec le film, s'il y en a une
-              errorWidget: (_, _, _) => _fallback(),
+              error: _fallback(),
             ),
     );
   }

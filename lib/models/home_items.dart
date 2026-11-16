@@ -1,3 +1,4 @@
+import 'blur_hash.dart';
 import 'item_details.dart';
 import 'media_item.dart';
 import 'resume_entry.dart';
@@ -91,6 +92,9 @@ class NewEpisodesEntry {
     final count = (json['ChildCount'] as int?) ?? 1;
     final season = json['ParentIndexNumber'] as int?;
     final number = json['IndexNumber'] as int?;
+    final posterTag = isSeries
+        ? (imageTags?['Primary'] as String?)
+        : (json['SeriesPrimaryImageTag'] as String?);
     final series = MediaItem(
       id:
           (isSeries ? json['Id'] : json['SeriesId']) as String? ??
@@ -100,9 +104,8 @@ class NewEpisodesEntry {
           (json['Name'] as String?) ??
           'Sans titre',
       type: 'Series',
-      posterTag: isSeries
-          ? (imageTags?['Primary'] as String?)
-          : (json['SeriesPrimaryImageTag'] as String?),
+      posterTag: posterTag,
+      posterHash: blurHashOf(json, 'Primary', posterTag),
     );
     final String label;
     if (type == 'Episode' && season != null && number != null) {

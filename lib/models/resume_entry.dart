@@ -1,3 +1,4 @@
+import 'blur_hash.dart';
 import 'durations.dart';
 import 'episode.dart';
 import 'media_item.dart';
@@ -46,6 +47,11 @@ class ResumeEntry {
           name: seriesName,
           type: 'Series',
           posterTag: json['SeriesPrimaryImageTag'] as String?,
+          posterHash: blurHashOf(
+            json,
+            'Primary',
+            json['SeriesPrimaryImageTag'] as String?,
+          ),
         ),
         title: seriesName,
         subtitle: (season != null && number != null)

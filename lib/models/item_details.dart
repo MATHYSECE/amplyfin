@@ -1,3 +1,4 @@
+import 'blur_hash.dart';
 import 'durations.dart';
 import 'media_item.dart';
 import 'media_quality.dart';
@@ -15,6 +16,7 @@ class ItemDetails {
     this.officialRating,
     this.communityRating,
     this.backdropTag,
+    this.backdropHash,
     this.quality,
     this.endYear,
     this.status,
@@ -30,6 +32,9 @@ class ItemDetails {
   factory ItemDetails.fromJson(Map<String, dynamic> json) {
     final ticks = json['RunTimeTicks'] as int?;
     final backdropTags = json['BackdropImageTags'] as List<dynamic>?;
+    final backdropTag = (backdropTags != null && backdropTags.isNotEmpty)
+        ? backdropTags.first as String?
+        : null;
     final endDate = json['EndDate'] as String?;
     // Premier fichier vidéo : pistes et choix par défaut du serveur
     // (qui tiennent compte des préférences de l'utilisateur)
@@ -44,9 +49,8 @@ class ItemDetails {
       runtime: ticksToDuration(ticks),
       officialRating: json['OfficialRating'] as String?,
       communityRating: (json['CommunityRating'] as num?)?.toDouble(),
-      backdropTag: (backdropTags != null && backdropTags.isNotEmpty)
-          ? backdropTags.first as String?
-          : null,
+      backdropTag: backdropTag,
+      backdropHash: blurHashOf(json, 'Backdrop', backdropTag),
       quality: MediaQuality.fromItemJson(json),
       endYear: endDate == null ? null : DateTime.tryParse(endDate)?.year,
       status: json['Status'] as String?,
@@ -83,6 +87,9 @@ class ItemDetails {
 
   /// Empreinte de l'image de fond, ou null s'il n'y en a pas.
   final String? backdropTag;
+
+  /// Aperçu flou de l'image de fond, affiché pendant qu'elle charge.
+  final String? backdropHash;
 
   /// Qualité technique du fichier (films), si connue.
   final MediaQuality? quality;

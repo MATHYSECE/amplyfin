@@ -1,6 +1,5 @@
 import 'dart:async';
 
-import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 
 import '../api/jellyfin_api.dart';
@@ -16,6 +15,7 @@ import '../theme/app_theme.dart';
 import '../widgets/genre_card.dart';
 import '../widgets/media_row.dart';
 import '../widgets/people_row.dart';
+import '../widgets/net_image.dart';
 import '../widgets/ui.dart';
 import '../widgets/tv_focus.dart';
 import 'genre_screen.dart';
@@ -778,12 +778,11 @@ class _EpisodeImage extends StatelessWidget {
     return Card(
       child: url == null
           ? local
-          : CachedNetworkImage(
-              imageUrl: url,
-              fit: BoxFit.cover,
+          : NetImage(
+              url: url,
+              blurHash: episode.imageHash,
               memCacheWidth: 480,
-              placeholder: (_, _) => const SizedBox.shrink(),
-              errorWidget: (_, _, _) => local,
+              error: local,
             ),
     );
   }

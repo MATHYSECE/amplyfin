@@ -1,4 +1,3 @@
-import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 
 import '../api/jellyfin_api.dart';
@@ -26,6 +25,7 @@ import '../widgets/details_page.dart';
 import '../widgets/favorite_button.dart';
 import '../widgets/download_controls.dart';
 import '../widgets/track_picker.dart';
+import '../widgets/net_image.dart';
 import '../widgets/ui.dart';
 import '../widgets/watched_controls.dart';
 import '../widgets/tv_focus.dart';
@@ -892,15 +892,12 @@ class _EpisodeThumbnail extends StatelessWidget {
     return Card(
       child: url == null
           ? placeholder
-          : CachedNetworkImage(
-              imageUrl: url,
-              fit: BoxFit.cover,
-              width: double.infinity,
-              height: double.infinity,
+          : NetImage(
+              url: url,
+              blurHash: episode.imageHash,
               memCacheWidth: _episodeImageWidth,
-              fadeInDuration: AppDurations.fast,
-              placeholder: (_, _) => const SizedBox.shrink(),
-              errorWidget: (_, _, _) => placeholder,
+              fadeIn: AppDurations.fast,
+              error: placeholder,
             ),
     );
   }

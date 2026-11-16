@@ -10,6 +10,7 @@ import '../models/media_item.dart';
 import '../services/download_manager.dart';
 import '../theme/app_theme.dart';
 import 'poster_image.dart';
+import 'net_image.dart';
 import 'ui.dart';
 
 /// Squelette commun des fiches (film, série) : grande image de fond qui
@@ -303,12 +304,10 @@ class _Backdrop extends StatelessWidget {
     if (localBackdrop != null) {
       image = Image.file(localBackdrop, fit: BoxFit.cover);
     } else if (backdropUrl != null) {
-      image = CachedNetworkImage(
-        imageUrl: backdropUrl,
-        fit: BoxFit.cover,
-        fadeInDuration: AppDurations.medium,
-        placeholder: (_, _) => const SizedBox.shrink(),
-        errorWidget: (_, _, _) => _blurredPoster(),
+      image = NetImage(
+        url: backdropUrl,
+        blurHash: details?.backdropHash,
+        error: _blurredPoster(),
       );
     } else if (showFallback) {
       image = _blurredPoster();

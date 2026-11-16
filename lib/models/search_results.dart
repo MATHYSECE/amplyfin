@@ -1,3 +1,4 @@
+import 'blur_hash.dart';
 import 'download_info.dart';
 import 'media_item.dart';
 
@@ -12,6 +13,7 @@ class SearchEpisode {
     this.seasonNumber,
     this.number,
     this.imageTag,
+    this.imageHash,
   });
 
   /// Lit un épisode renvoyé par GET /Items.
@@ -25,11 +27,17 @@ class SearchEpisode {
         name: (json['SeriesName'] as String?) ?? 'Série',
         type: 'Series',
         posterTag: json['SeriesPrimaryImageTag'] as String?,
+        posterHash: blurHashOf(
+          json,
+          'Primary',
+          json['SeriesPrimaryImageTag'] as String?,
+        ),
       ),
       seasonId: json['SeasonId'] as String?,
       seasonNumber: json['ParentIndexNumber'] as int?,
       number: json['IndexNumber'] as int?,
       imageTag: imageTags?['Primary'] as String?,
+      imageHash: blurHashOf(json, 'Primary', imageTags?['Primary'] as String?),
     );
   }
 
@@ -55,6 +63,9 @@ class SearchEpisode {
 
   /// Empreinte de la vignette de l'épisode (null s'il n'y en a pas).
   final String? imageTag;
+
+  /// Aperçu flou de la vignette, affiché pendant qu'elle charge.
+  final String? imageHash;
 
   /// « S5 · É1 · Las Vegas ».
   String get detail {

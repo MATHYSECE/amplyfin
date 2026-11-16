@@ -1,6 +1,5 @@
 import 'dart:async';
 
-import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 
 import '../api/jellyfin_api.dart';
@@ -8,6 +7,7 @@ import '../models/home_items.dart';
 import '../services/device_capabilities.dart';
 import '../theme/app_theme.dart';
 import 'media_row.dart';
+import 'net_image.dart';
 
 /// « À la une » en haut de l'accueil : les nouveautés défilent toutes
 /// seules (fondu et léger zoom sur l'image), ou au doigt. Sur un téléphone,
@@ -274,18 +274,17 @@ class _HeroImageState extends State<_HeroImage>
         MediaQuery.sizeOf(context).width *
         MediaQuery.devicePixelRatioOf(context);
     final width = ((pixels / 200).ceil() * 200).clamp(400, 1920);
-    final url =
-        widget.api.backdropUrl(widget.item.details, width: width) ??
-        widget.api.posterUrl(widget.item.item, width: 600);
+    final backdrop = widget.api.backdropUrl(widget.item.details, width: width);
+    final url = backdrop ?? widget.api.posterUrl(widget.item.item, width: 600);
     final image = url == null
         ? const ColoredBox(color: AppColors.surface2)
-        : CachedNetworkImage(
-            imageUrl: url,
-            fit: BoxFit.cover,
-            fadeInDuration: AppDurations.medium,
-            placeholder: (_, _) => const ColoredBox(color: AppColors.surface1),
-            errorWidget: (_, _, _) =>
-                const ColoredBox(color: AppColors.surface2),
+        : NetImage(
+            url: url,
+            blurHash: backdrop != null
+                ? widget.item.details.backdropHash
+                : widget.item.item.posterHash,
+            placeholder: const ColoredBox(color: AppColors.surface1),
+            error: const ColoredBox(color: AppColors.surface2),
           );
     return AnimatedBuilder(
       animation: _controller,

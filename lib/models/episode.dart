@@ -1,3 +1,4 @@
+import 'blur_hash.dart';
 import 'durations.dart';
 import 'file_size.dart';
 import 'media_quality.dart';
@@ -15,6 +16,7 @@ class Episode {
     this.overview,
     this.runtime,
     this.imageTag,
+    this.imageHash,
     this.progress = const WatchProgress(),
     this.quality,
     this.tracks = const [],
@@ -36,6 +38,7 @@ class Episode {
       overview: json['Overview'] as String?,
       runtime: ticksToDuration(json['RunTimeTicks'] as int?),
       imageTag: imageTags?['Primary'] as String?,
+      imageHash: blurHashOf(json, 'Primary', imageTags?['Primary'] as String?),
       progress: WatchProgress.fromUserData(
         json['UserData'] as Map<String, dynamic>?,
       ),
@@ -64,6 +67,9 @@ class Episode {
 
   /// Empreinte de la vignette de l'épisode (null s'il n'y en a pas).
   final String? imageTag;
+
+  /// Aperçu flou de la vignette, affiché pendant qu'elle charge.
+  final String? imageHash;
 
   /// Où en est la lecture (position, part vue, déjà vu).
   final WatchProgress progress;

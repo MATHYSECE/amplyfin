@@ -1,3 +1,4 @@
+import 'blur_hash.dart';
 import 'watch_progress.dart';
 
 /// Un élément de la bibliothèque (film ou série), avec juste ce qu'il faut
@@ -9,18 +10,21 @@ class MediaItem {
     this.type,
     this.year,
     this.posterTag,
+    this.posterHash,
     this.progress = const WatchProgress(),
   });
 
   /// Lit un élément à partir du JSON renvoyé par GET /Items.
   factory MediaItem.fromJson(Map<String, dynamic> json) {
     final imageTags = json['ImageTags'] as Map<String, dynamic>?;
+    final posterTag = imageTags?['Primary'] as String?;
     return MediaItem(
       id: json['Id'] as String,
       name: (json['Name'] as String?) ?? 'Sans titre',
       type: json['Type'] as String?,
       year: json['ProductionYear'] as int?,
-      posterTag: imageTags?['Primary'] as String?,
+      posterTag: posterTag,
+      posterHash: blurHashOf(json, 'Primary', posterTag),
       progress: WatchProgress.fromUserData(
         json['UserData'] as Map<String, dynamic>?,
       ),
@@ -42,6 +46,9 @@ class MediaItem {
   /// Empreinte de l'affiche : change quand l'affiche change sur le serveur.
   /// Null s'il n'y a pas d'affiche.
   final String? posterTag;
+
+  /// Aperçu flou de l'affiche, affiché pendant qu'elle charge.
+  final String? posterHash;
 
   /// Vu ou pas, et pour une série le nombre d'épisodes pas vus (seulement
   /// si la demande au serveur l'inclut).
