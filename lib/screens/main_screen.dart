@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_animate/flutter_animate.dart';
 
 import '../api/jellyfin_api.dart';
 import '../models/media_item.dart';
@@ -12,6 +13,7 @@ import '../widgets/account_sheet.dart';
 import '../widgets/connection_pill.dart';
 import '../widgets/download_controls.dart';
 import '../widgets/library_grid.dart';
+import '../widgets/liquid_pill.dart';
 import '../widgets/transitions.dart';
 import '../widgets/tv_focus.dart';
 import '../widgets/ui.dart';
@@ -503,7 +505,8 @@ class _Header extends StatelessWidget {
   }
 }
 
-/// Barre de navigation : pastille blanche qui glisse sous l'onglet choisi.
+/// Barre de navigation : pastille blanche « liquide » qui s'étire vers
+/// l'onglet choisi.
 /// Sur une tablette, une pilule flottante en bas au centre.
 class _BottomBar extends StatelessWidget {
   const _BottomBar({
@@ -533,19 +536,12 @@ class _BottomBar extends StatelessWidget {
         final pillWidth = wide ? width - 8 : 56.0;
         return Stack(
           children: [
-            AnimatedPositioned(
-              duration: AppDurations.emphasized,
-              curve: Curves.easeInOutCubicEmphasized,
-              left: index * width + (width - pillWidth) / 2,
-              top: wide ? 4 : 6,
-              width: pillWidth,
-              height: wide ? 52 : 32,
-              child: const DecoratedBox(
-                decoration: ShapeDecoration(
-                  color: AppColors.white,
-                  shape: StadiumBorder(),
-                ),
-              ),
+            LiquidPill(
+              index: index,
+              slotExtent: width,
+              pillExtent: pillWidth,
+              crossStart: wide ? 4 : 6,
+              crossExtent: wide ? 52 : 32,
             ),
             // Toute la hauteur de la barre : sur une tablette, les onglets
             // sont centrés sur la pastille
@@ -628,43 +624,69 @@ class _SideRail extends StatelessWidget {
         color: AppColors.scrim55,
         border: Border(right: BorderSide(color: AppColors.glassBorder)),
       ),
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          for (final (i, (icon, label)) in _BottomBar._items.indexed)
-            Padding(
-              padding: const EdgeInsets.symmetric(vertical: 8),
-              child: TvFocusable(
-                onTap: () => onSelect(i),
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          // Onglets de même hauteur, centrés : la pastille sait où aller
+          const slot = 80.0;
+          const itemHeight = 66.0;
+          final items = _BottomBar._items;
+          return Stack(
+            children: [
+              LiquidPill(
+                index: index,
+                axis: Axis.vertical,
+                mainStart: (constraints.maxHeight - slot * items.length) / 2,
+                slotExtent: slot,
+                pillExtent: itemHeight,
+                crossStart: 12,
+                crossExtent: 80,
                 radius: AppRadius.card,
-                child: AnimatedContainer(
-                  duration: AppDurations.medium,
-                  width: 80,
-                  padding: const EdgeInsets.symmetric(vertical: 10),
-                  decoration: BoxDecoration(
-                    color: i == index ? AppColors.white : Colors.transparent,
-                    borderRadius: BorderRadius.circular(AppRadius.card),
-                  ),
-                  child: Column(
-                    children: [
-                      Icon(
-                        icon,
-                        size: 26,
-                        color: i == index ? AppColors.black : AppColors.grey,
-                      ),
-                      const SizedBox(height: 4),
-                      Text(
-                        label,
-                        style: textTheme.labelSmall?.copyWith(
-                          color: i == index ? AppColors.black : AppColors.grey,
+              ),
+              Positioned.fill(
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    for (final (i, (icon, label)) in items.indexed)
+                      SizedBox(
+                        height: slot,
+                        child: Center(
+                          child: TvFocusable(
+                            onTap: () => onSelect(i),
+                            radius: AppRadius.card,
+                            child: SizedBox(
+                              width: 80,
+                              height: itemHeight,
+                              child: TweenAnimationBuilder<Color?>(
+                                tween: ColorTween(
+                                  end: i == index
+                                      ? AppColors.black
+                                      : AppColors.grey,
+                                ),
+                                duration: AppDurations.medium,
+                                builder: (context, color, _) => Column(
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  children: [
+                                    Icon(icon, size: 26, color: color),
+                                    const SizedBox(height: 4),
+                                    Text(
+                                      label,
+                                      style: textTheme.labelSmall?.copyWith(
+                                        color: color,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          ),
                         ),
                       ),
-                    ],
-                  ),
+                  ],
                 ),
               ),
-            ),
-        ],
+            ],
+          );
+        },
       ),
     );
   }
@@ -695,16 +717,25 @@ class _BarItem extends StatelessWidget {
         ? (wide ? AppColors.black : AppColors.white)
         : AppColors.grey;
     final style = Theme.of(context).textTheme.labelSmall;
-    final iconWidget = TweenAnimationBuilder<Color?>(
-      tween: ColorTween(end: iconColor),
-      duration: AppDurations.medium,
-      builder: (context, color, _) => AnimatedScale(
-        scale: selected ? 1.06 : 1,
-        duration: AppDurations.medium,
-        curve: Curves.easeOutBack,
-        child: Icon(icon, size: 23, color: color),
-      ),
-    );
+    final iconWidget =
+        TweenAnimationBuilder<Color?>(
+              tween: ColorTween(end: iconColor),
+              duration: AppDurations.medium,
+              builder: (context, color, _) =>
+                  Icon(icon, size: 23, color: color),
+            )
+            // Petit bond de l'icône quand l'onglet devient le choisi
+            .animate(target: selected ? 1 : 0)
+            .scaleXY(
+              end: 1.08,
+              duration: AppDurations.emphasized + AppDurations.fast,
+              curve: Curves.elasticOut,
+            )
+            .moveY(
+              end: -1.5,
+              duration: AppDurations.medium,
+              curve: Curves.easeOutCubic,
+            );
     final text = AnimatedDefaultTextStyle(
       duration: AppDurations.medium,
       style: (style ?? const TextStyle()).copyWith(
