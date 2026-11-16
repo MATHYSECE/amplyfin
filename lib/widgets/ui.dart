@@ -16,18 +16,23 @@ String joinInfos(Iterable<String> parts) => parts
     .join(' · ');
 
 /// Fond noir avec un léger halo blanc en dégradé (en haut à gauche par
-/// défaut, et un second plus discret en bas à droite).
+/// défaut, et un second plus discret en bas à droite). [tint] : halo de
+/// couleur à la place du blanc (ambilight des fiches), qui arrive en fondu.
 class GlowBackground extends StatelessWidget {
   const GlowBackground({
     super.key,
     required this.child,
     this.center = const Alignment(-0.7, -1.1),
+    this.tint,
   });
 
   final Widget child;
 
   /// Position du halo principal.
   final Alignment center;
+
+  /// Couleur du halo (null : blanc).
+  final Color? tint;
 
   @override
   Widget build(BuildContext context) {
@@ -36,23 +41,37 @@ class GlowBackground extends StatelessWidget {
       child: Stack(
         children: [
           Positioned.fill(
-            child: DecoratedBox(
-              decoration: BoxDecoration(
-                gradient: RadialGradient(
-                  center: center,
-                  radius: 1.1,
-                  colors: const [AppColors.glow, Colors.transparent],
+            child: TweenAnimationBuilder<Color?>(
+              tween: ColorTween(end: tint ?? AppColors.glow),
+              duration: const Duration(milliseconds: 900),
+              curve: Curves.easeOut,
+              builder: (context, color, _) => DecoratedBox(
+                decoration: BoxDecoration(
+                  gradient: RadialGradient(
+                    center: center,
+                    radius: 1.1,
+                    colors: [color ?? AppColors.glow, Colors.transparent],
+                  ),
                 ),
               ),
             ),
           ),
-          const Positioned.fill(
-            child: DecoratedBox(
-              decoration: BoxDecoration(
-                gradient: RadialGradient(
-                  center: Alignment(1.1, 1.1),
-                  radius: 0.9,
-                  colors: [AppColors.glowSoft, Colors.transparent],
+          Positioned.fill(
+            child: TweenAnimationBuilder<Color?>(
+              tween: ColorTween(
+                end:
+                    tint?.withValues(alpha: tint!.a * 0.45) ??
+                    AppColors.glowSoft,
+              ),
+              duration: const Duration(milliseconds: 900),
+              curve: Curves.easeOut,
+              builder: (context, color, _) => DecoratedBox(
+                decoration: BoxDecoration(
+                  gradient: RadialGradient(
+                    center: const Alignment(1.1, 1.1),
+                    radius: 0.9,
+                    colors: [color ?? AppColors.glowSoft, Colors.transparent],
+                  ),
                 ),
               ),
             ),

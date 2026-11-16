@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../api/jellyfin_api.dart';
+import '../models/blur_hash.dart';
 import '../models/item_details.dart';
 import '../models/media_item.dart';
 import '../services/device_capabilities.dart';
@@ -180,8 +181,14 @@ class _DetailsPageState extends State<DetailsPage> {
     final gutter = AppLayout.gutter(context);
     final twoColumns = _twoColumns;
 
+    // Ambilight : le halo prend la couleur de l'affiche (ou de l'image de
+    // fond), d'après son aperçu flou
+    final hash = widget.item.posterHash ?? widget.details?.backdropHash;
     final page = GlowBackground(
       center: const Alignment(0.9, -0.2),
+      tint: hash == null
+          ? null
+          : AppColors.ambient(blurHashAverageColor(hash), opacity: 0.38),
       child: Stack(
         children: [
           CustomScrollView(

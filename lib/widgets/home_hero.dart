@@ -5,6 +5,7 @@ import 'package:flutter/physics.dart';
 import 'package:flutter/services.dart';
 
 import '../api/jellyfin_api.dart';
+import '../models/blur_hash.dart';
 import '../models/home_items.dart';
 import '../services/device_capabilities.dart';
 import '../theme/app_theme.dart';
@@ -547,6 +548,27 @@ class _HeroDeckState extends State<_HeroDeck>
         ],
       ),
     );
+    // Ambilight : la carte de devant éclaire autour d'elle de sa couleur
+    final hash = item.details.backdropHash ?? item.item.posterHash;
+    final glow = hash == null
+        ? null
+        : AppColors.ambient(blurHashAverageColor(hash), opacity: 0.55);
+    final lit = glow == null || place >= 1
+        ? card
+        : DecoratedBox(
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(AppRadius.card),
+              boxShadow: [
+                BoxShadow(
+                  color: glow.withValues(alpha: glow.a * (1 - place)),
+                  blurRadius: 48,
+                  spreadRadius: -6,
+                  offset: const Offset(0, 18),
+                ),
+              ],
+            ),
+            child: card,
+          );
     return Positioned(
       // Même carte d'une place à l'autre : son image ne recharge pas
       key: ValueKey(item.item.id),
@@ -565,7 +587,7 @@ class _HeroDeckState extends State<_HeroDeck>
             child: Transform.scale(
               scale: 1 - 0.05 * place,
               alignment: Alignment.bottomCenter,
-              child: card,
+              child: lit,
             ),
           ),
         ),

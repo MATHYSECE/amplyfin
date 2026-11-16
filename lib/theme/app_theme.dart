@@ -52,6 +52,21 @@ abstract final class AppColors {
 
   /// Erreurs (seule couleur, pour qu'une erreur reste bien visible).
   static const error = Color(0xFFFF7A7A);
+
+  /// Halo « ambilight » tiré de la couleur moyenne d'une affiche
+  /// ([average]) : la même teinte, plus vive et à mi-clarté, très
+  /// transparente. Null pour une affiche presque grise (le halo reste
+  /// blanc, comme le reste de l'appli).
+  static Color? ambient(Color? average, {double opacity = 0.32}) {
+    if (average == null) return null;
+    final hsl = HSLColor.fromColor(average);
+    if (hsl.saturation < 0.12 || hsl.lightness < 0.04) return null;
+    return hsl
+        .withSaturation((hsl.saturation * 1.25).clamp(0.4, 0.85))
+        .withLightness(0.5)
+        .toColor()
+        .withValues(alpha: opacity);
+  }
 }
 
 /// Arrondis des coins.
