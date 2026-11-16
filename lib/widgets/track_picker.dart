@@ -78,14 +78,17 @@ class PickerExtra {
 
 /// Liste de choix qui monte du bas de l'écran, avec une coche sur le choix
 /// actuel. Renvoie l'option touchée, ou null si on ferme sans choisir.
-/// [extra] : ligne de réglage facultative, sous les choix.
+/// [extra] (ou [extras], s'il y en a plusieurs) : lignes de réglage
+/// facultatives, sous les choix.
 Future<PickerOption<T>?> showPicker<T>(
   BuildContext context, {
   required String title,
   required List<PickerOption<T>> options,
   required T selected,
   PickerExtra? extra,
+  List<PickerExtra> extras = const [],
 }) {
+  final settings = [?extra, ...extras];
   return showModalBottomSheet<PickerOption<T>>(
     context: context,
     isScrollControlled: true,
@@ -115,8 +118,8 @@ Future<PickerOption<T>?> showPicker<T>(
                 onTap: () => Navigator.of(context).pop(option),
               ),
             ),
-          if (extra != null) ...[
-            const Divider(),
+          if (settings.isNotEmpty) const Divider(),
+          for (final extra in settings)
             _PickerRow(
               onTap: () {
                 Navigator.of(context).pop();
@@ -136,7 +139,6 @@ Future<PickerOption<T>?> showPicker<T>(
                 },
               ),
             ),
-          ],
         ],
       ),
     ),

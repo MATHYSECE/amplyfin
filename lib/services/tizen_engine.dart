@@ -287,6 +287,14 @@ class TizenEngine implements VideoEngine {
     await _current.value?.setVolume(_volume);
   }
 
+  // Télé Samsung : le lecteur de la télé ne change pas de vitesse sur un
+  // flux du réseau
+  @override
+  bool get supportsSpeed => false;
+
+  @override
+  Future<void> setSpeed(double speed) async {}
+
   @override
   Future<void> stop() => _release();
 

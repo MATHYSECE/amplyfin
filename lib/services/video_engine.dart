@@ -61,6 +61,12 @@ abstract class VideoEngine {
   /// Volume du lecteur, de 0 à 1.
   Future<void> setVolume(double volume);
 
+  /// Vrai si ce moteur sait lire plus vite ou plus lentement.
+  bool get supportsSpeed;
+
+  /// Vitesse de lecture (1 = normale), gardée pour les vidéos suivantes.
+  Future<void> setSpeed(double speed);
+
   /// Arrête la vidéo en cours (le moteur oublie ses pistes et sa durée).
   Future<void> stop();
 

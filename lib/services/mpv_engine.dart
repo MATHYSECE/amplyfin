@@ -279,6 +279,12 @@ class MpvEngine implements VideoEngine {
   Future<void> setVolume(double volume) => _player.setVolume(volume * 100);
 
   @override
+  bool get supportsSpeed => true;
+
+  @override
+  Future<void> setSpeed(double speed) => _player.setRate(speed);
+
+  @override
   Future<void> stop() => _player.stop();
 
   /// Arrête d'abord la lecture (le décodeur vidéo libère l'écran),

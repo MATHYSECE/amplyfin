@@ -10,6 +10,8 @@ import '../models/media_segments.dart';
 import '../models/next_episode.dart';
 import '../models/playback_info.dart';
 import '../models/playback_quality.dart';
+import '../models/playback_speed.dart';
+import '../models/sleep_timer.dart';
 import '../models/session.dart';
 import '../models/subtitle_size.dart';
 import '../models/track_choice.dart';
@@ -155,6 +157,14 @@ class _PlayerScreenState extends State<PlayerScreen> {
 
   /// Attente lancée par une erreur du moteur avant le démarrage.
   Timer? _startupErrorTimer;
+
+  /// Vitesse de lecture (1 = normale), gardée d'un épisode au suivant.
+  double _speed = 1;
+
+  /// Minuterie de sommeil : choix actuel, heure prévue de la pause.
+  SleepChoice _sleep = SleepChoice.off;
+  DateTime? _sleepAt;
+  Timer? _sleepTimer;
 
   /// Panneau « Infos de lecture » (menu Qualité) : lignes affichées, mises
   /// à jour toutes les 2 s tant qu'il est ouvert.
@@ -303,6 +313,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
     _progressTimer?.cancel();
     _startupErrorTimer?.cancel();
     _detailsTimer?.cancel();
+    _sleepTimer?.cancel();
     _skipFocus.dispose();
     _nextFocus.dispose();
     _stillFocus.dispose();
@@ -676,10 +687,13 @@ class _PlayerScreenState extends State<PlayerScreen> {
   }
 
   /// Fin du compte à rebours (ou de l'épisode) : le suivant, sauf après
-  /// plusieurs épisodes enchaînés sans toucher l'écran.
+  /// plusieurs épisodes enchaînés sans toucher l'écran, ou si la minuterie
+  /// de sommeil est réglée sur la fin de la vidéo.
   void _autoAdvance() {
     if (_switching || _askingStillWatching || _next == null) return;
-    if (_autoPlays >= stillWatchingAfter) {
+    if (_autoPlays >= stillWatchingAfter || _sleep == SleepChoice.endOfVideo) {
+      // Minuterie « à la fin de la vidéo » : elle a servi
+      _sleep = SleepChoice.off;
       _player.pause();
       setState(() {
         _askingStillWatching = true;
@@ -1014,15 +1028,82 @@ class _PlayerScreenState extends State<PlayerScreen> {
           ),
       ],
       selected: _quality,
-      extra: PickerExtra(
-        icon: Icons.info_outline_rounded,
-        label: 'Infos de lecture',
-        value: _details == null ? 'Masquées' : 'Affichées',
-        onTap: _toggleDetails,
-      ),
+      extras: [
+        if (_player.supportsSpeed)
+          PickerExtra(
+            icon: Icons.speed_rounded,
+            label: 'Vitesse de lecture',
+            value: playbackSpeedLabel(_speed),
+            onTap: _chooseSpeed,
+          ),
+        if (!widget.trailer)
+          PickerExtra(
+            icon: Icons.bedtime_outlined,
+            label: 'Minuterie de sommeil',
+            value: sleepTimerStatus(_sleep, _sleepAt, DateTime.now()),
+            onTap: _chooseSleepTimer,
+          ),
+        PickerExtra(
+          icon: Icons.info_outline_rounded,
+          label: 'Infos de lecture',
+          value: _details == null ? 'Masquées' : 'Affichées',
+          onTap: _toggleDetails,
+        ),
+      ],
     );
     if (chosen == null || chosen.value == _quality || !mounted) return;
     await _open(chosen.value, start: _player.state.position);
+  }
+
+  /// Menu « Vitesse de lecture » (gardée jusqu'à la fermeture du lecteur).
+  Future<void> _chooseSpeed() async {
+    final chosen = await showPicker(
+      context,
+      title: 'Vitesse de lecture',
+      options: [
+        for (final speed in playbackSpeeds)
+          PickerOption(speed, playbackSpeedLabel(speed)),
+      ],
+      selected: _speed,
+    );
+    if (chosen == null || chosen.value == _speed || !mounted) return;
+    setState(() => _speed = chosen.value);
+    await _player.setSpeed(chosen.value);
+  }
+
+  /// Menu « Minuterie de sommeil » : la lecture se met en pause toute seule
+  /// (pour s'endormir sans que les épisodes s'enchaînent toute la nuit).
+  Future<void> _chooseSleepTimer() async {
+    final chosen = await showPicker(
+      context,
+      title: 'Minuterie de sommeil',
+      options: [
+        for (final choice in SleepChoice.values)
+          PickerOption(choice, choice.label),
+      ],
+      selected: _sleep,
+    );
+    if (chosen == null || !mounted) return;
+    _sleepTimer?.cancel();
+    final delay = chosen.value.delay;
+    setState(() {
+      _sleep = chosen.value;
+      _sleepAt = delay == null ? null : DateTime.now().add(delay);
+    });
+    if (delay != null) _sleepTimer = Timer(delay, _onSleepTimer);
+  }
+
+  /// Fin de la minuterie : pause, et la minuterie s'éteint.
+  void _onSleepTimer() {
+    if (!mounted) return;
+    setState(() {
+      _sleep = SleepChoice.off;
+      _sleepAt = null;
+    });
+    _player.pause();
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Minuterie de sommeil : lecture en pause.')),
+    );
   }
 
   /// Affiche ou masque le panneau « Infos de lecture ».

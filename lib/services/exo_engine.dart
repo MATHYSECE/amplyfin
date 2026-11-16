@@ -169,6 +169,8 @@ class ExoEngine implements VideoEngine {
       await controller.setVolume(_volume);
       if (media.start > Duration.zero) await controller.seekTo(media.start);
       await controller.play();
+      // Après le départ : certains lecteurs oublient la vitesse en pause
+      if (_speed != 1) await controller.setPlaybackSpeed(_speed);
     } on Object catch (e) {
       // Fichier illisible, serveur injoignable… : le lecteur décide
       if (!_disposed && _current.value == controller) _report('$e');
@@ -306,6 +308,17 @@ class ExoEngine implements VideoEngine {
   Future<void> setVolume(double volume) async {
     _volume = volume.clamp(0.0, 1.0);
     await _current.value?.setVolume(_volume);
+  }
+
+  double _speed = 1;
+
+  @override
+  bool get supportsSpeed => true;
+
+  @override
+  Future<void> setSpeed(double speed) async {
+    _speed = speed;
+    await _current.value?.setPlaybackSpeed(speed);
   }
 
   @override
