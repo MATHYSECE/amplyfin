@@ -236,6 +236,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
   void initState() {
     super.initState();
     // Plein écran, téléphone à l'horizontale
+    _orientationRequest++;
     SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
     SystemChrome.setPreferredOrientations([
       DeviceOrientation.landscapeLeft,
@@ -359,8 +360,35 @@ class _PlayerScreenState extends State<PlayerScreen> {
     // Retour à l'affichage normal (PC : fenêtre d'avant le plein écran)
     AppWindow.setFullScreen(false);
     SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
-    SystemChrome.setPreferredOrientations([]);
+    _restoreOrientation();
     super.dispose();
+  }
+
+  /// Change à chaque ouverture du lecteur (voir [_restoreOrientation]).
+  static int _orientationRequest = 0;
+
+  /// Sortie du lecteur. Téléphone : retour forcé à la verticale, sinon iOS
+  /// peut rester bloqué en paysage ; toutes les orientations sont permises
+  /// de nouveau un peu après. Tablette, télé, PC : toutes tout de suite.
+  static void _restoreOrientation() {
+    final view = WidgetsBinding.instance.platformDispatcher.views.firstOrNull;
+    final phone =
+        view != null &&
+        !DeviceCapabilities.isTv &&
+        !DeviceCapabilities.isDesktop &&
+        (view.physicalSize / view.devicePixelRatio).shortestSide < 600;
+    if (!phone) {
+      SystemChrome.setPreferredOrientations([]);
+      return;
+    }
+    SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp]);
+    final request = _orientationRequest;
+    Future.delayed(const Duration(milliseconds: 800), () {
+      // Un autre film lancé entre-temps garde son paysage
+      if (request == _orientationRequest) {
+        SystemChrome.setPreferredOrientations([]);
+      }
+    });
   }
 
   /// Demande au serveur comment lire le film dans la [quality] voulue,
