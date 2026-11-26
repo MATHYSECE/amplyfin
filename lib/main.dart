@@ -30,12 +30,12 @@ Future<void> main() async {
   }
   // Prépare le moteur vidéo (media_kit), absent des télés Samsung
   if (!DeviceCapabilities.isTizen) MediaKit.ensureInitialized();
-  // iPhone, iPad, PC : video_player passe par libmdk (puce vidéo, image
+  // iPhone, iPad, PC, Mac : video_player passe par libmdk (puce vidéo, image
   // partagée avec Flutter sans recopie)
   if (usesMdk) {
     fvp.registerWith(
       options: {
-        'platforms': ['ios', 'windows'],
+        'platforms': ['ios', 'windows', 'macos'],
       },
     );
   }

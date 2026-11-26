@@ -11,10 +11,11 @@ import 'tizen_engine.dart';
 /// Vrai si cet appareil lit avec ExoPlayer (Android).
 bool get usesExoPlayer => defaultTargetPlatform == TargetPlatform.android;
 
-/// Vrai si cet appareil lit avec libmdk (iPhone, iPad, PC).
+/// Vrai si cet appareil lit avec libmdk (iPhone, iPad, PC, Mac).
 bool get usesMdk =>
     defaultTargetPlatform == TargetPlatform.iOS ||
-    defaultTargetPlatform == TargetPlatform.windows;
+    defaultTargetPlatform == TargetPlatform.windows ||
+    defaultTargetPlatform == TargetPlatform.macOS;
 
 /// Moteur vidéo : ce dont le lecteur a besoin, quel que soit l'appareil.
 /// Chaque appareil branche le meilleur moteur pour lui derrière cette même

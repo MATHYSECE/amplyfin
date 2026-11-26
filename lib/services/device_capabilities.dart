@@ -32,7 +32,7 @@ class DeviceCapabilities {
     'TIZEN_API_VERSION',
   );
 
-  /// Vrai sur un ordinateur (Windows) : souris et clavier, fenêtre, pas de
+  /// Vrai sur un ordinateur (Windows, Mac) : souris et clavier, fenêtre, pas de
   /// luminosité ni de données mobiles. Connu dès le démarrage
   /// ([detectDesktop]) ; reste faux dans les tests.
   static bool isDesktop = false;
@@ -42,7 +42,7 @@ class DeviceCapabilities {
 
   /// Repère si l'appli tourne sur un ordinateur (au démarrage).
   static void detectDesktop() {
-    isDesktop = Platform.isWindows;
+    isDesktop = Platform.isWindows || Platform.isMacOS;
   }
 
   /// Demande au téléphone s'il est une télé (une seule fois, au démarrage).

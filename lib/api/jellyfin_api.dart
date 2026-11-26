@@ -99,6 +99,7 @@ class JellyfinApi {
   static String get _deviceName {
     if (Platform.isIOS) return 'iPhone';
     if (Platform.isWindows) return 'Windows';
+    if (Platform.isMacOS) return 'Mac';
     // Télé Samsung (Tizen, vue comme un Linux)
     if (Platform.environment.containsKey('TIZEN_API_VERSION')) {
       return 'Samsung TV';

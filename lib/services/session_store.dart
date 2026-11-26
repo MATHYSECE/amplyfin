@@ -12,7 +12,11 @@ import 'profile_data.dart';
 /// son mot de passe). Tous partagent l'identifiant de l'appareil : Jellyfin
 /// ne coupe que les anciennes connexions de la même personne.
 class SessionStore {
-  static const _storage = FlutterSecureStorage();
+  // Mac : trousseau classique, sans « partage du trousseau » (qui exigerait
+  // un compte Apple payant pour ouvrir l'appli sur un autre Mac)
+  static const _storage = FlutterSecureStorage(
+    mOptions: MacOsOptions(usesDataProtectionKeychain: false),
+  );
 
   // Noms des cases du coffre-fort
   static const _kProfiles = 'profiles';
