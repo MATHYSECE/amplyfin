@@ -38,7 +38,11 @@ class DeviceCapabilities {
   static bool isDesktop = false;
 
   /// Nom de l'appareil dans les textes de l'appli (« effacé du PC »).
-  static String get deviceWord => isDesktop ? 'PC' : 'téléphone';
+  static String get deviceWord => !isDesktop
+      ? 'téléphone'
+      : Platform.isMacOS
+      ? 'Mac'
+      : 'PC';
 
   /// Repère si l'appli tourne sur un ordinateur (au démarrage).
   static void detectDesktop() {
