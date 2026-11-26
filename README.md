@@ -16,6 +16,7 @@ sobre en noir et blanc.
 ![Samsung](https://img.shields.io/badge/Samsung-Tizen%206.5+-black?logo=samsung&logoColor=white)
 ![iPhone](https://img.shields.io/badge/iPhone%20·%20iPad-iOS%2015+-black?logo=apple&logoColor=white)
 ![Windows](https://img.shields.io/badge/Windows-10%20·%2011-black?logo=windows&logoColor=white)
+![Mac](https://img.shields.io/badge/Mac-macOS%2012+-black?logo=apple&logoColor=white)
 ![Flutter](https://img.shields.io/badge/Flutter-3.47-black?logo=flutter&logoColor=white)
 
 [**Télécharger**](https://github.com/MATHYSECE/amplyfin/releases/latest) ·
@@ -115,6 +116,7 @@ d'un appareil à l'autre. Amplyfin part du principe inverse :
 | **Tablette** | Mise en page adaptée, « Qui regarde ? » à l'ouverture. |
 | **Fire TV, télé Samsung** | Tout à la télécommande : sélection visible, OK maintenu pour les options, avance rapide en maintenant les flèches. |
 | **PC Windows** | Souris et clavier : plein écran (F, F11, double clic), espace, flèches, molette pour le volume, survol des affiches. |
+| **Mac** | Mêmes raccourcis que sur PC, vrai plein écran du Mac (bouton vert, ⌃⌘F), menus en français. |
 
 ## Les lecteurs vidéo
 
@@ -124,6 +126,7 @@ d'un appareil à l'autre. Amplyfin part du principe inverse :
 | Télé Samsung | **Lecteur de la télé** | Le lecteur standard de Tizen (paquet `video_player_videohole`), décodé par la puce de la télé : 4K, HDR10, Dolby Digital Plus / Atmos. |
 | iPhone, iPad | **libmdk** (paquet `fvp`) | Lit le MKV tel quel, que le lecteur d'Apple refuse. Décodage par la puce de l'iPhone et image partagée en Metal sans recopie : environ 5 fois moins de batterie qu'avec mpv. |
 | Windows | **libmdk** (paquet `fvp`) | Décodage par la carte graphique et image partagée sans recopie : environ 3 fois moins de processeur et de carte graphique qu'avec mpv, pour les PC portables sur batterie. |
+| Mac | **libmdk** (paquet `fvp`) | Décodage par la puce du Mac (VideoToolbox) : un film 4K HEVC 10 bits occupe environ 13 % du processeur. |
 
 Ce que chaque appareil sait décoder est mesuré sur l'appareil lui-même (sur
 Samsung, d'après les caractéristiques des télés : DTS et TrueHD convertis) et
@@ -190,9 +193,24 @@ Windows 10 ou 11, 64 bits.
 </details>
 
 <details>
+<summary><b>Mac</b></summary>
+
+1. Télécharge `Amplyfin-x.y.z.dmg`, ouvre-le et glisse **Amplyfin** dans
+   **Applications**.
+2. Au premier lancement, le Mac refuse d'ouvrir l'appli (elle n'est pas
+   signée par un compte Apple payant). Va dans **Réglages Système →
+   Confidentialité et sécurité**, tout en bas : clique sur **Ouvrir quand
+   même**, puis confirme. Les lancements suivants se font normalement.
+3. Une mise à jour : glisse la nouvelle version par-dessus, comptes et
+   réglages sont gardés.
+
+macOS 12 ou plus récent, Mac Apple (M1 et après) ou Intel.
+</details>
+
+<details>
 <summary><b>iPhone, iPad</b></summary>
 
-L'appli iPhone est fabriquée sans Mac, sur
+L'appli iPhone est fabriquée sur un Mac (Xcode) ou sans Mac, sur
 [Codemagic](https://codemagic.io) (workflow `ios-sans-signature` de
 `codemagic.yaml`), puis installée avec
 [Sideloadly](https://sideloadly.io) et un identifiant Apple gratuit.
@@ -215,7 +233,8 @@ iOS 15 ou plus récent.
 - Windows : Visual Studio 2022 Build Tools (C++ et composant ATL), mode
   développeur de Windows activé, [Inno Setup 6](https://jrsoftware.org/isinfo.php)
   pour l'installateur
-- iPhone : aucun Mac nécessaire, tout se fait sur Codemagic
+- Mac et iPhone : Xcode et [CocoaPods](https://cocoapods.org) sur un Mac
+  (pour l'iPhone, Codemagic marche aussi sans Mac)
 - Samsung : [flutter-tizen](https://github.com/flutter-tizen/flutter-tizen)
   (même version de Flutter), .NET SDK 8, extension **Tizen** de VS Code avec
   le paquet « 6.5 IOT-Headed + Mobile », certificat Samsung
@@ -225,6 +244,7 @@ iOS 15 ou plus récent.
 flutter pub get
 flutter run                 # appareil ou émulateur branché
 flutter run -d windows      # version PC
+flutter run -d macos        # version Mac
 flutter analyze             # vérifications du code
 flutter test                # tests
 ```
@@ -239,6 +259,11 @@ flutter build apk --release --target-platform android-arm,android-arm64
 flutter-tizen build tpk -p tv --target-arch arm
 # Windows : appli + installateur dans dist\
 powershell -ExecutionPolicy Bypass -File windows\installer\build.ps1
+# Mac : appli dans build/macos/Build/Products/Release/, puis le .dmg
+flutter build macos --release
+mkdir -p dist/dmg && ditto build/macos/Build/Products/Release/Amplyfin.app dist/dmg/Amplyfin.app
+ln -s /Applications dist/dmg/Applications
+hdiutil create -volname Amplyfin -srcfolder dist/dmg -format UDZO dist/Amplyfin-x.y.z.dmg
 ```
 Les apk de mise à jour doivent être signés avec la même clé
 (`android/key.properties`, hors du dépôt) et porter un numéro de version
@@ -252,7 +277,7 @@ lib/
 ├── services/   session, téléchargements, profils, moteurs vidéo
 │   ├── video_engine.dart   lecteur générique utilisé par tout l'écran de lecture
 │   ├── exo_engine.dart     ExoPlayer (Android)
-│   ├── mdk_engine.dart     libmdk (iPhone, iPad, Windows)
+│   ├── mdk_engine.dart     libmdk (iPhone, iPad, Windows, Mac)
 │   ├── mpv_engine.dart     mpv (secours, plus utilisé par défaut)
 │   └── tizen_engine.dart   lecteur de la télé (Samsung)
 ├── screens/    écrans (accueil, fiches, lecteur, paramètres…)
@@ -272,6 +297,7 @@ Principes du code :
 - [x] Fire TV (navigation à la télécommande)
 - [x] Profils
 - [x] Windows
+- [x] Mac
 - [x] Lecteur ExoPlayer sur Android
 - [x] Améliorations (téléchargements, Continuer à regarder, synchronisation)
 - [x] Visite guidée à la première connexion
