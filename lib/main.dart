@@ -9,6 +9,7 @@ import 'package:media_kit/media_kit.dart';
 
 import 'api/jellyfin_api.dart';
 import 'screens/start_screen.dart';
+import 'services/app_window.dart';
 import 'services/device_capabilities.dart';
 import 'services/download_manager.dart';
 import 'services/video_engine.dart';
@@ -22,6 +23,8 @@ Future<void> main() async {
   await DeviceCapabilities.detectTv();
   // Ordinateur ou pas : pareil (souris, clavier, fenêtre)
   DeviceCapabilities.detectDesktop();
+  // Mac : suit le plein écran pris ou quitté par la fenêtre elle-même
+  AppWindow.listen();
   // Télé : la page suit la sélection de la télécommande, et OK maintenu
   // ne se répète pas
   if (DeviceCapabilities.isTv) {
